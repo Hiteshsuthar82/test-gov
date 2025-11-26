@@ -1,0 +1,145 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from '../../lib/api'
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Textarea } from '../../components/ui/textarea'
+import { Button } from '../../components/ui/button'
+
+export default function CategoryFormPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    bannerImageUrl: '',
+    price: 0,
+    details: '',
+    isActive: true,
+  })
+
+  const { data } = useQuery({
+    queryKey: ['category', id],
+    queryFn: async () => {
+      const response = await api.get(`/admin/categories/${id}`)
+      return response.data.data
+    },
+    enabled: !!id,
+  })
+
+  useEffect(() => {
+    if (data) {
+      setFormData({
+        name: data.name || '',
+        description: data.description || '',
+        bannerImageUrl: data.bannerImageUrl || '',
+        price: data.price || 0,
+        details: data.details || '',
+        isActive: data.isActive ?? true,
+      })
+    }
+  }, [data])
+
+  const mutation = useMutation({
+    mutationFn: async (data: any) => {
+      if (id) {
+        return api.put(`/admin/categories/${id}`, data)
+      } else {
+        return api.post('/admin/categories', data)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      navigate('/categories')
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    mutation.mutate(formData)
+  }
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold mb-6">{id ? 'Edit' : 'Create'} Category</h1>
+      <Card>
+        <CardHeader>
+          <CardTitle>Category Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="bannerImageUrl">Banner Image URL</Label>
+              <Input
+                id="bannerImageUrl"
+                value={formData.bannerImageUrl}
+                onChange={(e) => setFormData({ ...formData, bannerImageUrl: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="price">Price (₹) *</Label>
+              <Input
+                id="price"
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                required
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <Label htmlFor="details">Details (HTML/Rich Text)</Label>
+              <Textarea
+                id="details"
+                value={formData.details}
+                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
+                rows={6}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                className="w-4 h-4"
+              />
+              <Label htmlFor="isActive">Active</Label>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => navigate('/categories')}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
