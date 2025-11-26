@@ -4,6 +4,7 @@ export interface ISection {
   sectionId: string;
   name: string;
   order: number;
+  durationMinutes?: number; // Optional: if set, this section has its own time limit
 }
 
 export interface ITestSet extends Document {
@@ -14,6 +15,7 @@ export interface ITestSet extends Document {
   totalMarks: number;
   negativeMarking: number;
   sections: ISection[];
+  hasSectionWiseTiming: boolean; // If true, each section has its own timer
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +26,7 @@ const SectionSchema = new Schema<ISection>(
     sectionId: { type: String, required: true },
     name: { type: String, required: true },
     order: { type: Number, required: true },
+    durationMinutes: { type: Number }, // Optional: time limit for this section
   },
   { _id: false }
 );
@@ -37,6 +40,7 @@ const TestSetSchema = new Schema<ITestSet>(
     totalMarks: { type: Number, required: true },
     negativeMarking: { type: Number, required: true },
     sections: [SectionSchema],
+    hasSectionWiseTiming: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

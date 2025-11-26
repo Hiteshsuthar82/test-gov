@@ -12,6 +12,7 @@ interface Section {
   sectionId: string
   name: string
   order: number
+  durationMinutes?: number
 }
 
 export default function SetFormPage() {
@@ -24,10 +25,12 @@ export default function SetFormPage() {
     durationMinutes: 60,
     totalMarks: 100,
     negativeMarking: 0.25,
+    hasSectionWiseTiming: false,
     isActive: true,
     sections: [] as Section[],
   })
   const [resolvedCategoryId, setResolvedCategoryId] = useState<string | null>(categoryId || null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const { data } = useQuery({
     queryKey: ['set', id],
@@ -61,6 +64,7 @@ export default function SetFormPage() {
         durationMinutes: data.durationMinutes || 60,
         totalMarks: data.totalMarks || 100,
         negativeMarking: data.negativeMarking || 0.25,
+        hasSectionWiseTiming: data.hasSectionWiseTiming ?? false,
         isActive: data.isActive ?? true,
         sections: data.sections || [],
       })
@@ -90,8 +94,49 @@ export default function SetFormPage() {
     },
   })
 
+  const validateForm = (): boolean => {
+    setValidationError(null)
+
+    // Validate section-wise timing
+    if (formData.hasSectionWiseTiming) {
+      if (formData.sections.length === 0) {
+        setValidationError('Please add at least one section when section-wise timing is enabled.')
+        return false
+      }
+
+      // Calculate total section duration
+      const totalSectionDuration = formData.sections.reduce((sum, section) => {
+        return sum + (section.durationMinutes || 0)
+      }, 0)
+
+      // Check if all sections have duration
+      const sectionsWithoutDuration = formData.sections.filter(
+        (s) => !s.durationMinutes || s.durationMinutes <= 0
+      )
+      if (sectionsWithoutDuration.length > 0) {
+        setValidationError('All sections must have a duration when section-wise timing is enabled.')
+        return false
+      }
+
+      // Check if total section duration matches test duration
+      if (totalSectionDuration !== formData.durationMinutes) {
+        setValidationError(
+          `Total section duration (${totalSectionDuration} minutes) must equal test duration (${formData.durationMinutes} minutes).`
+        )
+        return false
+      }
+    }
+
+    return true
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+
     mutation.mutate(formData)
   }
 
@@ -100,14 +145,16 @@ export default function SetFormPage() {
       sectionId: `section-${Date.now()}`,
       name: '',
       order: formData.sections.length + 1,
+      durationMinutes: formData.hasSectionWiseTiming ? 20 : undefined,
     }
     setFormData({ ...formData, sections: [...formData.sections, newSection] })
   }
 
-  const updateSection = (index: number, field: keyof Section, value: string | number) => {
+  const updateSection = (index: number, field: keyof Section, value: string | number | undefined) => {
     const sections = [...formData.sections]
     sections[index] = { ...sections[index], [field]: value }
     setFormData({ ...formData, sections })
+    setValidationError(null) // Clear validation error when updating sections
   }
 
   const removeSection = (index: number) => {
@@ -149,9 +196,17 @@ export default function SetFormPage() {
                   id="durationMinutes"
                   type="number"
                   value={formData.durationMinutes}
-                  onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 0 })
+                    setValidationError(null) // Clear validation error when changing duration
+                  }}
                   required
                 />
+                {formData.hasSectionWiseTiming && formData.sections.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Must equal sum of section durations
+                  </p>
+                )}
               </div>
               <div>
                 <Label htmlFor="totalMarks">Total Marks *</Label>
@@ -177,6 +232,50 @@ export default function SetFormPage() {
             </div>
 
             <div>
+              <div className="flex items-center gap-2 mb-4">
+                <input
+                  type="checkbox"
+                  id="hasSectionWiseTiming"
+                  checked={formData.hasSectionWiseTiming}
+                  onChange={(e) => {
+                    const newValue = e.target.checked
+                    setFormData({
+                      ...formData,
+                      hasSectionWiseTiming: newValue,
+                      // Clear section durations if disabling
+                      sections: formData.sections.map(s => ({
+                        ...s,
+                        durationMinutes: newValue ? (s.durationMinutes || 20) : undefined
+                      }))
+                    })
+                    setValidationError(null) // Clear validation error when toggling
+                  }}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="hasSectionWiseTiming" className="font-medium">
+                  Enable Section-wise Timing
+                </Label>
+              </div>
+              {formData.hasSectionWiseTiming && (
+                <div className="mb-4 space-y-2">
+                  <div className="p-3 bg-blue-50 rounded-md text-sm text-blue-800">
+                    <strong>Note:</strong> When enabled, each section will have its own timer. Students must complete each section within its time limit.
+                  </div>
+                  <div className="p-3 bg-yellow-50 rounded-md text-sm text-yellow-800">
+                    <strong>Important:</strong> Sum of all section durations must equal the total test duration ({formData.durationMinutes} minutes).
+                  </div>
+                  {formData.sections.length > 0 && (
+                    <div className="p-2 bg-gray-50 rounded-md text-sm">
+                      <strong>Current total:</strong>{' '}
+                      <span className={formData.sections.reduce((sum, s) => sum + (s.durationMinutes || 0), 0) === formData.durationMinutes ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {formData.sections.reduce((sum, s) => sum + (s.durationMinutes || 0), 0)} minutes
+                      </span>
+                      {' / '}
+                      {formData.durationMinutes} minutes
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex justify-between items-center mb-2">
                 <Label>Sections</Label>
                 <Button type="button" variant="outline" size="sm" onClick={addSection}>
@@ -199,6 +298,16 @@ export default function SetFormPage() {
                       onChange={(e) => updateSection(index, 'order', parseInt(e.target.value))}
                       className="w-20"
                     />
+                    {formData.hasSectionWiseTiming && (
+                      <Input
+                        type="number"
+                        placeholder="Duration (min)"
+                        value={section.durationMinutes || ''}
+                        onChange={(e) => updateSection(index, 'durationMinutes', parseInt(e.target.value) || undefined)}
+                        className="w-32"
+                        min="1"
+                      />
+                    )}
                     <Button type="button" variant="destructive" size="sm" onClick={() => removeSection(index)}>
                       Remove
                     </Button>
@@ -217,6 +326,12 @@ export default function SetFormPage() {
               />
               <Label htmlFor="isActive">Active</Label>
             </div>
+
+            {validationError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-800">
+                <strong>Validation Error:</strong> {validationError}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button type="submit" disabled={mutation.isPending}>

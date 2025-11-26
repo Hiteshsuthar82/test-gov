@@ -48,9 +48,12 @@ export const attemptService = {
           totalMarks: testSet.totalMarks,
           negativeMarking: testSet.negativeMarking,
           sections: testSet.sections,
+          hasSectionWiseTiming: testSet.hasSectionWiseTiming,
         },
         questions,
         startedAt: existingAttempt.startedAt,
+        currentSectionId: existingAttempt.currentSectionId,
+        sectionTimings: existingAttempt.sectionTimings,
       };
     }
 
@@ -61,6 +64,16 @@ export const attemptService = {
     })
       .sort({ questionOrder: 1 })
       .select('-correctOptionId -explanationText -explanationImageUrl');
+
+    // Initialize section timings if section-wise timing is enabled
+    const sectionTimings = testSet.hasSectionWiseTiming && testSet.sections.length > 0
+      ? testSet.sections.map((section, index) => ({
+          sectionId: section.sectionId,
+          startedAt: index === 0 ? new Date() : new Date(0), // Only first section starts immediately
+          timeSpentSeconds: 0,
+          status: index === 0 ? 'IN_PROGRESS' : 'IN_PROGRESS' as const,
+        }))
+      : undefined;
 
     // Create attempt with preloaded questions
     const attempt = await TestAttempt.create({
@@ -76,6 +89,10 @@ export const attemptService = {
         timeSpentSeconds: 0,
         markedForReview: false,
       })),
+      sectionTimings,
+      currentSectionId: testSet.hasSectionWiseTiming && testSet.sections.length > 0
+        ? testSet.sections[0].sectionId
+        : undefined,
     });
 
     return {
@@ -87,6 +104,7 @@ export const attemptService = {
         totalMarks: testSet.totalMarks,
         negativeMarking: testSet.negativeMarking,
         sections: testSet.sections,
+        hasSectionWiseTiming: testSet.hasSectionWiseTiming,
       },
       questions: questions.map((q) => ({
         id: q._id,
@@ -98,6 +116,8 @@ export const attemptService = {
         questionOrder: q.questionOrder,
       })),
       startedAt: attempt.startedAt,
+      currentSectionId: attempt.currentSectionId,
+      sectionTimings: attempt.sectionTimings,
     };
   },
 
@@ -115,10 +135,22 @@ export const attemptService = {
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
       status: 'IN_PROGRESS',
-    });
+    }).populate('testSetId');
 
     if (!attempt) {
       throw new Error('Attempt not found or not in progress');
+    }
+
+    const testSet = attempt.testSetId as any;
+
+    // If section-wise timing is enabled, update section timing
+    if (testSet.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+      const sectionTiming = attempt.sectionTimings.find(
+        (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+      );
+      if (sectionTiming) {
+        sectionTiming.timeSpentSeconds += data.timeSpentIncrementSeconds;
+      }
     }
 
     const questionIndex = attempt.questions.findIndex(
@@ -136,6 +168,129 @@ export const attemptService = {
     await attempt.save();
 
     return attempt.questions[questionIndex];
+  },
+
+  async submitSection(attemptId: string, userId: string, sectionId: string) {
+    const attempt = await TestAttempt.findOne({
+      _id: new Types.ObjectId(attemptId),
+      userId: new Types.ObjectId(userId),
+      status: 'IN_PROGRESS',
+    }).populate('testSetId');
+
+    if (!attempt) {
+      throw new Error('Attempt not found or not in progress');
+    }
+
+    const testSet = attempt.testSetId as any;
+    if (!testSet.hasSectionWiseTiming) {
+      throw new Error('Section-wise timing is not enabled for this test');
+    }
+
+    // Find and end the current section
+    const sectionTiming = attempt.sectionTimings?.find(
+      (st) => st.sectionId === sectionId && st.status === 'IN_PROGRESS'
+    );
+
+    if (!sectionTiming) {
+      throw new Error('Section not found or already completed');
+    }
+
+    const now = new Date();
+    sectionTiming.endedAt = now;
+    sectionTiming.status = 'COMPLETED';
+    sectionTiming.timeSpentSeconds = Math.floor(
+      (now.getTime() - sectionTiming.startedAt.getTime()) / 1000
+    );
+
+    // Find next section
+    const currentSectionIndex = testSet.sections.findIndex(
+      (s: any) => s.sectionId === sectionId
+    );
+    const nextSection = testSet.sections[currentSectionIndex + 1];
+
+    if (nextSection) {
+      // Start next section
+      const nextSectionTiming = attempt.sectionTimings?.find(
+        (st) => st.sectionId === nextSection.sectionId
+      );
+      if (nextSectionTiming) {
+        nextSectionTiming.startedAt = now;
+        nextSectionTiming.status = 'IN_PROGRESS';
+        attempt.currentSectionId = nextSection.sectionId;
+      }
+    } else {
+      // All sections completed, submit entire test
+      attempt.currentSectionId = undefined;
+      await this.submitAttempt(attemptId, userId, 'AUTO_SUBMIT');
+      return { message: 'All sections completed. Test submitted.', testCompleted: true };
+    }
+
+    await attempt.save();
+
+    return {
+      message: 'Section submitted successfully',
+      currentSectionId: attempt.currentSectionId,
+      sectionTimings: attempt.sectionTimings,
+      testCompleted: false,
+    };
+  },
+
+  async checkSectionTimer(attemptId: string, userId: string) {
+    const attempt = await TestAttempt.findOne({
+      _id: new Types.ObjectId(attemptId),
+      userId: new Types.ObjectId(userId),
+      status: 'IN_PROGRESS',
+    }).populate('testSetId');
+
+    if (!attempt) {
+      throw new Error('Attempt not found or not in progress');
+    }
+
+    const testSet = attempt.testSetId as any;
+    if (!testSet.hasSectionWiseTiming || !attempt.currentSectionId) {
+      return { hasSectionTiming: false };
+    }
+
+    const currentSection = testSet.sections.find(
+      (s: any) => s.sectionId === attempt.currentSectionId
+    );
+    const sectionTiming = attempt.sectionTimings?.find(
+      (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+    );
+
+    if (!currentSection || !sectionTiming || !currentSection.durationMinutes) {
+      return { hasSectionTiming: false };
+    }
+
+    const now = new Date();
+    const elapsedSeconds = Math.floor(
+      (now.getTime() - sectionTiming.startedAt.getTime()) / 1000
+    );
+    const totalSeconds = currentSection.durationMinutes * 60;
+    const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+
+    // Auto-submit if time expired
+    if (remainingSeconds === 0) {
+      await this.submitSection(attemptId, userId, attempt.currentSectionId);
+      return {
+        hasSectionTiming: true,
+        timeExpired: true,
+        remainingSeconds: 0,
+        sectionId: attempt.currentSectionId,
+      };
+    }
+
+    return {
+      hasSectionTiming: true,
+      sectionId: attempt.currentSectionId,
+      durationMinutes: currentSection.durationMinutes,
+      elapsedSeconds,
+      remainingSeconds,
+      sectionTiming: {
+        startedAt: sectionTiming.startedAt,
+        timeSpentSeconds: elapsedSeconds,
+      },
+    };
   },
 
   async submitAttempt(attemptId: string, userId: string, reason?: string) {

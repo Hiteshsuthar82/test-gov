@@ -21,9 +21,17 @@ const updateAnswerSchema = z.object({
   }),
 });
 
+const submitSectionSchema = z.object({
+  body: z.object({
+    sectionId: z.string().min(1),
+  }),
+});
+
 router.post('/start', studentAuthMiddleware, validate(startAttemptSchema), attemptController.start);
 router.patch('/:attemptId/answer', studentAuthMiddleware, validate(updateAnswerSchema), attemptController.updateAnswer);
 router.post('/:attemptId/submit', studentAuthMiddleware, attemptController.submit);
+router.post('/:attemptId/submit-section', studentAuthMiddleware, validate(submitSectionSchema), attemptController.submitSection);
+router.get('/:attemptId/section-timer', studentAuthMiddleware, attemptController.checkSectionTimer);
 router.get('/:attemptId', studentAuthMiddleware, attemptController.getAttempt);
 router.get('/:attemptId/deep-dive', studentAuthMiddleware, attemptController.getDeepDive);
 

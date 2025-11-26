@@ -8,6 +8,14 @@ export interface IQuestionAnswer {
   markedForReview: boolean;
 }
 
+export interface ISectionTiming {
+  sectionId: string;
+  startedAt: Date;
+  endedAt?: Date;
+  timeSpentSeconds: number;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'AUTO_SUBMITTED';
+}
+
 export interface ITestAttempt extends Document {
   userId: Types.ObjectId;
   categoryId: Types.ObjectId;
@@ -16,6 +24,8 @@ export interface ITestAttempt extends Document {
   startedAt: Date;
   endedAt?: Date;
   questions: IQuestionAnswer[];
+  sectionTimings?: ISectionTiming[]; // For section-wise timing
+  currentSectionId?: string; // Current active section
   totalScore: number;
   totalCorrect: number;
   totalWrong: number;
@@ -36,6 +46,21 @@ const QuestionAnswerSchema = new Schema<IQuestionAnswer>(
   { _id: false }
 );
 
+const SectionTimingSchema = new Schema<ISectionTiming>(
+  {
+    sectionId: { type: String, required: true },
+    startedAt: { type: Date, required: true },
+    endedAt: { type: Date },
+    timeSpentSeconds: { type: Number, default: 0 },
+    status: {
+      type: String,
+      enum: ['IN_PROGRESS', 'COMPLETED', 'AUTO_SUBMITTED'],
+      default: 'IN_PROGRESS',
+    },
+  },
+  { _id: false }
+);
+
 const TestAttemptSchema = new Schema<ITestAttempt>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -49,6 +74,8 @@ const TestAttemptSchema = new Schema<ITestAttempt>(
     startedAt: { type: Date, required: true },
     endedAt: { type: Date },
     questions: [QuestionAnswerSchema],
+    sectionTimings: [SectionTimingSchema],
+    currentSectionId: { type: String },
     totalScore: { type: Number, default: 0 },
     totalCorrect: { type: Number, default: 0 },
     totalWrong: { type: Number, default: 0 },

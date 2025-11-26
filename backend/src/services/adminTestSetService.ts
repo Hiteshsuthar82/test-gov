@@ -28,12 +28,21 @@ export const adminTestSetService = {
     durationMinutes: number;
     totalMarks: number;
     negativeMarking: number;
-    sections: Array<{ sectionId: string; name: string; order: number }>;
+    sections: Array<{ sectionId: string; name: string; order: number; durationMinutes?: number }>;
+    hasSectionWiseTiming?: boolean;
     isActive?: boolean;
   }) {
     const category = await Category.findById(categoryId);
     if (!category) {
       throw new Error('Category not found');
+    }
+
+    // Validate: If section-wise timing is enabled, all sections must have durationMinutes
+    if (data.hasSectionWiseTiming) {
+      const sectionsWithoutDuration = data.sections.filter(s => !s.durationMinutes || s.durationMinutes <= 0);
+      if (sectionsWithoutDuration.length > 0) {
+        throw new Error('All sections must have a duration when section-wise timing is enabled');
+      }
     }
 
     const testSet = await TestSet.create({
@@ -51,7 +60,16 @@ export const adminTestSetService = {
     return testSet;
   },
 
-  async update(id: string, data: Partial<Omit<Parameters<typeof adminTestSetService.create>[1], 'sections'>> & { sections?: Array<{ sectionId: string; name: string; order: number }> }) {
+  async update(id: string, data: Partial<Omit<Parameters<typeof adminTestSetService.create>[1], 'sections'>> & { sections?: Array<{ sectionId: string; name: string; order: number; durationMinutes?: number }> }) {
+    // Validate: If section-wise timing is enabled, all sections must have durationMinutes
+    if (data.hasSectionWiseTiming !== undefined && data.hasSectionWiseTiming) {
+      const sections = data.sections || [];
+      const sectionsWithoutDuration = sections.filter(s => !s.durationMinutes || s.durationMinutes <= 0);
+      if (sectionsWithoutDuration.length > 0) {
+        throw new Error('All sections must have a duration when section-wise timing is enabled');
+      }
+    }
+
     const testSet = await TestSet.findByIdAndUpdate(id, data, { new: true });
     if (!testSet) {
       throw new Error('Test set not found');
