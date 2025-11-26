@@ -13,7 +13,13 @@ export const adminTestSetService = {
     if (!testSet) {
       throw new Error('Test set not found');
     }
-    return testSet;
+    // Convert to plain object and ensure categoryId is included as both object and string
+    const result = testSet.toObject();
+    if (result.categoryId && typeof result.categoryId === 'object') {
+      // Keep the populated object but also add the ID as a string for easier access
+      result.categoryIdString = result.categoryId._id.toString();
+    }
+    return result;
   },
 
   async create(categoryId: string, data: {

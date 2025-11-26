@@ -27,12 +27,28 @@ export default function SetFormPage() {
     isActive: true,
     sections: [] as Section[],
   })
+  const [resolvedCategoryId, setResolvedCategoryId] = useState<string | null>(categoryId || null)
 
   const { data } = useQuery({
     queryKey: ['set', id],
     queryFn: async () => {
       const response = await api.get(`/admin/sets/${id}`)
-      return response.data.data
+      const setData = response.data.data
+      // Extract categoryId from populated object
+      if (setData?.categoryIdString) {
+        setResolvedCategoryId(setData.categoryIdString)
+      } else if (setData?.categoryId) {
+        let catId: string
+        if (typeof setData.categoryId === 'object' && setData.categoryId._id) {
+          catId = setData.categoryId._id.toString()
+        } else if (typeof setData.categoryId === 'string') {
+          catId = setData.categoryId
+        } else {
+          catId = String(setData.categoryId)
+        }
+        setResolvedCategoryId(catId)
+      }
+      return setData
     },
     enabled: !!id,
   })
@@ -61,7 +77,16 @@ export default function SetFormPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sets'] })
-      navigate(`/categories/${categoryId || data?.categoryId}/sets`)
+      queryClient.invalidateQueries({ queryKey: ['sets', categoryId || resolvedCategoryId] })
+      
+      // Use resolved categoryId (from params or from data)
+      const finalCategoryId = categoryId || resolvedCategoryId
+      
+      if (finalCategoryId) {
+        navigate(`/categories/${finalCategoryId}/sets`)
+      } else {
+        navigate('/categories')
+      }
     },
   })
 
