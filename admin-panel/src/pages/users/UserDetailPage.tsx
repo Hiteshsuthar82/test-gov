@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
+import { Loader } from '../../components/ui/loader'
 
 export default function UserDetailPage() {
   const { id } = useParams()
@@ -44,10 +45,10 @@ export default function UserDetailPage() {
     },
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <Loader fullScreen />
 
   return (
-    <div>
+    <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">User Details</h1>
         <Button variant="outline" onClick={() => navigate('/users')}>

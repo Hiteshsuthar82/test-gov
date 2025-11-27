@@ -61,7 +61,7 @@ export default function SendNotificationPage() {
   }
 
   return (
-    <div>
+    <div className="p-8">
       <h1 className="text-3xl font-bold mb-6">Send Notification</h1>
       <Card>
         <CardHeader>

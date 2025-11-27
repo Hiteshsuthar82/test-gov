@@ -5,6 +5,14 @@ export const adminBannerService = {
     return Banner.find().sort({ sortOrder: 1, createdAt: -1 });
   },
 
+  async getById(id: string) {
+    const banner = await Banner.findById(id);
+    if (!banner) {
+      throw new Error('Banner not found');
+    }
+    return banner;
+  },
+
   async create(data: {
     imageUrl: string;
     title?: string;

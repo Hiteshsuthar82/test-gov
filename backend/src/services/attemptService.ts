@@ -37,7 +37,7 @@ export const attemptService = {
         isActive: true,
       })
         .sort({ questionOrder: 1 })
-        .select('-correctOptionId -explanationText -explanationImageUrl');
+        .select('-correctOptionId -explanationText -explanationImageUrls');
 
       return {
         attemptId: existingAttempt._id,
@@ -449,7 +449,7 @@ export const attemptService = {
         isCorrect: qa.isCorrect,
         marks: question.marks,
         explanationText: question.explanationText,
-        explanationImageUrl: question.explanationImageUrl,
+        explanationImageUrls: question.explanationImageUrls || (question.explanationImageUrl ? [question.explanationImageUrl] : []), // Support both old and new format
         timeSpentSeconds: qa.timeSpentSeconds,
         markedForReview: qa.markedForReview,
       };

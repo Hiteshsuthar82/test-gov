@@ -7,11 +7,14 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { Button } from '../../components/ui/button'
+import { ImageUpload } from '../../components/ui/image-upload'
 
 export default function BannerFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imageUrl, setImageUrl] = useState<string>('')
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -42,11 +45,11 @@ export default function BannerFormPage() {
   }, [data])
 
   const mutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (formDataToSend: FormData) => {
       if (id) {
-        return api.put(`/admin/banners/${id}`, data)
+        return api.put(`/admin/banners/${id}`, formDataToSend)
       } else {
-        return api.post('/admin/banners', data)
+        return api.post('/admin/banners', formDataToSend)
       }
     },
     onSuccess: () => {
@@ -55,14 +58,41 @@ export default function BannerFormPage() {
     },
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    mutation.mutate(formData)
+    
+    const formDataToSend = new FormData()
+    formDataToSend.append('title', formData.title)
+    formDataToSend.append('description', formData.description)
+    formDataToSend.append('isActive', formData.isActive.toString())
+    formDataToSend.append('sortOrder', formData.sortOrder.toString())
+    
+    // Priority: new file > new URL > existing URL (only if no new file/URL)
+    // IMPORTANT: When a new file is selected, do NOT send imageUrl to avoid conflicts
+    if (imageFile) {
+      // New file selected - this will replace the old image
+      // Only send the file, do NOT send any imageUrl
+      formDataToSend.append('image', imageFile)
+      console.log('Sending new file for upload:', imageFile.name)
+    } else if (imageUrl) {
+      // New URL provided - backend will fetch and upload
+      formDataToSend.append('imageUrl', imageUrl)
+      console.log('Sending new URL for upload:', imageUrl)
+    } else if (id && formData.imageUrl) {
+      // Update mode: keep existing image if no new file/URL provided
+      formDataToSend.append('imageUrl', formData.imageUrl)
+      console.log('Keeping existing image:', formData.imageUrl)
+    } else if (!id) {
+      // Create mode without image - backend will return error
+      console.log('No image provided for new banner')
+    }
+
+    mutation.mutate(formDataToSend)
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">{id ? 'Edit' : 'Create'} Banner</h1>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-6 text-gray-900">{id ? 'Edit' : 'Create'} Banner</h1>
       <Card>
         <CardHeader>
           <CardTitle>Banner Details</CardTitle>
@@ -70,12 +100,24 @@ export default function BannerFormPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="imageUrl">Image URL</Label>
-              <Input
-                id="imageUrl"
+              <ImageUpload
                 value={formData.imageUrl}
-                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                onChange={(file, url) => {
+                  if (file) {
+                    setImageFile(file)
+                    setImageUrl('')
+                  } else if (url) {
+                    setImageUrl(url)
+                    setImageFile(null)
+                  } else {
+                    setImageFile(null)
+                    setImageUrl('')
+                    setFormData({ ...formData, imageUrl: '' })
+                  }
+                }}
+                label="Banner Image"
                 required
+                folder="banners"
               />
             </div>
             <div>

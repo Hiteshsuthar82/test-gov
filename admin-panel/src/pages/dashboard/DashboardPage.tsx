@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Loader } from '../../components/ui/loader'
 import { Users, BookOpen, CreditCard, TrendingUp } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -13,7 +14,7 @@ export default function DashboardPage() {
   })
 
   if (isLoading) {
-    return <div>Loading...</div>
+    return <Loader fullScreen />
   }
 
   const stats = [
@@ -44,8 +45,8 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-8 text-gray-900">Dashboard</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon

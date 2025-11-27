@@ -63,8 +63,8 @@ export default function NoticeFormPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">{id ? 'Edit' : 'Create'} Notice</h1>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-6 text-gray-900">{id ? 'Edit' : 'Create'} Notice</h1>
       <Card>
         <CardHeader>
           <CardTitle>Notice Details</CardTitle>

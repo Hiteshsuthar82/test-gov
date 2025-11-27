@@ -24,7 +24,7 @@ export const adminQuestionService = {
     correctOptionId: string;
     marks?: number;
     explanationText?: string;
-    explanationImageUrl?: string;
+    explanationImageUrls?: string[]; // Changed to array
     questionOrder: number;
     isActive?: boolean;
   }) {

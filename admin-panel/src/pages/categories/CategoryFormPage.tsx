@@ -7,11 +7,14 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { Button } from '../../components/ui/button'
+import { ImageUpload } from '../../components/ui/image-upload'
 
 export default function CategoryFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [bannerImageFile, setBannerImageFile] = useState<File | null>(null)
+  const [bannerImageUrl, setBannerImageUrl] = useState<string>('')
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -44,11 +47,11 @@ export default function CategoryFormPage() {
   }, [data])
 
   const mutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (formDataToSend: FormData) => {
       if (id) {
-        return api.put(`/admin/categories/${id}`, data)
+        return api.put(`/admin/categories/${id}`, formDataToSend)
       } else {
-        return api.post('/admin/categories', data)
+        return api.post('/admin/categories', formDataToSend)
       }
     },
     onSuccess: () => {
@@ -57,14 +60,40 @@ export default function CategoryFormPage() {
     },
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    mutation.mutate(formData)
+    
+    const formDataToSend = new FormData()
+    formDataToSend.append('name', formData.name)
+    formDataToSend.append('description', formData.description || '')
+    formDataToSend.append('price', formData.price.toString())
+    formDataToSend.append('details', formData.details || '')
+    formDataToSend.append('isActive', formData.isActive.toString())
+    
+    // Priority: new file > new URL > existing URL (only if no new file/URL)
+    // IMPORTANT: When a new file is selected, do NOT send bannerImageUrl to avoid conflicts
+    if (bannerImageFile) {
+      // New file selected - this will replace the old image
+      // Only send the file, do NOT send any bannerImageUrl
+      formDataToSend.append('bannerImage', bannerImageFile)
+      console.log('Sending new file for upload:', bannerImageFile.name)
+    } else if (bannerImageUrl) {
+      // New URL provided - backend will fetch and upload
+      formDataToSend.append('bannerImageUrl', bannerImageUrl)
+      console.log('Sending new URL for upload:', bannerImageUrl)
+    } else if (id && formData.bannerImageUrl) {
+      // Update mode: keep existing image if no new file/URL provided
+      formDataToSend.append('bannerImageUrl', formData.bannerImageUrl)
+      console.log('Keeping existing image:', formData.bannerImageUrl)
+    }
+    // For create mode without image, bannerImageUrl can be optional
+
+    mutation.mutate(formDataToSend)
   }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">{id ? 'Edit' : 'Create'} Category</h1>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-6 text-gray-900">{id ? 'Edit' : 'Create'} Category</h1>
       <Card>
         <CardHeader>
           <CardTitle>Category Details</CardTitle>
@@ -90,11 +119,23 @@ export default function CategoryFormPage() {
               />
             </div>
             <div>
-              <Label htmlFor="bannerImageUrl">Banner Image URL</Label>
-              <Input
-                id="bannerImageUrl"
+              <ImageUpload
                 value={formData.bannerImageUrl}
-                onChange={(e) => setFormData({ ...formData, bannerImageUrl: e.target.value })}
+                onChange={(file, url) => {
+                  if (file) {
+                    setBannerImageFile(file)
+                    setBannerImageUrl('')
+                  } else if (url) {
+                    setBannerImageUrl(url)
+                    setBannerImageFile(null)
+                  } else {
+                    setBannerImageFile(null)
+                    setBannerImageUrl('')
+                    setFormData({ ...formData, bannerImageUrl: '' })
+                  }
+                }}
+                label="Banner Image"
+                folder="categories"
               />
             </div>
             <div>

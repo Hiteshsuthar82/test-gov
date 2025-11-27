@@ -2,77 +2,117 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
-import { Input } from '../../components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { Button } from '../../components/ui/button'
+import { SearchInput } from '../../components/ui/search-input'
+import { Pagination } from '../../components/ui/pagination'
+import { Loader } from '../../components/ui/loader'
 
 export default function UsersListPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const pageSize = 20
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users', search, page],
+    queryKey: ['users', search, page, pageSize],
     queryFn: async () => {
       const response = await api.get('/admin/users', {
-        params: { search, page, limit: 20 },
+        params: { 
+          search: search || undefined, 
+          page, 
+          limit: pageSize 
+        },
       })
       return response.data.data
     },
   })
 
-  if (isLoading) return <div>Loading...</div>
+  const handleSearchChange = (value: string) => {
+    setSearch(value)
+    setPage(1)
+  }
+
+  const users = data?.users || []
+  const total = data?.total || users.length
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Users</h1>
-        <Input
-          placeholder="Search users..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(1)
-          }}
-          className="w-64"
-        />
+    <div className="p-8">
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold text-gray-900">Users</h1>
+        </div>
+        
+        <div className="mb-4">
+          <SearchInput
+            value={search}
+            onChange={handleSearchChange}
+            placeholder="Search users by name, email, or mobile..."
+            className="max-w-md"
+          />
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg border">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Mobile</TableHead>
-              <TableHead>Preparing For</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+            <TableRow className="bg-gray-50">
+              <TableHead className="font-semibold text-gray-900">Name</TableHead>
+              <TableHead className="font-semibold text-gray-900">Email</TableHead>
+              <TableHead className="font-semibold text-gray-900">Mobile</TableHead>
+              <TableHead className="font-semibold text-gray-900">Preparing For</TableHead>
+              <TableHead className="font-semibold text-gray-900">Status</TableHead>
+              <TableHead className="font-semibold text-gray-900">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.users?.map((user: any) => (
-              <TableRow key={user._id}>
-                <TableCell className="font-medium">{user.name}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.mobile}</TableCell>
-                <TableCell>{user.preparingForExam || '-'}</TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    user.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                  }`}>
-                    {user.isBlocked ? 'Blocked' : 'Active'}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Button variant="outline" size="sm" onClick={() => navigate(`/users/${user._id}`)}>
-                    View
-                  </Button>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-12">
+                  <Loader inline />
                 </TableCell>
               </TableRow>
-            ))}
+            ) : users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-12 text-gray-500">
+                  No users found
+                </TableCell>
+              </TableRow>
+            ) : (
+              users.map((user: any) => (
+                <TableRow key={user._id} className="hover:bg-gray-50">
+                  <TableCell className="font-medium text-gray-900">{user.name}</TableCell>
+                  <TableCell className="text-gray-700">{user.email}</TableCell>
+                  <TableCell className="text-gray-700">{user.mobile}</TableCell>
+                  <TableCell className="text-gray-700">{user.preparingForExam || '-'}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      user.isBlocked ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                    }`}>
+                      {user.isBlocked ? 'Blocked' : 'Active'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/users/${user._id}`)}>
+                      View
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
+        
+        {!isLoading && total > pageSize && (
+          <div className="p-4 border-t border-gray-200">
+            <Pagination
+              current={page}
+              total={total}
+              pageSize={pageSize}
+              onChange={setPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

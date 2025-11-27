@@ -9,9 +9,10 @@ router.use(adminAuthMiddleware);
 
 router.get('/sets/:setId/questions', adminQuestionController.getByTestSet);
 router.get('/:id', adminQuestionController.getById);
-router.post('/sets/:setId/questions', upload.fields([{ name: 'questionImage' }, { name: 'explanationImage' }]), adminQuestionController.create);
+// Use upload.any() to handle dynamic fields (questionImage, explanationImage, optionImage_0, optionImage_1, etc.)
+router.post('/sets/:setId/questions', upload.any(), adminQuestionController.create);
 router.post('/sets/:setId/questions/bulk', adminQuestionController.bulkCreate);
-router.put('/:id', upload.fields([{ name: 'questionImage' }, { name: 'explanationImage' }]), adminQuestionController.update);
+router.put('/:id', upload.any(), adminQuestionController.update);
 router.delete('/:id', adminQuestionController.delete);
 
 export default router;

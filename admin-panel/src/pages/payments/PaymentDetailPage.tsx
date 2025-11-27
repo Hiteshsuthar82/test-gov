@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button'
 import { Textarea } from '../../components/ui/textarea'
 import { Label } from '../../components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
+import { Loader } from '../../components/ui/loader'
 import { useState } from 'react'
 
 export default function PaymentDetailPage() {
@@ -48,10 +49,10 @@ export default function PaymentDetailPage() {
     },
   })
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) return <Loader fullScreen />
 
   return (
-    <div>
+    <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Payment Details</h1>
         <Button variant="outline" onClick={() => navigate('/payments')}>

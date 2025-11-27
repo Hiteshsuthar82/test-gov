@@ -15,7 +15,7 @@ export interface IQuestion extends Document {
   correctOptionId: string;
   marks: number;
   explanationText?: string;
-  explanationImageUrl?: string;
+  explanationImageUrls?: string[]; // Changed from explanationImageUrl to array
   questionOrder: number;
   isActive: boolean;
   createdAt: Date;
@@ -41,7 +41,7 @@ const QuestionSchema = new Schema<IQuestion>(
     correctOptionId: { type: String, required: true },
     marks: { type: Number, default: 1 },
     explanationText: { type: String },
-    explanationImageUrl: { type: String },
+    explanationImageUrls: { type: [String], default: [] }, // Changed to array
     questionOrder: { type: Number, required: true },
     isActive: { type: Boolean, default: true },
   },
