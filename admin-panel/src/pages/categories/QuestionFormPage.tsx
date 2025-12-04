@@ -9,6 +9,7 @@ import { Textarea } from '../../components/ui/textarea'
 import { Button } from '../../components/ui/button'
 import { Select } from '../../components/ui/select'
 import { ImageUpload } from '../../components/ui/image-upload'
+import { RichTextEditor } from '../../components/ui/rich-text-editor'
 
 interface Option {
   optionId: string
@@ -25,17 +26,26 @@ export default function QuestionFormPage() {
   const { id, setId } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [directionImageFile, setDirectionImageFile] = useState<File | null>(null)
+  const [directionImageUrl, setDirectionImageUrl] = useState<string>('')
   const [questionImageFile, setQuestionImageFile] = useState<File | null>(null)
   const [questionImageUrl, setQuestionImageUrl] = useState<string>('')
+  const [conclusionImageFile, setConclusionImageFile] = useState<File | null>(null)
+  const [conclusionImageUrl, setConclusionImageUrl] = useState<string>('')
   const [explanationImages, setExplanationImages] = useState<Array<{ file: File | null; url: string; id: string }>>([])
   const [formData, setFormData] = useState({
     sectionId: '',
+    direction: '',
+    directionImageUrl: '',
     questionText: '',
     questionImageUrl: '',
+    conclusion: '',
+    conclusionImageUrl: '',
     options: [] as OptionWithFile[],
     correctOptionId: '',
     marks: 1,
     explanationText: '',
+    explanationFormattedText: '',
     explanationImageUrls: [] as string[],
     questionOrder: 1,
     isActive: true,
@@ -77,19 +87,27 @@ export default function QuestionFormPage() {
       
       setFormData({
         sectionId: questionData.sectionId || '',
+        direction: questionData.direction || '',
+        directionImageUrl: questionData.directionImageUrl || '',
         questionText: questionData.questionText || '',
         questionImageUrl: questionData.questionImageUrl || '',
+        conclusion: questionData.conclusion || '',
+        conclusionImageUrl: questionData.conclusionImageUrl || '',
         options: questionData.options || [],
         correctOptionId: questionData.correctOptionId || '',
         marks: questionData.marks || 1,
         explanationText: questionData.explanationText || '',
+        explanationFormattedText: questionData.explanationFormattedText || '',
         explanationImageUrls: explanationUrls,
         questionOrder: questionData.questionOrder || 1,
         isActive: questionData.isActive ?? true,
       })
       
+      setDirectionImageUrl(questionData.directionImageUrl || '')
+      setConclusionImageUrl(questionData.conclusionImageUrl || '')
+      
       // Initialize explanation images state
-      setExplanationImages(explanationUrls.map((url, index) => ({
+      setExplanationImages(explanationUrls.map((url: string, index: number) => ({
         file: null,
         url: url,
         id: `existing-${index}`
@@ -104,6 +122,7 @@ export default function QuestionFormPage() {
           { optionId: 'B', text: '' },
           { optionId: 'C', text: '' },
           { optionId: 'D', text: '' },
+          { optionId: 'E', text: '' },
         ],
       }))
     }
@@ -156,12 +175,24 @@ export default function QuestionFormPage() {
     
     const formDataToSend = new FormData()
     formDataToSend.append('sectionId', formData.sectionId)
+    formDataToSend.append('direction', formData.direction || '')
     formDataToSend.append('questionText', formData.questionText)
+    formDataToSend.append('conclusion', formData.conclusion || '')
     formDataToSend.append('correctOptionId', formData.correctOptionId)
     formDataToSend.append('marks', formData.marks.toString())
     formDataToSend.append('explanationText', formData.explanationText || '')
+    formDataToSend.append('explanationFormattedText', formData.explanationFormattedText || '')
     formDataToSend.append('questionOrder', formData.questionOrder.toString())
     formDataToSend.append('isActive', formData.isActive.toString())
+    
+    // Direction image
+    if (directionImageFile) {
+      formDataToSend.append('directionImage', directionImageFile)
+    } else if (directionImageUrl) {
+      formDataToSend.append('directionImageUrl', directionImageUrl)
+    } else if (formData.directionImageUrl && !directionImageFile && !directionImageUrl) {
+      formDataToSend.append('directionImageUrl', formData.directionImageUrl)
+    }
     
     // Question image
     if (questionImageFile) {
@@ -170,6 +201,15 @@ export default function QuestionFormPage() {
       formDataToSend.append('questionImageUrl', questionImageUrl)
     } else if (formData.questionImageUrl && !questionImageFile && !questionImageUrl) {
       formDataToSend.append('questionImageUrl', formData.questionImageUrl)
+    }
+    
+    // Conclusion image
+    if (conclusionImageFile) {
+      formDataToSend.append('conclusionImage', conclusionImageFile)
+    } else if (conclusionImageUrl) {
+      formDataToSend.append('conclusionImageUrl', conclusionImageUrl)
+    } else if (formData.conclusionImageUrl && !conclusionImageFile && !conclusionImageUrl) {
+      formDataToSend.append('conclusionImageUrl', formData.conclusionImageUrl)
     }
     
     // Explanation images (multiple)
@@ -201,7 +241,7 @@ export default function QuestionFormPage() {
     // If we have files but no URLs, backend will handle files and create URLs from them
     
     // Options
-    const optionsData = formData.options.map((opt, index) => {
+    const optionsData = formData.options.map((opt) => {
       const optionData: any = {
         optionId: opt.optionId,
         text: opt.text,
@@ -307,6 +347,38 @@ export default function QuestionFormPage() {
             </div>
 
             <div>
+              <Label htmlFor="direction">Direction</Label>
+              <Textarea
+                id="direction"
+                value={formData.direction}
+                onChange={(e) => setFormData({ ...formData, direction: e.target.value })}
+                rows={3}
+                placeholder="Enter direction text (appears before question text)"
+              />
+            </div>
+
+            <div>
+              <ImageUpload
+                value={formData.directionImageUrl}
+                onChange={(file, url) => {
+                  if (file) {
+                    setDirectionImageFile(file)
+                    setDirectionImageUrl('')
+                  } else if (url) {
+                    setDirectionImageUrl(url)
+                    setDirectionImageFile(null)
+                  } else {
+                    setDirectionImageFile(null)
+                    setDirectionImageUrl('')
+                    setFormData({ ...formData, directionImageUrl: '' })
+                  }
+                }}
+                label="Direction Image"
+                folder="questions"
+              />
+            </div>
+
+            <div>
               <Label htmlFor="questionText">Question Text *</Label>
               <Textarea
                 id="questionText"
@@ -334,6 +406,38 @@ export default function QuestionFormPage() {
                   }
                 }}
                 label="Question Image"
+                folder="questions"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="conclusion">Conclusion</Label>
+              <Textarea
+                id="conclusion"
+                value={formData.conclusion}
+                onChange={(e) => setFormData({ ...formData, conclusion: e.target.value })}
+                rows={3}
+                placeholder="Enter conclusion text (appears after question text)"
+              />
+            </div>
+
+            <div>
+              <ImageUpload
+                value={formData.conclusionImageUrl}
+                onChange={(file, url) => {
+                  if (file) {
+                    setConclusionImageFile(file)
+                    setConclusionImageUrl('')
+                  } else if (url) {
+                    setConclusionImageUrl(url)
+                    setConclusionImageFile(null)
+                  } else {
+                    setConclusionImageFile(null)
+                    setConclusionImageUrl('')
+                    setFormData({ ...formData, conclusionImageUrl: '' })
+                  }
+                }}
+                label="Conclusion Image"
                 folder="questions"
               />
             </div>
@@ -406,12 +510,17 @@ export default function QuestionFormPage() {
             </div>
 
             <div>
-              <Label htmlFor="explanationText">Explanation Text</Label>
-              <Textarea
-                id="explanationText"
-                value={formData.explanationText}
-                onChange={(e) => setFormData({ ...formData, explanationText: e.target.value })}
-                rows={3}
+              <RichTextEditor
+                value={formData.explanationFormattedText || formData.explanationText || ''}
+                onChange={(plainText, formattedText) => {
+                  setFormData({ 
+                    ...formData, 
+                    explanationText: plainText,
+                    explanationFormattedText: formattedText
+                  })
+                }}
+                label="Explanation Text"
+                placeholder="Enter explanation with formatting (bold, bullets, etc.)"
               />
             </div>
 

@@ -18,12 +18,17 @@ export const adminQuestionService = {
 
   async create(testSetId: string, data: {
     sectionId: string;
+    direction?: string;
+    directionImageUrl?: string;
     questionText: string;
     questionImageUrl?: string;
+    conclusion?: string;
+    conclusionImageUrl?: string;
     options: Array<{ optionId: string; text: string; imageUrl?: string }>;
     correctOptionId: string;
     marks?: number;
     explanationText?: string;
+    explanationFormattedText?: string;
     explanationImageUrls?: string[]; // Changed to array
     questionOrder: number;
     isActive?: boolean;

@@ -42,8 +42,34 @@ export const adminQuestionController = {
         );
       };
       
+      let directionImageUrl: string | undefined;
       let questionImageUrl: string | undefined;
+      let conclusionImageUrl: string | undefined;
       let explanationImageUrls: string[] = [];
+
+      // Upload direction image if file provided
+      const directionImageFile = getFileByFieldname('directionImage');
+      if (directionImageFile) {
+        const uploadResult = await uploadToCloudinary(
+          directionImageFile.buffer,
+          'questions',
+          `direction-${Date.now()}`
+        );
+        directionImageUrl = uploadResult.secure_url;
+      } 
+      // If directionImageUrl is provided (from URL input), fetch and upload to Cloudinary
+      else if (req.body.directionImageUrl && typeof req.body.directionImageUrl === 'string' && req.body.directionImageUrl.trim()) {
+        if (req.body.directionImageUrl.includes('cloudinary.com')) {
+          directionImageUrl = req.body.directionImageUrl;
+        } else {
+          const uploadResult = await fetchAndUploadToCloudinary(
+            req.body.directionImageUrl,
+            'questions',
+            `direction-${Date.now()}`
+          );
+          directionImageUrl = uploadResult.secure_url;
+        }
+      }
 
       // Upload question image if file provided
       const questionImageFile = getFileByFieldname('questionImage');
@@ -66,6 +92,30 @@ export const adminQuestionController = {
             `question-${Date.now()}`
           );
           questionImageUrl = uploadResult.secure_url;
+        }
+      }
+
+      // Upload conclusion image if file provided
+      const conclusionImageFile = getFileByFieldname('conclusionImage');
+      if (conclusionImageFile) {
+        const uploadResult = await uploadToCloudinary(
+          conclusionImageFile.buffer,
+          'questions',
+          `conclusion-${Date.now()}`
+        );
+        conclusionImageUrl = uploadResult.secure_url;
+      } 
+      // If conclusionImageUrl is provided (from URL input), fetch and upload to Cloudinary
+      else if (req.body.conclusionImageUrl && typeof req.body.conclusionImageUrl === 'string' && req.body.conclusionImageUrl.trim()) {
+        if (req.body.conclusionImageUrl.includes('cloudinary.com')) {
+          conclusionImageUrl = req.body.conclusionImageUrl;
+        } else {
+          const uploadResult = await fetchAndUploadToCloudinary(
+            req.body.conclusionImageUrl,
+            'questions',
+            `conclusion-${Date.now()}`
+          );
+          conclusionImageUrl = uploadResult.secure_url;
         }
       }
 
@@ -153,12 +203,17 @@ export const adminQuestionController = {
 
       const question = await adminQuestionService.create(setId, {
         sectionId: req.body.sectionId,
+        direction: req.body.direction,
+        directionImageUrl: directionImageUrl || undefined,
         questionText: req.body.questionText,
         questionImageUrl: questionImageUrl || undefined,
+        conclusion: req.body.conclusion,
+        conclusionImageUrl: conclusionImageUrl || undefined,
         options: options || req.body.options,
         correctOptionId: req.body.correctOptionId,
         marks: parseInt(req.body.marks) || 1,
         explanationText: req.body.explanationText,
+        explanationFormattedText: req.body.explanationFormattedText,
         explanationImageUrls: explanationImageUrls.length > 0 ? explanationImageUrls : undefined,
         questionOrder: parseInt(req.body.questionOrder) || 1,
         isActive: req.body.isActive === 'true' || req.body.isActive === true,
@@ -187,11 +242,67 @@ export const adminQuestionController = {
         );
       };
       
+      let directionImageUrl: string | undefined;
       let questionImageUrl: string | undefined;
+      let conclusionImageUrl: string | undefined;
       let explanationImageUrls: string[] = [];
 
       // Get existing question to delete old images
       const existingQuestion = await adminQuestionService.getById(id);
+
+      // Upload new direction image if file provided
+      const directionImageFile = getFileByFieldname('directionImage');
+      if (directionImageFile) {
+        // Delete old image
+        if (existingQuestion?.directionImageUrl && existingQuestion.directionImageUrl.includes('cloudinary.com')) {
+          try {
+            await deleteFromCloudinary(existingQuestion.directionImageUrl);
+          } catch (error) {
+            console.error('Error deleting old direction image:', error);
+          }
+        }
+
+        const uploadResult = await uploadToCloudinary(
+          directionImageFile.buffer,
+          'questions',
+          `direction-${Date.now()}`
+        );
+        directionImageUrl = uploadResult.secure_url;
+      } 
+      // If directionImageUrl is provided (from URL input), fetch and upload to Cloudinary
+      else if (req.body.directionImageUrl && typeof req.body.directionImageUrl === 'string' && req.body.directionImageUrl.trim()) {
+        if (req.body.directionImageUrl.includes('cloudinary.com')) {
+          if (req.body.directionImageUrl !== existingQuestion?.directionImageUrl) {
+            // New Cloudinary URL, delete old one if exists
+            if (existingQuestion?.directionImageUrl && existingQuestion.directionImageUrl.includes('cloudinary.com')) {
+              try {
+                await deleteFromCloudinary(existingQuestion.directionImageUrl);
+              } catch (error) {
+                console.error('Error deleting old direction image:', error);
+              }
+            }
+            directionImageUrl = req.body.directionImageUrl;
+          } else {
+            directionImageUrl = req.body.directionImageUrl;
+          }
+        } else {
+          // Fetch from URL and upload to Cloudinary
+          if (existingQuestion?.directionImageUrl && existingQuestion.directionImageUrl.includes('cloudinary.com')) {
+            try {
+              await deleteFromCloudinary(existingQuestion.directionImageUrl);
+            } catch (error) {
+              console.error('Error deleting old direction image:', error);
+            }
+          }
+
+          const uploadResult = await fetchAndUploadToCloudinary(
+            req.body.directionImageUrl,
+            'questions',
+            `direction-${Date.now()}`
+          );
+          directionImageUrl = uploadResult.secure_url;
+        }
+      }
 
       // Upload new question image if file provided
       const questionImageFile = getFileByFieldname('questionImage');
@@ -244,6 +355,60 @@ export const adminQuestionController = {
             `question-${Date.now()}`
           );
           questionImageUrl = uploadResult.secure_url;
+        }
+      }
+
+      // Upload new conclusion image if file provided
+      const conclusionImageFile = getFileByFieldname('conclusionImage');
+      if (conclusionImageFile) {
+        // Delete old image
+        if (existingQuestion?.conclusionImageUrl && existingQuestion.conclusionImageUrl.includes('cloudinary.com')) {
+          try {
+            await deleteFromCloudinary(existingQuestion.conclusionImageUrl);
+          } catch (error) {
+            console.error('Error deleting old conclusion image:', error);
+          }
+        }
+
+        const uploadResult = await uploadToCloudinary(
+          conclusionImageFile.buffer,
+          'questions',
+          `conclusion-${Date.now()}`
+        );
+        conclusionImageUrl = uploadResult.secure_url;
+      } 
+      // If conclusionImageUrl is provided (from URL input), fetch and upload to Cloudinary
+      else if (req.body.conclusionImageUrl && typeof req.body.conclusionImageUrl === 'string' && req.body.conclusionImageUrl.trim()) {
+        if (req.body.conclusionImageUrl.includes('cloudinary.com')) {
+          if (req.body.conclusionImageUrl !== existingQuestion?.conclusionImageUrl) {
+            // New Cloudinary URL, delete old one if exists
+            if (existingQuestion?.conclusionImageUrl && existingQuestion.conclusionImageUrl.includes('cloudinary.com')) {
+              try {
+                await deleteFromCloudinary(existingQuestion.conclusionImageUrl);
+              } catch (error) {
+                console.error('Error deleting old conclusion image:', error);
+              }
+            }
+            conclusionImageUrl = req.body.conclusionImageUrl;
+          } else {
+            conclusionImageUrl = req.body.conclusionImageUrl;
+          }
+        } else {
+          // Fetch from URL and upload to Cloudinary
+          if (existingQuestion?.conclusionImageUrl && existingQuestion.conclusionImageUrl.includes('cloudinary.com')) {
+            try {
+              await deleteFromCloudinary(existingQuestion.conclusionImageUrl);
+            } catch (error) {
+              console.error('Error deleting old conclusion image:', error);
+            }
+          }
+
+          const uploadResult = await fetchAndUploadToCloudinary(
+            req.body.conclusionImageUrl,
+            'questions',
+            `conclusion-${Date.now()}`
+          );
+          conclusionImageUrl = uploadResult.secure_url;
         }
       }
 
@@ -400,16 +565,27 @@ export const adminQuestionController = {
 
       const updateData: any = {
         sectionId: req.body.sectionId,
+        direction: req.body.direction,
         questionText: req.body.questionText,
+        conclusion: req.body.conclusion,
         correctOptionId: req.body.correctOptionId,
         marks: parseInt(req.body.marks) || 1,
         explanationText: req.body.explanationText,
+        explanationFormattedText: req.body.explanationFormattedText,
         questionOrder: parseInt(req.body.questionOrder) || 1,
         isActive: req.body.isActive === 'true' || req.body.isActive === true,
       };
       
+      if (directionImageUrl !== undefined) {
+        updateData.directionImageUrl = directionImageUrl || undefined;
+      }
+      
       if (questionImageUrl !== undefined) {
         updateData.questionImageUrl = questionImageUrl || undefined;
+      }
+      
+      if (conclusionImageUrl !== undefined) {
+        updateData.conclusionImageUrl = conclusionImageUrl || undefined;
       }
       
       // Only update explanationImageUrls if new images were provided or explicitly cleared
@@ -438,12 +614,30 @@ export const adminQuestionController = {
       // Get question to delete images from Cloudinary
       const question = await adminQuestionService.getById(id);
       
+      // Delete direction image
+      if (question?.directionImageUrl) {
+        try {
+          await deleteFromCloudinary(question.directionImageUrl);
+        } catch (error) {
+          console.error('Error deleting direction image:', error);
+        }
+      }
+
       // Delete question image
       if (question?.questionImageUrl) {
         try {
           await deleteFromCloudinary(question.questionImageUrl);
         } catch (error) {
           console.error('Error deleting question image:', error);
+        }
+      }
+
+      // Delete conclusion image
+      if (question?.conclusionImageUrl) {
+        try {
+          await deleteFromCloudinary(question.conclusionImageUrl);
+        } catch (error) {
+          console.error('Error deleting conclusion image:', error);
         }
       }
 
