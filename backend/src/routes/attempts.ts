@@ -43,7 +43,9 @@ router.post('/:attemptId/submit-section', studentAuthMiddleware, validate(submit
 router.get('/:attemptId/section-timer', studentAuthMiddleware, attemptController.checkSectionTimer);
 router.get('/:attemptId', studentAuthMiddleware, attemptController.getAttempt);
 router.get('/:attemptId/deep-dive', studentAuthMiddleware, attemptController.getDeepDive);
+router.post('/:attemptId/pause', studentAuthMiddleware, attemptController.pauseAttempt);
 router.get('/', studentAuthMiddleware, attemptController.getUserAttempts);
+router.get('/in-progress/list', studentAuthMiddleware, attemptController.getInProgressAttempts);
 
 export default router;
 

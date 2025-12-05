@@ -11,6 +11,8 @@ import { Button } from '../../components/ui/button'
 import { Select } from '../../components/ui/select'
 import { ImageUpload } from '../../components/ui/image-upload'
 import { RichTextEditor } from '../../components/ui/rich-text-editor'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog'
+import { AlertTriangle } from 'lucide-react'
 
 interface Option {
   optionId: string
@@ -62,6 +64,7 @@ export default function QuestionFormPage() {
   const [conclusionImageFile, setConclusionImageFile] = useState<File | null>(null)
   const [conclusionImageUrl, setConclusionImageUrl] = useState<string>('')
   const [explanationImages, setExplanationImages] = useState<ExplanationImage[]>([])
+  const [showWarningDialog, setShowWarningDialog] = useState(false)
   
   // Initialize form with default values
   const { register, control, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<QuestionFormData>({
@@ -214,6 +217,12 @@ export default function QuestionFormPage() {
   })
 
   const onSubmit = async (data: QuestionFormData) => {
+    // Validate that correctOptionId is selected
+    if (!data.correctOptionId || data.correctOptionId.trim() === '') {
+      setShowWarningDialog(true)
+      return
+    }
+
     const formDataToSend = new FormData()
     formDataToSend.append('sectionId', data.sectionId)
     formDataToSend.append('direction', data.direction || '')
@@ -331,6 +340,28 @@ export default function QuestionFormPage() {
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-6 text-gray-900">{id ? 'Edit' : 'Create'} Question</h1>
+      
+      {/* Warning Dialog for Missing Correct Answer */}
+      <Dialog open={showWarningDialog} onOpenChange={setShowWarningDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              <DialogTitle>Correct Answer Required</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2">
+              Please select the correct answer option before saving the question. 
+              The correct answer is required to create or update a question.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowWarningDialog(false)}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader>
           <CardTitle>Question Details</CardTitle>

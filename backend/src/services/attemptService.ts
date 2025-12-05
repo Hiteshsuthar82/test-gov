@@ -450,16 +450,18 @@ export const attemptService = {
       };
     }).filter(Boolean);
 
+    const testSet = attempt.testSetId as any;
+
     return {
       attemptId: attempt._id,
       testSet: {
-        id: attempt.testSetId._id || attempt.testSetId,
-        name: attempt.testSetId.name,
-        durationMinutes: attempt.testSetId.durationMinutes,
-        totalMarks: attempt.testSetId.totalMarks,
-        negativeMarking: attempt.testSetId.negativeMarking,
-        sections: attempt.testSetId.sections,
-        hasSectionWiseTiming: attempt.testSetId.hasSectionWiseTiming,
+        id: testSet._id || testSet,
+        name: testSet.name,
+        durationMinutes: testSet.durationMinutes,
+        totalMarks: testSet.totalMarks,
+        negativeMarking: testSet.negativeMarking,
+        sections: testSet.sections,
+        hasSectionWiseTiming: testSet.hasSectionWiseTiming,
       },
       questions: questionsWithDetails,
       status: attempt.status,
@@ -555,6 +557,63 @@ export const attemptService = {
       .populate('categoryId', 'name')
       .sort({ createdAt: -1 })
       .limit(50);
+
+    return attempts;
+  },
+
+  async pauseAttempt(attemptId: string, userId: string) {
+    const attempt = await TestAttempt.findOne({
+      _id: new Types.ObjectId(attemptId),
+      userId: new Types.ObjectId(userId),
+      status: 'IN_PROGRESS',
+    });
+
+    if (!attempt) {
+      throw new Error('Attempt not found or not in progress');
+    }
+
+    // Calculate elapsed time and update
+    const now = new Date();
+    const elapsedSeconds = Math.floor((now.getTime() - attempt.startedAt.getTime()) / 1000);
+    
+    // Update section timing if section-wise
+    const testSet = await TestSet.findById(attempt.testSetId);
+    if (testSet?.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+      const sectionTiming = attempt.sectionTimings.find(
+        (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+      );
+      if (sectionTiming) {
+        sectionTiming.timeSpentSeconds = Math.floor(
+          (now.getTime() - sectionTiming.startedAt.getTime()) / 1000
+        );
+      }
+    }
+
+    // Store paused state (we'll use a custom field or just return the state)
+    // For now, we'll just return the current state - the frontend will handle pausing
+    await attempt.save();
+
+    return {
+      message: 'Test paused',
+      elapsedSeconds,
+      pausedAt: now,
+    };
+  },
+
+  async getInProgressAttempts(userId: string, testSetId?: string) {
+    const query: any = {
+      userId: new Types.ObjectId(userId),
+      status: 'IN_PROGRESS',
+    };
+
+    if (testSetId) {
+      query.testSetId = new Types.ObjectId(testSetId);
+    }
+
+    const attempts = await TestAttempt.find(query)
+      .populate('testSetId', 'name durationMinutes totalMarks')
+      .populate('categoryId', 'name')
+      .sort({ startedAt: -1 });
 
     return attempts;
   },

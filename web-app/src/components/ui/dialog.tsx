@@ -4,17 +4,32 @@ import { cn } from "@/lib/utils"
 interface DialogProps {
   open: boolean
   children: React.ReactNode
+  onOpenChange?: (open: boolean) => void
+  preventClose?: boolean // New prop to prevent closing
 }
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {}
 
-export const Dialog: React.FC<DialogProps> = ({ open, children }) => {
+export const Dialog: React.FC<DialogProps> = ({ open, children, onOpenChange, preventClose = false }) => {
   if (!open) return null
 
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (preventClose) {
+      e.stopPropagation()
+      return
+    }
+    if (e.target === e.currentTarget && onOpenChange) {
+      onOpenChange(false)
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onClick={preventClose ? undefined : handleBackdropClick}
+    >
       <div className="fixed inset-0 bg-black/50" />
-      <div className="relative z-50">
+      <div className="relative z-50" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>

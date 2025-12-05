@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
-import { FiClock, FiFileText, FiCheckCircle, FiLock, FiList } from 'react-icons/fi'
+import { FiClock, FiFileText, FiCheckCircle, FiLock, FiList, FiX } from 'react-icons/fi'
 
 interface TestSet {
   _id: string
@@ -68,22 +69,64 @@ export default function CategoryPage() {
     retry: false,
   })
 
+  const [showResumeDialog, setShowResumeDialog] = useState(false)
+  const [selectedTestSetId, setSelectedTestSetId] = useState<string | null>(null)
+
+  const { data: inProgressAttempts } = useQuery({
+    queryKey: ['inProgressAttempts', selectedTestSetId],
+    queryFn: async () => {
+      const response = await api.get(`/attempts/in-progress/list${selectedTestSetId ? `?testSetId=${selectedTestSetId}` : ''}`)
+      return response.data.data
+    },
+    enabled: showResumeDialog && !!selectedTestSetId,
+  })
+
   const startAttemptMutation = useMutation({
     mutationFn: async (testSetId: string) => {
       const response = await api.post(`/attempts/start`, { testSetId })
       return response.data.data
     },
     onSuccess: (data) => {
-      window.location.href = `/test/${data.testSetId}/attempt/${data.attemptId}`
+      window.location.href = `/test/${data.testSet?.id || data.testSetId}/attempt/${data.attemptId}`
     },
   })
 
-  const handleStartTest = (testSetId: string) => {
+  const handleStartTest = async (testSetId: string) => {
     if (!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') {
       alert('Please subscribe to this category first')
       return
     }
-    startAttemptMutation.mutate(testSetId)
+
+    // Check for in-progress attempts
+    try {
+      const response = await api.get(`/attempts/in-progress/list?testSetId=${testSetId}`)
+      const inProgress = response.data.data || []
+      
+      if (inProgress.length > 0) {
+        setSelectedTestSetId(testSetId)
+        setShowResumeDialog(true)
+      } else {
+        startAttemptMutation.mutate(testSetId)
+      }
+    } catch (error) {
+      // If check fails, just start new test
+      startAttemptMutation.mutate(testSetId)
+    }
+  }
+
+  const handleResumeAttempt = (attemptId: string) => {
+    const testSet = testSets?.find((ts: TestSet) => ts._id === selectedTestSetId)
+    if (testSet) {
+      window.location.href = `/test/${selectedTestSetId}/attempt/${attemptId}`
+    }
+  }
+
+  const handleStartNewTest = () => {
+    if (selectedTestSetId) {
+      startAttemptMutation.mutate(selectedTestSetId)
+      setShowResumeDialog(false)
+      setSelectedTestSetId(null)
+    }
   }
 
   return (
@@ -236,6 +279,67 @@ export default function CategoryPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Resume Dialog */}
+        {showResumeDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-2xl mx-4">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Resume Test or Start New?</CardTitle>
+                  <button
+                    onClick={() => {
+                      setShowResumeDialog(false)
+                      setSelectedTestSetId(null)
+                    }}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <FiX className="w-5 h-5" />
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 mb-4">
+                  You have {inProgressAttempts?.length || 0} in-progress test{inProgressAttempts?.length !== 1 ? 's' : ''}. Choose an option:
+                </p>
+                <div className="space-y-4">
+                  {inProgressAttempts && inProgressAttempts.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Resume Existing Test:</h3>
+                      <div className="space-y-2">
+                        {inProgressAttempts.map((attempt: any) => (
+                          <Card key={attempt._id} className="hover:bg-gray-50 cursor-pointer">
+                            <CardContent className="pt-4">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <p className="font-medium">{attempt.testSetId?.name || 'Test'}</p>
+                                  <p className="text-sm text-gray-600">
+                                    Started: {new Date(attempt.startedAt).toLocaleString()}
+                                  </p>
+                                </div>
+                                <Button
+                                  onClick={() => handleResumeAttempt(attempt._id)}
+                                  variant="outline"
+                                >
+                                  Resume
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="pt-4 border-t">
+                    <Button onClick={handleStartNewTest} className="w-full">
+                      Start New Test
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </Layout>

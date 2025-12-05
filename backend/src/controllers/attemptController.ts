@@ -104,5 +104,30 @@ export const attemptController = {
       sendError(res, error.message, 400);
     }
   },
+
+  pauseAttempt: async (req: AuthRequest, res: Response) => {
+    try {
+      const { attemptId } = req.params;
+      const userId = req.user._id.toString();
+      const result = await attemptService.pauseAttempt(attemptId, userId);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  getInProgressAttempts: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user._id.toString();
+      const { testSetId } = req.query;
+      const attempts = await attemptService.getInProgressAttempts(
+        userId,
+        testSetId as string | undefined
+      );
+      sendSuccess(res, attempts);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
 };
 
