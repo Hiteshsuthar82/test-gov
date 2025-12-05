@@ -51,5 +51,23 @@ export const authController = {
       sendError(res, error.message, 500);
     }
   },
+
+  signupWeb: async (req: Request, res: Response) => {
+    try {
+      const result = await authService.signupWeb(req.body);
+      sendSuccess(res, result, 'Signup successful. OTP sent to email.');
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  verifyOTPWeb: async (req: Request, res: Response) => {
+    try {
+      const result = await authService.verifyOTPWeb(req.body);
+      sendSuccess(res, result, 'Login successful.');
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
 };
 

@@ -409,14 +409,64 @@ export const attemptService = {
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
     })
-      .populate('testSetId', 'name durationMinutes totalMarks')
+      .populate('testSetId', 'name durationMinutes totalMarks negativeMarking sections hasSectionWiseTiming')
       .populate('categoryId', 'name');
 
     if (!attempt) {
       throw new Error('Attempt not found');
     }
 
-    return attempt;
+    // Get full question details
+    const questionIds = attempt.questions.map((q) => q.questionId);
+    const questions = await Question.find({ _id: { $in: questionIds } })
+      .sort({ questionOrder: 1 })
+      .select('-correctOptionId -explanationText -explanationFormattedText -explanationImageUrls');
+
+    // Map questions by ID for easy lookup
+    const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
+
+    // Combine attempt data with full question details
+    const questionsWithDetails = attempt.questions.map((qa) => {
+      const question = questionMap.get(qa.questionId.toString());
+      if (!question) return null;
+
+      return {
+        _id: question._id.toString(),
+        id: question._id.toString(), // Alias for compatibility
+        sectionId: question.sectionId,
+        direction: question.direction,
+        directionImageUrl: question.directionImageUrl,
+        questionText: question.questionText,
+        questionImageUrl: question.questionImageUrl,
+        conclusion: question.conclusion,
+        conclusionImageUrl: question.conclusionImageUrl,
+        options: question.options || [], // Ensure options is always an array
+        marks: question.marks,
+        questionOrder: question.questionOrder,
+        selectedOptionId: qa.selectedOptionId,
+        markedForReview: qa.markedForReview,
+        timeSpentSeconds: qa.timeSpentSeconds,
+      };
+    }).filter(Boolean);
+
+    return {
+      attemptId: attempt._id,
+      testSet: {
+        id: attempt.testSetId._id || attempt.testSetId,
+        name: attempt.testSetId.name,
+        durationMinutes: attempt.testSetId.durationMinutes,
+        totalMarks: attempt.testSetId.totalMarks,
+        negativeMarking: attempt.testSetId.negativeMarking,
+        sections: attempt.testSetId.sections,
+        hasSectionWiseTiming: attempt.testSetId.hasSectionWiseTiming,
+      },
+      questions: questionsWithDetails,
+      status: attempt.status,
+      startedAt: attempt.startedAt,
+      endedAt: attempt.endedAt,
+      currentSectionId: attempt.currentSectionId,
+      sectionTimings: attempt.sectionTimings,
+    };
   },
 
   async getDeepDive(attemptId: string, userId: string) {
@@ -471,6 +521,40 @@ export const attemptService = {
       endedAt: attempt.endedAt,
       questions: detailedQuestions,
     };
+  },
+
+  async updateReview(attemptId: string, userId: string, questionId: string, markedForReview: boolean) {
+    const attempt = await TestAttempt.findOne({
+      _id: new Types.ObjectId(attemptId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!attempt) {
+      throw new Error('Attempt not found');
+    }
+
+    const question = attempt.questions.find(
+      (q) => q.questionId.toString() === questionId
+    );
+
+    if (question) {
+      question.markedForReview = markedForReview;
+      await attempt.save();
+    }
+
+    return { message: 'Review status updated' };
+  },
+
+  async getUserAttempts(userId: string) {
+    const attempts = await TestAttempt.find({
+      userId: new Types.ObjectId(userId),
+    })
+      .populate('testSetId', 'name')
+      .populate('categoryId', 'name')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    return attempts;
   },
 };
 

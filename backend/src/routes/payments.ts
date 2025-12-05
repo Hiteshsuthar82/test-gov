@@ -14,14 +14,19 @@ const createPaymentSchema = z.object({
     payerName: z.string().min(1),
     payerUpiId: z.string().min(1),
     upiTransactionId: z.string().optional(),
-    screenshotUrl: z.string().url(),
+    screenshotUrl: z.string().url().optional(),
   }),
 });
+
+router.get(
+  '/config',
+  paymentController.getConfig
+);
 
 router.post(
   '/',
   studentAuthMiddleware,
-  validate(createPaymentSchema),
+  upload.single('screenshot'),
   paymentController.create
 );
 

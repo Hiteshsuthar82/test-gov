@@ -31,9 +31,32 @@ const verifyOTPSchema = z.object({
   }),
 });
 
+const signupWebSchema = z.object({
+  body: z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    mobile: z.string().min(10),
+    preparingForExam: z.string().optional(),
+  }),
+});
+
+const verifyOTPWebSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    otp: z.string().length(6),
+  }),
+});
+
+// Mobile routes
 router.post('/signup', validate(signupSchema), authController.signup);
 router.post('/send-otp', validate(sendOTPSchema), authController.sendOTP);
 router.post('/verify-otp', validate(verifyOTPSchema), authController.verifyOTP);
+
+// Web routes
+router.post('/web/signup', validate(signupWebSchema), authController.signupWeb);
+router.post('/web/send-otp', validate(sendOTPSchema), authController.sendOTP);
+router.post('/web/verify-otp', validate(verifyOTPWebSchema), authController.verifyOTPWeb);
+
 router.get('/me', studentAuthMiddleware, authController.me);
 
 export default router;

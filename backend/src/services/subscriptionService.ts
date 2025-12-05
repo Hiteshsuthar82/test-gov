@@ -13,5 +13,16 @@ export const subscriptionService = {
 
     return subscriptions;
   },
+
+  async checkSubscription(userId: string, categoryId: string) {
+    const subscription = await Subscription.findOne({
+      userId: new Types.ObjectId(userId),
+      categoryId: new Types.ObjectId(categoryId),
+    })
+      .populate('categoryId', 'name price bannerImageUrl')
+      .populate('paymentReferenceId', 'amount status');
+
+    return subscription;
+  },
 };
 

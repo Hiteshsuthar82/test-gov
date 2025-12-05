@@ -21,6 +21,13 @@ const updateAnswerSchema = z.object({
   }),
 });
 
+const updateReviewSchema = z.object({
+  body: z.object({
+    questionId: z.string().min(1),
+    markedForReview: z.boolean(),
+  }),
+});
+
 const submitSectionSchema = z.object({
   body: z.object({
     sectionId: z.string().min(1),
@@ -29,11 +36,14 @@ const submitSectionSchema = z.object({
 
 router.post('/start', studentAuthMiddleware, validate(startAttemptSchema), attemptController.start);
 router.patch('/:attemptId/answer', studentAuthMiddleware, validate(updateAnswerSchema), attemptController.updateAnswer);
+router.put('/:attemptId/answer', studentAuthMiddleware, attemptController.updateAnswer);
+router.put('/:attemptId/review', studentAuthMiddleware, validate(updateReviewSchema), attemptController.updateReview);
 router.post('/:attemptId/submit', studentAuthMiddleware, attemptController.submit);
 router.post('/:attemptId/submit-section', studentAuthMiddleware, validate(submitSectionSchema), attemptController.submitSection);
 router.get('/:attemptId/section-timer', studentAuthMiddleware, attemptController.checkSectionTimer);
 router.get('/:attemptId', studentAuthMiddleware, attemptController.getAttempt);
 router.get('/:attemptId/deep-dive', studentAuthMiddleware, attemptController.getDeepDive);
+router.get('/', studentAuthMiddleware, attemptController.getUserAttempts);
 
 export default router;
 

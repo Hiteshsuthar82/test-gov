@@ -82,5 +82,27 @@ export const attemptController = {
       sendError(res, error.message, 400);
     }
   },
+
+  updateReview: async (req: AuthRequest, res: Response) => {
+    try {
+      const { attemptId } = req.params;
+      const { questionId, markedForReview } = req.body;
+      const userId = req.user._id.toString();
+      const result = await attemptService.updateReview(attemptId, userId, questionId, markedForReview);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  getUserAttempts: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user._id.toString();
+      const attempts = await attemptService.getUserAttempts(userId);
+      sendSuccess(res, attempts);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
 };
 

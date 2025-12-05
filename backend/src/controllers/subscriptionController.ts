@@ -13,5 +13,16 @@ export const subscriptionController = {
       sendError(res, error.message, 500);
     }
   },
+
+  checkSubscription: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user._id.toString();
+      const { categoryId } = req.params;
+      const subscription = await subscriptionService.checkSubscription(userId, categoryId);
+      sendSuccess(res, subscription);
+    } catch (error: any) {
+      sendError(res, error.message, 500);
+    }
+  },
 };
 
