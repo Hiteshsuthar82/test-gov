@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useAuthStore } from './store/authStore'
+import { useIsAuthenticated } from './store/authStore'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import HomePage from './pages/HomePage'
@@ -13,8 +13,8 @@ import PaymentPage from './pages/PaymentPage'
 const queryClient = new QueryClient()
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
-  return isAuthenticated() ? <>{children}</> : <Navigate to="/login" />
+  const isAuthenticated = useIsAuthenticated()
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />
 }
 
 function App() {

@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
 import { FiUser, FiLogOut, FiHome } from 'react-icons/fi'
 
 export default function Navbar() {
-  const { user, logout, isAuthenticated } = useAuthStore()
+  const { user, logout } = useAuthStore()
+  const isAuthenticated = useIsAuthenticated()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -24,7 +25,7 @@ export default function Navbar() {
           </Link>
 
           <div className="flex items-center space-x-4">
-            {isAuthenticated() ? (
+            {isAuthenticated ? (
               <>
                 <Link to="/">
                   <Button variant="ghost" size="sm">

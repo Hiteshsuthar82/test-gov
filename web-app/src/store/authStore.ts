@@ -14,12 +14,12 @@ interface AuthState {
   token: string | null
   setAuth: (user: User, token: string) => void
   logout: () => void
-  isAuthenticated: () => boolean
 }
 
+// Create the store
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       token: null,
       setAuth: (user, token) => {
@@ -28,10 +28,8 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: () => {
         localStorage.removeItem('token')
+        localStorage.removeItem('user')
         set({ user: null, token: null })
-      },
-      isAuthenticated: () => {
-        return !!get().token && !!get().user
       },
     }),
     {
@@ -39,4 +37,10 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Create a selector hook for isAuthenticated
+export const useIsAuthenticated = () => {
+  const { token, user } = useAuthStore()
+  return !!token && !!user
+}
 
