@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
-import { FiUser, FiLogOut, FiHome } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiHome, FiBook } from 'react-icons/fi'
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
@@ -31,6 +31,12 @@ export default function Navbar() {
                   <Button variant="ghost" size="sm">
                     <FiHome className="mr-2" />
                     Home
+                  </Button>
+                </Link>
+                <Link to="/subscriptions">
+                  <Button variant="ghost" size="sm">
+                    <FiBook className="mr-2" />
+                    My Subscriptions
                   </Button>
                 </Link>
                 <Link to="/profile">

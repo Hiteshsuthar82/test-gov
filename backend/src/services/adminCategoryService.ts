@@ -45,6 +45,7 @@ export const adminCategoryService = {
     bannerImageUrl?: string;
     price: number;
     details?: string;
+    detailsFormatted?: string;
     isActive?: boolean;
   }) {
     return Category.create(data);

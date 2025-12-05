@@ -10,6 +10,7 @@ import { FiClock, FiFlag, FiCheckCircle } from 'react-icons/fi'
 interface Question {
   _id: string
   questionText: string
+  questionFormattedText?: string
   questionImageUrl?: string
   direction?: string
   directionImageUrl?: string
@@ -210,9 +211,14 @@ export default function TestAttemptPage() {
 
                   {/* Question */}
                   <div>
-                    <p className="text-lg font-medium mb-4">
-                      {currentQuestionIndex + 1}. {currentQuestion.questionText}
-                    </p>
+                    <div className="text-lg font-medium mb-4">
+                      {currentQuestionIndex + 1}.{' '}
+                      {currentQuestion.questionFormattedText ? (
+                        <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
+                      ) : (
+                        <span>{currentQuestion.questionText}</span>
+                      )}
+                    </div>
                     {currentQuestion.questionImageUrl && (
                       <img
                         src={currentQuestion.questionImageUrl}

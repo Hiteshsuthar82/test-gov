@@ -21,6 +21,7 @@ export const adminQuestionService = {
     direction?: string;
     directionImageUrl?: string;
     questionText: string;
+    questionFormattedText?: string;
     questionImageUrl?: string;
     conclusion?: string;
     conclusionImageUrl?: string;

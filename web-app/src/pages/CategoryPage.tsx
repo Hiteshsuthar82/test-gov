@@ -4,7 +4,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
-import { FiClock, FiFileText, FiCheckCircle } from 'react-icons/fi'
+import { FiClock, FiFileText, FiCheckCircle, FiLock, FiList } from 'react-icons/fi'
 
 interface TestSet {
   _id: string
@@ -13,6 +13,7 @@ interface TestSet {
   durationMinutes: number
   totalMarks: number
   totalQuestions: number
+  attemptCount?: number
   categoryId: string
   isActive: boolean
 }
@@ -30,15 +31,6 @@ export default function CategoryPage() {
   })
   const category = categoryData?.category
 
-  const { data: testSets, isLoading } = useQuery({
-    queryKey: ['testSets', categoryId],
-    queryFn: async () => {
-      const response = await api.get(`/sets/categories/${categoryId}/sets`)
-      return response.data.data.filter((set: TestSet) => set.isActive)
-    },
-    enabled: !!categoryId,
-  })
-
   const { data: subscriptionStatus } = useQuery({
     queryKey: ['subscriptionStatus', categoryId],
     queryFn: async () => {
@@ -50,6 +42,30 @@ export default function CategoryPage() {
       }
     },
     enabled: !!categoryId,
+  })
+
+  const isSubscriptionApproved = subscriptionStatus?.status === 'APPROVED'
+
+  // Always fetch test sets (public endpoint) regardless of subscription status
+  const { data: testSets, isLoading } = useQuery({
+    queryKey: ['testSets', categoryId, subscriptionStatus?.status],
+    queryFn: async () => {
+      const approved = subscriptionStatus?.status === 'APPROVED'
+      try {
+        // Try to get sets with subscription (full access) if approved
+        if (approved) {
+          const response = await api.get(`/sets/categories/${categoryId}/sets`)
+          return response.data.data.filter((set: TestSet) => set.isActive)
+        }
+      } catch (error: any) {
+        // If subscription endpoint fails, continue to public endpoint
+      }
+      // Get public sets (locked preview) - always use this as fallback or when not subscribed
+      const response = await api.get(`/sets/categories/${categoryId}/sets/public`)
+      return response.data.data.filter((set: TestSet) => set.isActive)
+    },
+    enabled: !!categoryId,
+    retry: false,
   })
 
   const startAttemptMutation = useMutation({
@@ -84,6 +100,15 @@ export default function CategoryPage() {
             )}
             <h1 className="text-4xl font-bold text-gray-900 mb-2">{category.name}</h1>
             <p className="text-lg text-gray-600">{category.description}</p>
+            {category.detailsFormatted || category.details ? (
+              <div className="mt-4 prose prose-sm max-w-none">
+                {category.detailsFormatted ? (
+                  <div dangerouslySetInnerHTML={{ __html: category.detailsFormatted }} />
+                ) : (
+                  <p className="text-gray-700 whitespace-pre-wrap">{category.details}</p>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -128,40 +153,89 @@ export default function CategoryPage() {
               </Card>
             ))}
           </div>
-        ) : (
+        ) : testSets && testSets.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {testSets?.map((testSet: TestSet) => (
-              <Card key={testSet._id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <CardTitle>{testSet.name}</CardTitle>
-                  <CardDescription>{testSet.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <FiClock className="mr-2" />
-                      {testSet.durationMinutes} minutes
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <FiFileText className="mr-2" />
-                      {testSet.totalQuestions} questions
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <FiCheckCircle className="mr-2" />
-                      {testSet.totalMarks} marks
-                    </div>
+            {testSets.map((testSet: TestSet) => {
+              const isLocked = !isSubscriptionApproved
+              const hasAttempts = (testSet.attemptCount || 0) > 0
+              return (
+                <Card 
+                  key={testSet._id} 
+                  className={`hover:shadow-lg transition-shadow relative ${isLocked ? 'opacity-75 border-gray-300' : ''}`}
+                >
+                  <div className="absolute top-4 right-4 z-10 flex gap-2">
+                    {isLocked && (
+                      <FiLock className="text-2xl text-gray-400" />
+                    )}
+                    {!isLocked && hasAttempts && (
+                      <Link to={`/test/${testSet._id}/attempts`}>
+                        <button
+                          className="p-2 rounded-full bg-purple-100 hover:bg-purple-200 transition-colors"
+                          title="View Past Attempts"
+                        >
+                          <FiList className="text-purple-600 text-lg" />
+                        </button>
+                      </Link>
+                    )}
                   </div>
-                  <Button
-                    className="w-full"
-                    onClick={() => handleStartTest(testSet._id)}
-                    disabled={!subscriptionStatus || subscriptionStatus.status !== 'APPROVED' || startAttemptMutation.isPending}
-                  >
-                    {startAttemptMutation.isPending ? 'Starting...' : 'Start Test'}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  <CardHeader>
+                    <CardTitle className={isLocked ? 'text-gray-500' : ''}>
+                      {testSet.name}
+                    </CardTitle>
+                    <CardDescription className={isLocked ? 'text-gray-400' : ''}>
+                      {testSet.description || 'No description available'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 mb-4">
+                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <FiClock className="mr-2" />
+                        {testSet.durationMinutes} minutes
+                      </div>
+                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <FiFileText className="mr-2" />
+                        {testSet.totalQuestions || 0} questions
+                      </div>
+                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <FiCheckCircle className="mr-2" />
+                        {testSet.totalMarks} marks
+                      </div>
+                      {hasAttempts && (
+                        <div className="flex items-center text-sm text-purple-600">
+                          <FiList className="mr-2" />
+                          {testSet.attemptCount} past attempt{testSet.attemptCount !== 1 ? 's' : ''}
+                        </div>
+                      )}
+                    </div>
+                    {isLocked ? (
+                      <Link to={`/categories/${categoryId}/payment`} className="block">
+                        <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                          <FiLock className="mr-2" />
+                          Unlock to Start
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Button
+                        className="w-full"
+                        onClick={() => handleStartTest(testSet._id)}
+                        disabled={startAttemptMutation.isPending}
+                      >
+                        {startAttemptMutation.isPending ? 'Starting...' : 'Start Test'}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
+        ) : (
+          <Card className="border-gray-300 bg-gray-50">
+            <CardContent className="pt-6">
+              <div className="text-center py-8">
+                <p className="text-gray-600">No test series available in this category yet.</p>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     </Layout>

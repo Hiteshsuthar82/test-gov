@@ -36,5 +36,16 @@ export const testSetController = {
       sendError(res, error.message, 500);
     }
   },
+
+  getSetsByCategoryPublic: async (req: AuthRequest, res: Response) => {
+    try {
+      const { categoryId } = req.params;
+      const userId = req.user?._id?.toString(); // Optional - user might not be authenticated
+      const sets = await testSetService.getSetsByCategoryPublic(categoryId, userId);
+      sendSuccess(res, sets);
+    } catch (error: any) {
+      sendError(res, error.message, 500);
+    }
+  },
 };
 

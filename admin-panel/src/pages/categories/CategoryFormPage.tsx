@@ -8,6 +8,7 @@ import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { Button } from '../../components/ui/button'
 import { ImageUpload } from '../../components/ui/image-upload'
+import { RichTextEditor } from '../../components/ui/rich-text-editor'
 
 export default function CategoryFormPage() {
   const { id } = useParams()
@@ -21,6 +22,7 @@ export default function CategoryFormPage() {
     bannerImageUrl: '',
     price: 0,
     details: '',
+    detailsFormatted: '',
     isActive: true,
   })
 
@@ -41,6 +43,7 @@ export default function CategoryFormPage() {
         bannerImageUrl: data.bannerImageUrl || '',
         price: data.price || 0,
         details: data.details || '',
+        detailsFormatted: data.detailsFormatted || data.details || '',
         isActive: data.isActive ?? true,
       })
     }
@@ -68,6 +71,7 @@ export default function CategoryFormPage() {
     formDataToSend.append('description', formData.description || '')
     formDataToSend.append('price', formData.price.toString())
     formDataToSend.append('details', formData.details || '')
+    formDataToSend.append('detailsFormatted', formData.detailsFormatted || '')
     formDataToSend.append('isActive', formData.isActive.toString())
     
     // Priority: new file > new URL > existing URL (only if no new file/URL)
@@ -151,12 +155,17 @@ export default function CategoryFormPage() {
               />
             </div>
             <div>
-              <Label htmlFor="details">Details (HTML/Rich Text)</Label>
-              <Textarea
-                id="details"
-                value={formData.details}
-                onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                rows={6}
+              <RichTextEditor
+                value={formData.detailsFormatted || formData.details || ''}
+                onChange={(plainText, formattedText) => {
+                  setFormData({
+                    ...formData,
+                    details: plainText,
+                    detailsFormatted: formattedText,
+                  })
+                }}
+                label="Details"
+                placeholder="Enter category details with formatting..."
               />
             </div>
             <div className="flex items-center gap-2">

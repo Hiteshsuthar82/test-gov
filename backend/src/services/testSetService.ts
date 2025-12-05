@@ -24,7 +24,31 @@ export const testSetService = {
       .sort({ createdAt: 1 })
       .select('-__v');
 
-    return sets;
+    // Get question counts and attempt counts for each set
+    const setsWithCounts = await Promise.all(
+      sets.map(async (set) => {
+        // Use set._id directly - Mongoose handles ObjectId comparison automatically
+        const questionCount = await Question.countDocuments({
+          testSetId: set._id,
+          isActive: true,
+        });
+
+        // Get attempt count for this user and test set
+        const attemptCount = await TestAttempt.countDocuments({
+          userId: new Types.ObjectId(userId),
+          testSetId: set._id,
+          status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+        });
+
+        return {
+          ...set.toObject(),
+          totalQuestions: questionCount,
+          attemptCount: attemptCount,
+        };
+      })
+    );
+
+    return setsWithCounts;
   },
 
   async getSetDetails(setId: string, userId: string) {
@@ -87,6 +111,51 @@ export const testSetService = {
       .select('-questions -__v');
 
     return attempts;
+  },
+
+  async getSetsByCategoryPublic(categoryId: string, userId?: string) {
+    // Get test sets without subscription check (public info only)
+    const sets = await TestSet.find({
+      categoryId: new Types.ObjectId(categoryId),
+      isActive: true,
+    })
+      .sort({ createdAt: 1 })
+      .select('name description durationMinutes totalMarks isActive _id categoryId');
+
+    // Get question counts and attempt counts for each set
+    const setsWithCounts = await Promise.all(
+      sets.map(async (set) => {
+        // Use set._id directly - Mongoose handles ObjectId comparison automatically
+        const questionCount = await Question.countDocuments({
+          testSetId: set._id,
+          isActive: true,
+        });
+
+        let attemptCount = 0;
+        // Get attempt count if userId is provided
+        if (userId) {
+          attemptCount = await TestAttempt.countDocuments({
+            userId: new Types.ObjectId(userId),
+            testSetId: set._id,
+            status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+          });
+        }
+
+        return {
+          _id: set._id,
+          name: set.name,
+          description: set.description,
+          durationMinutes: set.durationMinutes,
+          totalMarks: set.totalMarks,
+          totalQuestions: questionCount,
+          attemptCount: attemptCount,
+          categoryId: set.categoryId,
+          isActive: set.isActive,
+        };
+      })
+    );
+
+    return setsWithCounts;
   },
 };
 

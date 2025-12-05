@@ -6,6 +6,7 @@ export interface ICategory extends Document {
   bannerImageUrl?: string;
   price: number;
   details?: string;
+  detailsFormatted?: string;
   isActive: boolean;
   totalSetsCount: number;
   createdAt: Date;
@@ -19,6 +20,7 @@ const CategorySchema = new Schema<ICategory>(
     bannerImageUrl: { type: String },
     price: { type: Number, required: true },
     details: { type: String },
+    detailsFormatted: { type: String },
     isActive: { type: Boolean, default: true },
     totalSetsCount: { type: Number, default: 0 },
   },

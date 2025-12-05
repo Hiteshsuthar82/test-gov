@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
+import { useForm, Controller } from 'react-hook-form'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,17 +9,35 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Layout from '@/components/layout/Layout'
 import { FileUpload } from '@/components/ui/file-upload'
-import { FiCheckCircle, FiArrowLeft, FiCreditCard } from 'react-icons/fi'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { FiCheckCircle, FiArrowLeft, FiCreditCard, FiClock } from 'react-icons/fi'
+
+interface PaymentFormData {
+  payerName: string
+  payerUpiId: string
+  upiTransactionId: string
+  screenshotFile: File | null
+}
 
 export default function PaymentPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
-  const [formData, setFormData] = useState({
-    payerName: '',
-    payerUpiId: '',
-    upiTransactionId: '',
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [countdown, setCountdown] = useState(10)
+  
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors, isSubmitting },
+  } = useForm<PaymentFormData>({
+    defaultValues: {
+      payerName: '',
+      payerUpiId: '',
+      upiTransactionId: '',
+      screenshotFile: null,
+    },
   })
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
 
   const { data: categoryData, isLoading: categoryLoading } = useQuery({
     queryKey: ['category', categoryId],
@@ -35,34 +54,42 @@ export default function PaymentPage() {
       return api.post('/payments', formDataToSend)
     },
     onSuccess: () => {
-      alert('Payment submitted successfully! It will be reviewed by admin.')
-      navigate('/profile')
+      setShowSuccessModal(true)
+      setCountdown(10)
     },
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!screenshotFile) {
-      alert('Please upload payment screenshot')
-      return
+  // Auto-redirect after 10 seconds
+  useEffect(() => {
+    if (showSuccessModal && countdown > 0) {
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else if (showSuccessModal && countdown === 0) {
+      navigate('/subscriptions')
     }
+  }, [showSuccessModal, countdown, navigate])
 
-    if (!formData.payerName || !formData.payerUpiId) {
-      alert('Please fill all required fields')
+  const handleRedirect = () => {
+    navigate('/subscriptions')
+  }
+
+  const onSubmit = async (data: PaymentFormData) => {
+    if (!data.screenshotFile) {
       return
     }
 
     const formDataToSend = new FormData()
     formDataToSend.append('categoryId', categoryId || '')
     formDataToSend.append('amount', (category?.price || 0).toString())
-    formDataToSend.append('payerName', formData.payerName)
-    formDataToSend.append('payerUpiId', formData.payerUpiId)
-    if (formData.upiTransactionId) {
-      formDataToSend.append('upiTransactionId', formData.upiTransactionId)
+    formDataToSend.append('payerName', data.payerName)
+    formDataToSend.append('payerUpiId', data.payerUpiId)
+    if (data.upiTransactionId) {
+      formDataToSend.append('upiTransactionId', data.upiTransactionId)
     }
 
-    formDataToSend.append('screenshot', screenshotFile)
+    formDataToSend.append('screenshot', data.screenshotFile)
 
     paymentMutation.mutate(formDataToSend)
   }
@@ -88,6 +115,67 @@ export default function PaymentPage() {
 
   return (
     <Layout>
+      {/* Success Modal */}
+      <Dialog open={showSuccessModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full">
+              <FiCheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <DialogTitle className="text-center text-2xl text-gray-900">
+              Payment Submitted Successfully!
+            </DialogTitle>
+            <DialogDescription className="text-center mt-2">
+              Your payment request has been submitted and is pending admin review.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-6 space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">What happens next?</h3>
+              <ul className="space-y-2 text-sm text-blue-800">
+                <li className="flex items-start">
+                  <FiCheckCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span>Your payment will be reviewed by our admin team</span>
+                </li>
+                <li className="flex items-start">
+                  <FiCheckCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span>Review typically takes 24-48 hours</span>
+                </li>
+                <li className="flex items-start">
+                  <FiCheckCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span>You'll receive a notification once your subscription is approved</span>
+                </li>
+                <li className="flex items-start">
+                  <FiCheckCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span>Once approved, you'll have full access to all test series in this category</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> Please keep your payment screenshot handy in case we need to verify the transaction.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600 pt-2">
+              <FiClock className="w-4 h-4" />
+              <span>Redirecting to subscriptions page in {countdown} seconds...</span>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-6">
+            <Button
+              onClick={handleRedirect}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              Go to Subscriptions Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Link to={`/categories/${categoryId}`} className="inline-flex items-center text-purple-600 hover:text-purple-700 mb-6">
           <FiArrowLeft className="mr-2" />
@@ -130,56 +218,116 @@ export default function PaymentPage() {
                   </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                   <div>
-                    <Label htmlFor="payerName">Your Name *</Label>
+                    <Label htmlFor="payerName">
+                      Your Name <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                       id="payerName"
-                      value={formData.payerName}
-                      onChange={(e) => setFormData({ ...formData, payerName: e.target.value })}
+                      {...register('payerName', {
+                        required: 'Your name is required',
+                        minLength: {
+                          value: 2,
+                          message: 'Name must be at least 2 characters',
+                        },
+                        pattern: {
+                          value: /^[a-zA-Z\s]+$/,
+                          message: 'Name should only contain letters and spaces',
+                        },
+                      })}
                       placeholder="Enter your name"
-                      required
+                      className={errors.payerName ? 'border-red-500' : ''}
                     />
+                    {errors.payerName && (
+                      <p className="text-sm text-red-500 mt-1">{errors.payerName.message}</p>
+                    )}
                   </div>
 
                   <div>
-                    <Label htmlFor="payerUpiId">Your UPI ID *</Label>
+                    <Label htmlFor="payerUpiId">
+                      Your UPI ID <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                       id="payerUpiId"
-                      value={formData.payerUpiId}
-                      onChange={(e) => setFormData({ ...formData, payerUpiId: e.target.value })}
+                      {...register('payerUpiId', {
+                        required: 'UPI ID is required',
+                        pattern: {
+                          value: /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/,
+                          message: 'Please enter a valid UPI ID (e.g., yourname@paytm)',
+                        },
+                      })}
                       placeholder="yourname@paytm"
-                      required
+                      className={errors.payerUpiId ? 'border-red-500' : ''}
                     />
+                    {errors.payerUpiId && (
+                      <p className="text-sm text-red-500 mt-1">{errors.payerUpiId.message}</p>
+                    )}
                   </div>
 
                   <div>
                     <Label htmlFor="upiTransactionId">Transaction ID (Optional)</Label>
                     <Input
                       id="upiTransactionId"
-                      value={formData.upiTransactionId}
-                      onChange={(e) => setFormData({ ...formData, upiTransactionId: e.target.value })}
+                      {...register('upiTransactionId', {
+                        pattern: {
+                          value: /^[a-zA-Z0-9]+$/,
+                          message: 'Transaction ID should only contain letters and numbers',
+                        },
+                      })}
                       placeholder="Enter transaction ID if available"
+                      className={errors.upiTransactionId ? 'border-red-500' : ''}
                     />
+                    {errors.upiTransactionId && (
+                      <p className="text-sm text-red-500 mt-1">{errors.upiTransactionId.message}</p>
+                    )}
                   </div>
 
                   <div>
-                    <FileUpload
-                      value={screenshotFile}
-                      onChange={(file) => {
-                        setScreenshotFile(file)
+                    <Controller
+                      name="screenshotFile"
+                      control={control}
+                      rules={{
+                        required: 'Payment screenshot is required',
+                        validate: (value) => {
+                          if (!value) {
+                            return 'Please upload payment screenshot'
+                          }
+                          if (value && value.size > 5 * 1024 * 1024) {
+                            return 'File size must be less than 5MB'
+                          }
+                          if (value && !value.type.startsWith('image/')) {
+                            return 'Please upload an image file'
+                          }
+                          return true
+                        },
                       }}
-                      label="Upload payment screenshot"
-                      required
+                      render={({ field }) => (
+                        <div>
+                          <FileUpload
+                            value={field.value || null}
+                            onChange={(file) => {
+                              field.onChange(file)
+                            }}
+                            label="Upload payment screenshot"
+                            required
+                          />
+                          {errors.screenshotFile && (
+                            <p className="text-sm text-red-500 mt-1">
+                              {errors.screenshotFile.message}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     />
                   </div>
 
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={paymentMutation.isPending}
+                    disabled={paymentMutation.isPending || isSubmitting}
                   >
-                    {paymentMutation.isPending ? 'Submitting...' : 'Submit Payment'}
+                    {paymentMutation.isPending || isSubmitting ? 'Submitting...' : 'Submit Payment'}
                   </Button>
                 </form>
               </div>

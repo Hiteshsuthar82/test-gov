@@ -87,6 +87,12 @@ export default function PaymentDetailPage() {
               <div className="text-sm text-gray-500">UPI ID</div>
               <div className="font-medium">{payment?.payerUpiId}</div>
             </div>
+            {payment?.upiTransactionId && (
+              <div>
+                <div className="text-sm text-gray-500">Transaction ID</div>
+                <div className="font-medium">{payment.upiTransactionId}</div>
+              </div>
+            )}
             <div>
               <div className="text-sm text-gray-500">Status</div>
               <div>

@@ -9,6 +9,8 @@ import TestAttemptPage from './pages/TestAttemptPage'
 import ResultsPage from './pages/ResultsPage'
 import ProfilePage from './pages/ProfilePage'
 import PaymentPage from './pages/PaymentPage'
+import MySubscriptionsPage from './pages/MySubscriptionsPage'
+import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
 
 const queryClient = new QueryClient()
 
@@ -62,6 +64,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/subscriptions"
+            element={
+              <ProtectedRoute>
+                <MySubscriptionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test/:testSetId/attempts"
+            element={
+              <ProtectedRoute>
+                <TestAttemptsHistoryPage />
               </ProtectedRoute>
             }
           />

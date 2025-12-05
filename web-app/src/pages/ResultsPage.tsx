@@ -4,7 +4,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
-import { FiCheckCircle, FiXCircle, FiCircle, FiClock, FiTrendingUp } from 'react-icons/fi'
+import { FiCheckCircle, FiXCircle, FiCircle, FiTrendingUp } from 'react-icons/fi'
 
 export default function ResultsPage() {
   const { attemptId } = useParams()
@@ -128,7 +128,11 @@ export default function ResultsPage() {
 
                 {/* Question */}
                 <div>
-                  <p className="font-medium mb-2">{q.questionText}</p>
+                  {q.questionFormattedText ? (
+                    <div className="font-medium mb-2" dangerouslySetInnerHTML={{ __html: q.questionFormattedText }} />
+                  ) : (
+                    <p className="font-medium mb-2">{q.questionText}</p>
+                  )}
                   {q.questionImageUrl && (
                     <img src={q.questionImageUrl} alt="Question" className="max-w-md rounded mb-2" />
                   )}
@@ -177,26 +181,63 @@ export default function ResultsPage() {
                 </div>
 
                 {/* Explanation */}
-                {q.explanationFormattedText || q.explanationText ? (
-                  <div className="bg-purple-50 p-3 rounded">
-                    <p className="text-sm font-medium text-purple-900 mb-1">Explanation:</p>
-                    {q.explanationFormattedText ? (
-                      <div
-                        className="text-sm text-gray-700"
-                        dangerouslySetInnerHTML={{ __html: q.explanationFormattedText }}
-                      />
-                    ) : (
-                      <p className="text-sm text-gray-700">{q.explanationText}</p>
-                    )}
-                    {q.explanationImageUrls && q.explanationImageUrls.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {q.explanationImageUrls.map((img: string, i: number) => (
-                          <img key={i} src={img} alt={`Explanation ${i + 1}`} className="max-w-md rounded" />
-                        ))}
+                {(() => {
+                  // Check if explanation text exists
+                  const hasExplanationText = q.explanationFormattedText || q.explanationText
+                  
+                  // Check if explanation images exist
+                  let validImages: string[] = []
+                  if (q.explanationImageUrls) {
+                    if (Array.isArray(q.explanationImageUrls)) {
+                      validImages = q.explanationImageUrls.filter(
+                        (img: string) => img && typeof img === 'string' && img.trim() && img !== 'null' && img !== 'undefined'
+                      )
+                    } else if (typeof q.explanationImageUrls === 'string' && q.explanationImageUrls.trim() && q.explanationImageUrls !== 'null' && q.explanationImageUrls !== 'undefined') {
+                      validImages = [q.explanationImageUrls]
+                    }
+                  }
+                  const hasExplanationImages = validImages.length > 0
+                  
+                  // Show explanation section if either text or images exist
+                  if (hasExplanationText || hasExplanationImages) {
+                    return (
+                      <div className="bg-purple-50 p-3 rounded">
+                        <p className="text-sm font-medium text-purple-900 mb-1">Explanation:</p>
+                        {/* Show text first if it exists */}
+                        {hasExplanationText && (
+                          <>
+                            {q.explanationFormattedText ? (
+                              <div
+                                className="text-sm text-gray-700"
+                                dangerouslySetInnerHTML={{ __html: q.explanationFormattedText }}
+                              />
+                            ) : (
+                              <p className="text-sm text-gray-700">{q.explanationText}</p>
+                            )}
+                          </>
+                        )}
+                        {/* Show images after text (or alone if no text) */}
+                        {hasExplanationImages && (
+                          <div className={hasExplanationText ? "mt-2 space-y-2" : "space-y-2"}>
+                            {validImages.map((img: string, i: number) => (
+                              <img 
+                                key={i} 
+                                src={img} 
+                                alt={`Explanation ${i + 1}`} 
+                                className="max-w-md rounded"
+                                onError={(e) => {
+                                  // Hide image if it fails to load
+                                  e.currentTarget.style.display = 'none'
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ) : null}
+                    )
+                  }
+                  return null
+                })()}
               </CardContent>
             </Card>
           ))}

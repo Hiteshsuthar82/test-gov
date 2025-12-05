@@ -9,13 +9,20 @@ export interface IOption {
 export interface IQuestion extends Document {
   testSetId: Types.ObjectId;
   sectionId: string;
+  direction?: string;
+  directionImageUrl?: string;
   questionText: string;
+  questionFormattedText?: string;
   questionImageUrl?: string;
+  conclusion?: string;
+  conclusionImageUrl?: string;
   options: IOption[];
   correctOptionId: string;
   marks: number;
   explanationText?: string;
-  explanationImageUrl?: string;
+  explanationFormattedText?: string;
+  explanationImageUrl?: string; // Legacy field for backward compatibility
+  explanationImageUrls?: string[]; // New field for multiple images
   questionOrder: number;
   isActive: boolean;
   createdAt: Date;
@@ -35,13 +42,20 @@ const QuestionSchema = new Schema<IQuestion>(
   {
     testSetId: { type: Schema.Types.ObjectId, ref: 'TestSet', required: true },
     sectionId: { type: String, required: true },
+    direction: { type: String },
+    directionImageUrl: { type: String },
     questionText: { type: String, required: true },
+    questionFormattedText: { type: String },
     questionImageUrl: { type: String },
+    conclusion: { type: String },
+    conclusionImageUrl: { type: String },
     options: { type: [OptionSchema], required: true, minlength: 2 },
     correctOptionId: { type: String, required: true },
     marks: { type: Number, default: 1 },
     explanationText: { type: String },
-    explanationImageUrl: { type: String },
+    explanationFormattedText: { type: String },
+    explanationImageUrl: { type: String }, // Legacy field for backward compatibility
+    explanationImageUrls: { type: [String], default: [] }, // New field for multiple images
     questionOrder: { type: Number, required: true },
     isActive: { type: Boolean, default: true },
   },
