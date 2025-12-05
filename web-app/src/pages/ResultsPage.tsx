@@ -27,33 +27,6 @@ export default function ResultsPage() {
     }
   }
 
-  const getQuestionStatus = (q: any, index: number) => {
-    const isSelected = selectedQuestionIndex === index
-    const isCorrect = q.isCorrect
-    const isAnswered = !!q.selectedOptionId
-    const isMarked = q.markedForReview
-
-    if (isSelected) {
-      return 'current'
-    }
-    if (isCorrect && isMarked) {
-      return 'correct-and-marked'
-    }
-    if (isCorrect) {
-      return 'correct'
-    }
-    if (isAnswered && isMarked) {
-      return 'wrong-and-marked'
-    }
-    if (isAnswered) {
-      return 'wrong'
-    }
-    if (isMarked) {
-      return 'marked'
-    }
-    return 'unanswered'
-  }
-
   if (isLoading) {
     return (
       <Layout>
@@ -70,7 +43,10 @@ export default function ResultsPage() {
     )
   }
 
-  const percentage = results.totalScore > 0 ? (results.totalScore / (results.questions?.length || 1)) * 100 : 0
+  // Calculate percentage: (totalScore / totalMarks) * 100
+  // Use totalMarks from backend if available, otherwise calculate from questions
+  const totalMarks = results.totalMarks || results.questions?.reduce((sum: number, q: any) => sum + (q.marks || 1), 0) || 0
+  const percentage = totalMarks > 0 ? (results.totalScore / totalMarks) * 100 : 0
 
   return (
     <Layout>
@@ -298,41 +274,41 @@ export default function ResultsPage() {
                     <span>Correct</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-red-500 rounded-t-lg mr-2" />
-                    <span>Wrong</span>
+                    <div className="w-4 h-4 bg-red-500 rounded-b-lg mr-2" />
+                    <span>Incorrect</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-2" />
-                    <span>Marked for Review</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded mr-2" />
-                    <span>Unanswered</span>
+                    <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded mr-2" />
+                    <span>Unattempted</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-5 gap-3">
                   {results.questions?.map((q: any, index: number) => {
-                    const status = getQuestionStatus(q, index)
                     const isCorrect = q.isCorrect
                     const isAnswered = !!q.selectedOptionId
                     const isMarked = q.markedForReview
+                    const isSelected = selectedQuestionIndex === index
 
-                    let boxClasses = 'w-10 h-10 border-2 flex items-center justify-center text-sm font-medium relative cursor-pointer'
+                    let boxClasses = 'w-8 h-8 flex items-center justify-center text-xs font-medium relative cursor-pointer'
                     
-                    if (status === 'current') {
-                      boxClasses += ' border-purple-600 bg-purple-100 ring-2 ring-purple-500'
-                    } else if (status === 'correct-and-marked') {
-                      boxClasses += ' border-green-500 bg-green-100 rounded-full'
-                    } else if (status === 'wrong-and-marked') {
-                      boxClasses += ' border-red-500 bg-red-100 rounded-full'
-                    } else if (status === 'correct') {
-                      boxClasses += ' border-green-500 bg-green-100 rounded-t-lg'
-                    } else if (status === 'wrong') {
-                      boxClasses += ' border-red-500 bg-red-100 rounded-t-lg'
-                    } else if (status === 'marked') {
-                      boxClasses += ' border-purple-500 bg-purple-100 rounded-full'
+                    if (isSelected) {
+                      // Selected question: use actual status color but with yellow border
+                      if (isCorrect) {
+                        boxClasses += ' bg-green-500 rounded-lg text-white border-2 border-yellow-400'
+                      } else if (isAnswered) {
+                        boxClasses += ' bg-red-500 rounded-lg text-white border-2 border-yellow-400'
+                      } else {
+                        boxClasses += ' border-2 border-yellow-400 bg-white text-black rounded-lg'
+                      }
+                    } else if (isCorrect) {
+                      // Correct answer: green with rounded top corners (matching test attempt design)
+                      boxClasses += ' bg-green-500 rounded-t-full text-white'
+                    } else if (isAnswered) {
+                      // Incorrect answer: red with rounded top corners (matching test attempt design)
+                      boxClasses += ' bg-red-500 rounded-b-full text-white'
                     } else {
-                      boxClasses += ' border-gray-300 bg-white'
+                      // Unattempted: white with border (square, matching test attempt design)
+                      boxClasses += ' border-2 border-gray-300 bg-white text-black'
                     }
 
                     return (
@@ -340,11 +316,11 @@ export default function ResultsPage() {
                         key={q.questionId}
                         onClick={() => scrollToQuestion(index)}
                         className={boxClasses}
-                        title={`Question ${index + 1}: ${isCorrect ? 'Correct' : isAnswered ? 'Wrong' : 'Unanswered'}${isMarked ? ' (Marked)' : ''}`}
+                        title={`Question ${index + 1}: ${isCorrect ? 'Correct' : isAnswered ? 'Incorrect' : 'Unattempted'}${isMarked ? ' (Marked for Review)' : ''}`}
                       >
                         {index + 1}
-                        {(status === 'correct-and-marked' || status === 'wrong-and-marked') && (
-                          <FiCheckCircle className="absolute top-0 right-0 w-3 h-3 text-green-600 bg-white rounded-full" />
+                        {isMarked && (
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full border-2 border-white shadow-sm" />
                         )}
                       </button>
                     )

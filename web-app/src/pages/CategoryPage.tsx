@@ -82,8 +82,8 @@ export default function CategoryPage() {
   })
 
   const startAttemptMutation = useMutation({
-    mutationFn: async (testSetId: string) => {
-      const response = await api.post(`/attempts/start`, { testSetId })
+    mutationFn: async ({ testSetId, forceNew }: { testSetId: string; forceNew?: boolean }) => {
+      const response = await api.post(`/attempts/start`, { testSetId, forceNew })
       return response.data.data
     },
     onSuccess: (data) => {
@@ -106,11 +106,11 @@ export default function CategoryPage() {
         setSelectedTestSetId(testSetId)
         setShowResumeDialog(true)
       } else {
-        startAttemptMutation.mutate(testSetId)
+        startAttemptMutation.mutate({ testSetId, forceNew: false })
       }
     } catch (error) {
       // If check fails, just start new test
-      startAttemptMutation.mutate(testSetId)
+      startAttemptMutation.mutate({ testSetId, forceNew: false })
     }
   }
 
@@ -123,7 +123,8 @@ export default function CategoryPage() {
 
   const handleStartNewTest = () => {
     if (selectedTestSetId) {
-      startAttemptMutation.mutate(selectedTestSetId)
+      // Force creating a new attempt even if one exists
+      startAttemptMutation.mutate({ testSetId: selectedTestSetId, forceNew: true })
       setShowResumeDialog(false)
       setSelectedTestSetId(null)
     }

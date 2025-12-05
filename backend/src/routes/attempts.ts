@@ -9,6 +9,7 @@ const router = Router();
 const startAttemptSchema = z.object({
   body: z.object({
     testSetId: z.string().min(1),
+    forceNew: z.boolean().optional(),
   }),
 });
 
@@ -44,6 +45,7 @@ router.get('/:attemptId/section-timer', studentAuthMiddleware, attemptController
 router.get('/:attemptId', studentAuthMiddleware, attemptController.getAttempt);
 router.get('/:attemptId/deep-dive', studentAuthMiddleware, attemptController.getDeepDive);
 router.post('/:attemptId/pause', studentAuthMiddleware, attemptController.pauseAttempt);
+router.post('/:attemptId/resume', studentAuthMiddleware, attemptController.resumeAttempt);
 router.get('/', studentAuthMiddleware, attemptController.getUserAttempts);
 router.get('/in-progress/list', studentAuthMiddleware, attemptController.getInProgressAttempts);
 

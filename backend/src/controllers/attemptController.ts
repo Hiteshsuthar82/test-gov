@@ -6,9 +6,9 @@ import { AuthRequest } from '../middleware/auth';
 export const attemptController = {
   start: async (req: AuthRequest, res: Response) => {
     try {
-      const { testSetId } = req.body;
+      const { testSetId, forceNew } = req.body;
       const userId = req.user._id.toString();
-      const result = await attemptService.startAttempt(userId, testSetId);
+      const result = await attemptService.startAttempt(userId, testSetId, forceNew === true);
       sendSuccess(res, result);
     } catch (error: any) {
       sendError(res, error.message, 400);
@@ -110,6 +110,17 @@ export const attemptController = {
       const { attemptId } = req.params;
       const userId = req.user._id.toString();
       const result = await attemptService.pauseAttempt(attemptId, userId);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  resumeAttempt: async (req: AuthRequest, res: Response) => {
+    try {
+      const { attemptId } = req.params;
+      const userId = req.user._id.toString();
+      const result = await attemptService.resumeAttempt(attemptId, userId);
       sendSuccess(res, result);
     } catch (error: any) {
       sendError(res, error.message, 400);

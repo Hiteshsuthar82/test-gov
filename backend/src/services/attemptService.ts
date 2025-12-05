@@ -6,7 +6,7 @@ import { Leaderboard } from '../models/Leaderboard';
 import { Types } from 'mongoose';
 
 export const attemptService = {
-  async startAttempt(userId: string, testSetId: string) {
+  async startAttempt(userId: string, testSetId: string, forceNew: boolean = false) {
     const testSet = await TestSet.findById(testSetId).populate('categoryId');
     if (!testSet) {
       throw new Error('Test set not found');
@@ -23,38 +23,40 @@ export const attemptService = {
       throw new Error('Subscription not approved for this category');
     }
 
-    // Check if there's an in-progress attempt
-    const existingAttempt = await TestAttempt.findOne({
-      userId: new Types.ObjectId(userId),
-      testSetId: new Types.ObjectId(testSetId),
-      status: 'IN_PROGRESS',
-    });
-
-    if (existingAttempt) {
-      // Return existing attempt
-      const questions = await Question.find({
+    // Check if there's an in-progress attempt (only if not forcing new)
+    if (!forceNew) {
+      const existingAttempt = await TestAttempt.findOne({
+        userId: new Types.ObjectId(userId),
         testSetId: new Types.ObjectId(testSetId),
-        isActive: true,
-      })
-        .sort({ questionOrder: 1 })
-        .select('-correctOptionId -explanationText -explanationImageUrls');
+        status: 'IN_PROGRESS',
+      });
 
-      return {
-        attemptId: existingAttempt._id,
-        testSet: {
-          id: testSet._id,
-          name: testSet.name,
-          durationMinutes: testSet.durationMinutes,
-          totalMarks: testSet.totalMarks,
-          negativeMarking: testSet.negativeMarking,
-          sections: testSet.sections,
-          hasSectionWiseTiming: testSet.hasSectionWiseTiming,
-        },
-        questions,
-        startedAt: existingAttempt.startedAt,
-        currentSectionId: existingAttempt.currentSectionId,
-        sectionTimings: existingAttempt.sectionTimings,
-      };
+      if (existingAttempt) {
+        // Return existing attempt
+        const questions = await Question.find({
+          testSetId: new Types.ObjectId(testSetId),
+          isActive: true,
+        })
+          .sort({ questionOrder: 1 })
+          .select('-correctOptionId -explanationText -explanationImageUrls');
+
+        return {
+          attemptId: existingAttempt._id,
+          testSet: {
+            id: testSet._id,
+            name: testSet.name,
+            durationMinutes: testSet.durationMinutes,
+            totalMarks: testSet.totalMarks,
+            negativeMarking: testSet.negativeMarking,
+            sections: testSet.sections,
+            hasSectionWiseTiming: testSet.hasSectionWiseTiming,
+          },
+          questions,
+          startedAt: existingAttempt.startedAt,
+          currentSectionId: existingAttempt.currentSectionId,
+          sectionTimings: existingAttempt.sectionTimings,
+        };
+      }
     }
 
     // Get all questions
@@ -76,12 +78,14 @@ export const attemptService = {
       : undefined;
 
     // Create attempt with preloaded questions
+    const now = new Date();
     const attempt = await TestAttempt.create({
       userId: new Types.ObjectId(userId),
       categoryId: testSet.categoryId,
       testSetId: new Types.ObjectId(testSetId),
       status: 'IN_PROGRESS',
-      startedAt: new Date(),
+      startedAt: now,
+      lastActiveAt: now, // Initialize lastActiveAt when test starts
       questions: questions.map((q) => ({
         questionId: q._id,
         selectedOptionId: null,
@@ -416,6 +420,24 @@ export const attemptService = {
       throw new Error('Attempt not found');
     }
 
+    // If test is in progress, handle pause/resume tracking
+    const now = new Date();
+    if (attempt.status === 'IN_PROGRESS') {
+      if (attempt.lastActiveAt) {
+        // Test is active - check if there was a gap (user was away)
+        const timeSinceLastActive = Math.floor((now.getTime() - attempt.lastActiveAt.getTime()) / 1000);
+        // If more than 5 seconds since last activity, user was away - add to pause time
+        if (timeSinceLastActive > 5) {
+          attempt.totalPausedSeconds += timeSinceLastActive;
+        }
+        // Update lastActiveAt to current time to track current activity
+        attempt.lastActiveAt = now;
+        await attempt.save();
+      }
+      // If lastActiveAt is null, test was explicitly paused - don't change it
+      // Frontend will call resumeAttempt when user wants to resume
+    }
+
     // Get full question details
     const questionIds = attempt.questions.map((q) => q.questionId);
     const questions = await Question.find({ _id: { $in: questionIds } })
@@ -452,6 +474,11 @@ export const attemptService = {
 
     const testSet = attempt.testSetId as any;
 
+    // Calculate actual elapsed time (excluding pause time)
+    const actualElapsedSeconds = attempt.status === 'IN_PROGRESS' && attempt.lastActiveAt
+      ? Math.floor((attempt.lastActiveAt.getTime() - attempt.startedAt.getTime()) / 1000) - attempt.totalPausedSeconds
+      : attempt.totalTimeSeconds;
+
     return {
       attemptId: attempt._id,
       testSet: {
@@ -469,6 +496,9 @@ export const attemptService = {
       endedAt: attempt.endedAt,
       currentSectionId: attempt.currentSectionId,
       sectionTimings: attempt.sectionTimings,
+      lastActiveAt: attempt.lastActiveAt,
+      totalPausedSeconds: attempt.totalPausedSeconds,
+      actualElapsedSeconds: Math.max(0, actualElapsedSeconds),
     };
   },
 
@@ -476,11 +506,14 @@ export const attemptService = {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
-    });
+    }).populate('testSetId', 'totalMarks');
 
     if (!attempt) {
       throw new Error('Attempt not found');
     }
+
+    const testSet = attempt.testSetId as any;
+    const totalMarks = testSet?.totalMarks || 0;
 
     const questionIds = attempt.questions.map((q) => q.questionId);
     const questions = await Question.find({ _id: { $in: questionIds } });
@@ -517,6 +550,7 @@ export const attemptService = {
     return {
       attemptId: attempt._id,
       totalScore: attempt.totalScore,
+      totalMarks: totalMarks,
       totalCorrect: attempt.totalCorrect,
       totalWrong: attempt.totalWrong,
       totalUnanswered: attempt.totalUnanswered,
@@ -572,9 +606,18 @@ export const attemptService = {
       throw new Error('Attempt not found or not in progress');
     }
 
-    // Calculate elapsed time and update
     const now = new Date();
-    const elapsedSeconds = Math.floor((now.getTime() - attempt.startedAt.getTime()) / 1000);
+    
+    // If lastActiveAt exists, calculate pause time and add to totalPausedSeconds
+    if (attempt.lastActiveAt) {
+      const pauseDuration = Math.floor((now.getTime() - attempt.lastActiveAt.getTime()) / 1000);
+      if (pauseDuration > 0) {
+        attempt.totalPausedSeconds += pauseDuration;
+      }
+    }
+    
+    // Clear lastActiveAt to indicate test is paused
+    attempt.lastActiveAt = undefined;
     
     // Update section timing if section-wise
     const testSet = await TestSet.findById(attempt.testSetId);
@@ -583,20 +626,60 @@ export const attemptService = {
         (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
       );
       if (sectionTiming) {
-        sectionTiming.timeSpentSeconds = Math.floor(
-          (now.getTime() - sectionTiming.startedAt.getTime()) / 1000
-        );
+        // Calculate active time (excluding pause time)
+        const activeTime = Math.floor((now.getTime() - sectionTiming.startedAt.getTime()) / 1000) - attempt.totalPausedSeconds;
+        sectionTiming.timeSpentSeconds = Math.max(0, activeTime);
       }
     }
 
-    // Store paused state (we'll use a custom field or just return the state)
-    // For now, we'll just return the current state - the frontend will handle pausing
     await attempt.save();
 
     return {
       message: 'Test paused',
-      elapsedSeconds,
       pausedAt: now,
+      totalPausedSeconds: attempt.totalPausedSeconds,
+    };
+  },
+
+  async resumeAttempt(attemptId: string, userId: string) {
+    const attempt = await TestAttempt.findOne({
+      _id: new Types.ObjectId(attemptId),
+      userId: new Types.ObjectId(userId),
+      status: 'IN_PROGRESS',
+    });
+
+    if (!attempt) {
+      throw new Error('Attempt not found or not in progress');
+    }
+
+    const now = new Date();
+    
+    // If lastActiveAt was null (test was paused), calculate pause duration since pause
+    if (!attempt.lastActiveAt) {
+      // Test was explicitly paused - calculate pause time since last update
+      // Use updatedAt as a proxy for when pause happened
+      const lastUpdate = attempt.updatedAt || attempt.startedAt;
+      const pauseDuration = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
+      if (pauseDuration > 0) {
+        attempt.totalPausedSeconds += pauseDuration;
+      }
+    } else {
+      // If lastActiveAt exists, there might have been a gap since last activity
+      const timeSinceLastActive = Math.floor((now.getTime() - attempt.lastActiveAt.getTime()) / 1000);
+      if (timeSinceLastActive > 5) {
+        attempt.totalPausedSeconds += timeSinceLastActive;
+      }
+    }
+    
+    // Set lastActiveAt to now to resume the test
+    attempt.lastActiveAt = now;
+    
+    await attempt.save();
+
+    return {
+      message: 'Test resumed',
+      resumedAt: now,
+      totalPausedSeconds: attempt.totalPausedSeconds,
     };
   },
 

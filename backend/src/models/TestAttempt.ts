@@ -26,6 +26,8 @@ export interface ITestAttempt extends Document {
   questions: IQuestionAnswer[];
   sectionTimings?: ISectionTiming[]; // For section-wise timing
   currentSectionId?: string; // Current active section
+  lastActiveAt?: Date; // Last time user was active (for pause tracking)
+  totalPausedSeconds: number; // Total time paused (accumulated)
   totalScore: number;
   totalCorrect: number;
   totalWrong: number;
@@ -76,6 +78,8 @@ const TestAttemptSchema = new Schema<ITestAttempt>(
     questions: [QuestionAnswerSchema],
     sectionTimings: [SectionTimingSchema],
     currentSectionId: { type: String },
+    lastActiveAt: { type: Date },
+    totalPausedSeconds: { type: Number, default: 0 },
     totalScore: { type: Number, default: 0 },
     totalCorrect: { type: Number, default: 0 },
     totalWrong: { type: Number, default: 0 },
