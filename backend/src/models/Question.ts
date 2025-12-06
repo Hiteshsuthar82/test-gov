@@ -8,7 +8,7 @@ export interface IOption {
 
 export interface IQuestion extends Document {
   testSetId: Types.ObjectId;
-  sectionId: string;
+  sectionId?: string;
   direction?: string;
   directionImageUrl?: string;
   questionText: string;
@@ -41,7 +41,7 @@ const OptionSchema = new Schema<IOption>(
 const QuestionSchema = new Schema<IQuestion>(
   {
     testSetId: { type: Schema.Types.ObjectId, ref: 'TestSet', required: true },
-    sectionId: { type: String, required: true },
+    sectionId: { type: String, required: false },
     direction: { type: String },
     directionImageUrl: { type: String },
     questionText: { type: String, required: true },
@@ -63,7 +63,7 @@ const QuestionSchema = new Schema<IQuestion>(
 );
 
 QuestionSchema.index({ testSetId: 1, questionOrder: 1 });
-QuestionSchema.index({ testSetId: 1, sectionId: 1 });
+QuestionSchema.index({ testSetId: 1, sectionId: 1 }, { sparse: true });
 
 export const Question = mongoose.model<IQuestion>('Question', QuestionSchema);
 

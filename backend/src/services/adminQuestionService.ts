@@ -17,7 +17,7 @@ export const adminQuestionService = {
   },
 
   async create(testSetId: string, data: {
-    sectionId: string;
+    sectionId?: string;
     direction?: string;
     directionImageUrl?: string;
     questionText: string;
@@ -39,10 +39,21 @@ export const adminQuestionService = {
       throw new Error('Test set not found');
     }
 
-    // Validate sectionId exists in testSet
-    const sectionExists = testSet.sections.some((s) => s.sectionId === data.sectionId);
-    if (!sectionExists) {
-      throw new Error('Section ID not found in test set');
+    // Validate sectionId only if sections exist in testSet
+    if (testSet.sections && testSet.sections.length > 0) {
+      if (!data.sectionId) {
+        throw new Error('Section ID is required when sections exist in test set');
+      }
+      // Validate sectionId exists in testSet
+      const sectionExists = testSet.sections.some((s) => s.sectionId === data.sectionId);
+      if (!sectionExists) {
+        throw new Error('Section ID not found in test set');
+      }
+    } else {
+      // If no sections exist, sectionId should not be provided
+      if (data.sectionId) {
+        throw new Error('Section ID should not be provided when test set has no sections');
+      }
     }
 
     return Question.create({
@@ -52,11 +63,38 @@ export const adminQuestionService = {
   },
 
   async update(id: string, data: Partial<Omit<Parameters<typeof adminQuestionService.create>[1], 'testSetId'>>) {
-    const question = await Question.findByIdAndUpdate(id, data, { new: true });
+    const question = await Question.findById(id);
     if (!question) {
       throw new Error('Question not found');
     }
-    return question;
+
+    // Get the test set to validate sectionId if it's being updated
+    if (data.sectionId !== undefined) {
+      const testSet = await TestSet.findById(question.testSetId);
+      if (!testSet) {
+        throw new Error('Test set not found');
+      }
+
+      // Validate sectionId only if sections exist in testSet
+      if (testSet.sections && testSet.sections.length > 0) {
+        if (!data.sectionId) {
+          throw new Error('Section ID is required when sections exist in test set');
+        }
+        // Validate sectionId exists in testSet
+        const sectionExists = testSet.sections.some((s) => s.sectionId === data.sectionId);
+        if (!sectionExists) {
+          throw new Error('Section ID not found in test set');
+        }
+      } else {
+        // If no sections exist, sectionId should not be provided
+        if (data.sectionId) {
+          throw new Error('Section ID should not be provided when test set has no sections');
+        }
+      }
+    }
+
+    const updatedQuestion = await Question.findByIdAndUpdate(id, data, { new: true });
+    return updatedQuestion;
   },
 
   async delete(id: string) {

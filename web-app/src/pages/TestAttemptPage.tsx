@@ -39,8 +39,11 @@ export default function TestAttemptPage() {
   const [showPauseConfirmation, setShowPauseConfirmation] = useState(false)
   const [showPauseDialog, setShowPauseDialog] = useState(false)
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false)
+  const [showSubmitSectionConfirmation, setShowSubmitSectionConfirmation] = useState(false)
+  const [showLastQuestionDialog, setShowLastQuestionDialog] = useState(false)
   const [autoSubmitCountdown, setAutoSubmitCountdown] = useState(10)
   const [isPageVisible, setIsPageVisible] = useState(true)
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null) // For section selection when hasSectionWiseTiming is false
   const questionStartTimeRef = useRef<Date | null>(null)
   const timerIntervalRef = useRef<number | null>(null)
   const questionTimerIntervalRef = useRef<number | null>(null)
@@ -49,6 +52,8 @@ export default function TestAttemptPage() {
   const lastSavedTimesRef = useRef<Record<string, number>>({}) // Track last saved time for each question
   const timerInitializedRef = useRef(false) // Track if timer has been initialized and started
   const hasLocalUpdatesRef = useRef(false) // Track if we've made local state updates that shouldn't be overwritten
+  const sectionIndexInitializedRef = useRef(false) // Track if we've initialized the question index for current section
+  const prevSectionIdRef = useRef<string | undefined>(undefined) // Track previous section ID to detect section changes
 
   const { data: attemptData, isLoading: isLoadingAttempt } = useQuery({
     queryKey: ['attempt', attemptId],
@@ -326,6 +331,50 @@ export default function TestAttemptPage() {
     },
   })
 
+  const submitSectionMutation = useMutation({
+    mutationFn: async (sectionId: string) => {
+      // If test is paused, resume it first before submitting section
+      if (isPaused && attemptId) {
+        try {
+          await api.post(`/attempts/${attemptId}/resume`)
+          setIsPaused(false)
+          setShowPauseDialog(false)
+        } catch (error) {
+          console.error('Failed to resume test before submitting section:', error)
+          // Continue anyway, backend will handle it
+        }
+      }
+      return api.post(`/attempts/${attemptId}/submit-section`, { sectionId })
+    },
+    onSuccess: async (data) => {
+      setShowSubmitSectionConfirmation(false)
+      
+      // If test is completed, navigate to results
+      if (data.data?.testCompleted) {
+        navigate(`/test/${testSetId}/results/${attemptId}`)
+        return
+      }
+      
+      // Get the next section ID from response
+      const nextSectionId = data.data?.currentSectionId
+      
+      // Refetch attempt data to get updated section info
+      if (attemptId) {
+        await queryClient.invalidateQueries({ queryKey: ['attempt', attemptId] })
+        await queryClient.invalidateQueries({ queryKey: ['section-timer', attemptId] })
+        
+        // The useEffect watching currentSectionId will handle navigation to first question
+        // Just ensure the refetch completes so the new currentSectionId is available
+      }
+    },
+    onError: (error: any) => {
+      console.error('Failed to submit section:', error)
+      // Show error message to user
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit section. Please try again.'
+      alert(errorMessage)
+    },
+  })
+
   const pauseMutation = useMutation({
     mutationFn: async () => {
       // Time is already in state, just pause
@@ -405,8 +454,29 @@ export default function TestAttemptPage() {
     setMarkedForReview(newMarked)
     
     // If marking for review, automatically move to next question immediately
-    if (willMark && currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
+    // If sections exist but section-wise timing is disabled, find next in same section
+    if (willMark) {
+      const currentQ = questions[currentQuestionIndex]
+      if (currentQ) {
+        let nextIndex = currentQuestionIndex + 1
+        if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
+          // Find next question in the same section
+          const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
+          const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
+          if (currentSectionIndex < currentSectionQuestions.length - 1) {
+            // There's a next question in this section
+            const nextQuestionInSection = currentSectionQuestions[currentSectionIndex + 1]
+            nextIndex = questions.findIndex((q: Question) => q._id === nextQuestionInSection._id)
+          } else {
+            // No more questions in this section, don't move
+            return
+          }
+        }
+        
+        if (nextIndex < questions.length && nextIndex > currentQuestionIndex) {
+          setCurrentQuestionIndex(nextIndex)
+        }
+      }
     }
     
     // Save to backend in background AFTER UI update (fire-and-forget, non-blocking)
@@ -443,9 +513,64 @@ export default function TestAttemptPage() {
         })
       }
       
+      // Calculate section-related variables
+      const testSet = attemptData?.testSet
+      const currentSectionId = attemptData?.currentSectionId
+      const hasSections = testSet?.sections && testSet.sections.length > 0
+      const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
+      const isLastSection = hasSectionWiseTiming && currentSectionId && testSet?.sections
+        ? (() => {
+            const currentSectionIndex = testSet.sections.findIndex((s: any) => s.sectionId === currentSectionId)
+            return currentSectionIndex === testSet.sections.length - 1
+          })()
+        : false
+      
+      // Check if this is the last question
+      let isLastQuestionInSection = false
+      let isLastQuestionInTest = false
+      
+      if (hasSectionWiseTiming && currentQ.sectionId) {
+        // Check if it's last question in current section
+        const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
+        const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
+        isLastQuestionInSection = currentSectionIndex === currentSectionQuestions.length - 1
+        isLastQuestionInTest = isLastSection && isLastQuestionInSection
+      } else if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
+        // Check if it's last question in selected section
+        const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
+        const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
+        isLastQuestionInSection = currentSectionIndex === currentSectionQuestions.length - 1
+        isLastQuestionInTest = false // Can navigate to other sections
+      } else {
+        // No sections - check if it's last question overall
+        isLastQuestionInTest = currentQuestionIndex === questions.length - 1
+      }
+      
+      // If it's the last question, show popup instead of navigating
+      if (isLastQuestionInTest || (hasSectionWiseTiming && isLastQuestionInSection)) {
+        setShowLastQuestionDialog(true)
+        return
+      }
+      
+      // Find next question - if sections exist but section-wise timing is disabled, find next in same section
+      let nextIndex = currentQuestionIndex + 1
+      if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
+        // Find next question in the same section
+        const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
+        const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
+        if (currentSectionIndex < currentSectionQuestions.length - 1) {
+          // There's a next question in this section
+          const nextQuestionInSection = currentSectionQuestions[currentSectionIndex + 1]
+          nextIndex = questions.findIndex((q: Question) => q._id === nextQuestionInSection._id)
+        } else {
+          // No more questions in this section, stay on current question
+          return
+        }
+      }
+      
       // Move to next question immediately
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1)
+      if (nextIndex < questions.length && nextIndex > currentQuestionIndex) {
+        setCurrentQuestionIndex(nextIndex)
       }
     }
   }
@@ -518,6 +643,22 @@ export default function TestAttemptPage() {
     setShowSubmitConfirmation(false)
   }
 
+  const handleSubmitSection = () => {
+    if (currentSectionId) {
+      setShowSubmitSectionConfirmation(true)
+    }
+  }
+
+  const handleConfirmSubmitSection = () => {
+    if (currentSectionId) {
+      submitSectionMutation.mutate(currentSectionId)
+    }
+  }
+
+  const handleCancelSubmitSection = () => {
+    setShowSubmitSectionConfirmation(false)
+  }
+
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
@@ -576,6 +717,82 @@ export default function TestAttemptPage() {
     }
   }, [attemptData, currentQuestionIndex, questions])
 
+  // Navigate to first question when section changes (after section submission)
+  useEffect(() => {
+    if (attemptData?.testSet && questions.length > 0) {
+      const testSet = attemptData.testSet
+      const hasSectionWiseTiming = testSet.hasSectionWiseTiming === true
+      const currentSectionId = attemptData.currentSectionId
+      
+      if (hasSectionWiseTiming && currentSectionId) {
+        // Check if section has changed (e.g., after section submission)
+        // Only navigate if we had a previous section and it's different from current
+        if (prevSectionIdRef.current !== undefined && prevSectionIdRef.current !== currentSectionId) {
+          // Section changed - navigate to first question of new section
+          const firstQuestionInSection = questions.find((q: Question) => q.sectionId === currentSectionId)
+          if (firstQuestionInSection) {
+            const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
+            if (firstIndex >= 0) {
+              setCurrentQuestionIndex(firstIndex)
+            }
+          }
+        }
+        
+        // Update previous section ID (initialize on first load)
+        if (prevSectionIdRef.current === undefined || prevSectionIdRef.current !== currentSectionId) {
+          prevSectionIdRef.current = currentSectionId
+        }
+      }
+    }
+  }, [attemptData?.currentSectionId, questions, attemptData?.testSet])
+
+  // Initialize current question index to first question of current section when section-wise timing is enabled
+  useEffect(() => {
+    if (attemptData?.testSet && questions.length > 0 && !sectionIndexInitializedRef.current) {
+      const testSet = attemptData.testSet
+      const hasSectionWiseTiming = testSet.hasSectionWiseTiming === true
+      const currentSectionId = attemptData.currentSectionId
+      
+      if (hasSectionWiseTiming && currentSectionId) {
+        // Find first question of current section
+        const firstQuestionInSection = questions.find((q: Question) => q.sectionId === currentSectionId)
+        if (firstQuestionInSection) {
+          const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
+          // Only update if current index is not already in the current section
+          const currentQ = questions[currentQuestionIndex]
+          if (currentQ && currentQ.sectionId !== currentSectionId && firstIndex >= 0) {
+            setCurrentQuestionIndex(firstIndex)
+            sectionIndexInitializedRef.current = true
+            prevSectionIdRef.current = currentSectionId
+          } else if (currentQ && currentQ.sectionId === currentSectionId) {
+            // Already on a question from current section, mark as initialized
+            sectionIndexInitializedRef.current = true
+            prevSectionIdRef.current = currentSectionId
+          }
+        }
+      } else {
+        // Not section-wise timing, mark as initialized
+        sectionIndexInitializedRef.current = true
+      }
+    }
+  }, [attemptData, questions, currentQuestionIndex])
+
+  // Initialize selected section when sections exist but section-wise timing is disabled
+  useEffect(() => {
+    if (attemptData?.testSet && questions.length > 0 && currentQuestionIndex >= 0) {
+      const testSet = attemptData.testSet
+      const hasSections = testSet.sections && testSet.sections.length > 0
+      const hasSectionWiseTiming = testSet.hasSectionWiseTiming === true
+      
+      if (hasSections && !hasSectionWiseTiming && selectedSectionId === null) {
+        const currentQ = questions[currentQuestionIndex]
+        if (currentQ) {
+          setSelectedSectionId(currentQ.sectionId)
+        }
+      }
+    }
+  }, [attemptData, selectedSectionId, questions, currentQuestionIndex])
+
   if (isLoadingAttempt || !questions || questions.length === 0 || !currentQuestion) {
     return (
       <Layout>
@@ -598,9 +815,44 @@ export default function TestAttemptPage() {
   // Get current section questions if section-wise timing is enabled
   const testSet = attemptData?.testSet
   const currentSectionId = attemptData?.currentSectionId
-  const sectionQuestions = testSet?.hasSectionWiseTiming && currentSectionId
+  const hasSections = testSet?.sections && testSet.sections.length > 0
+  const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
+
+  // Determine which questions to show in palette
+  const sectionQuestions = hasSectionWiseTiming && currentSectionId
     ? questions.filter((q: Question) => q.sectionId === currentSectionId)
+    : hasSections && !hasSectionWiseTiming && selectedSectionId
+    ? questions.filter((q: Question) => q.sectionId === selectedSectionId)
     : questions
+
+  // Calculate section-specific stats when section-wise timing is enabled
+  const getSectionStats = () => {
+    if (!hasSectionWiseTiming || !currentSectionId) {
+      return null
+    }
+    const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentSectionId)
+    const sectionAnsweredCount = currentSectionQuestions.filter((q: Question) => selectedOptions[q._id]).length
+    const sectionMarkedCount = currentSectionQuestions.filter((q: Question) => markedForReview.has(q._id)).length
+    const sectionTotalCount = currentSectionQuestions.length
+    const sectionUnansweredCount = sectionTotalCount - sectionAnsweredCount
+    
+    return {
+      answered: sectionAnsweredCount,
+      unanswered: sectionUnansweredCount,
+      marked: sectionMarkedCount,
+      total: sectionTotalCount,
+    }
+  }
+
+  const sectionStats = getSectionStats()
+
+  // Check if current section is the last section
+  const isLastSection = hasSectionWiseTiming && currentSectionId && testSet?.sections
+    ? (() => {
+        const currentSectionIndex = testSet.sections.findIndex((s: any) => s.sectionId === currentSectionId)
+        return currentSectionIndex === testSet.sections.length - 1
+      })()
+    : false
 
   const getQuestionStatus = (questionId: string, index: number) => {
     const isCurrent = index === currentQuestionIndex
@@ -755,6 +1007,107 @@ export default function TestAttemptPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Section Selection Tabs (show when sections exist) */}
+        {hasSections && testSet?.sections && (
+          <Card className="mb-4">
+            <CardContent className="pt-4">
+              <div className="flex flex-wrap gap-2">
+                {testSet.sections
+                  .sort((a: any, b: any) => a.order - b.order)
+                  .map((section: any) => {
+                    const sectionQuestionsCount = questions.filter((q: Question) => q.sectionId === section.sectionId).length
+                    const isSelected = hasSectionWiseTiming 
+                      ? currentSectionId === section.sectionId
+                      : selectedSectionId === section.sectionId
+                    
+                    // Get section status from sectionTimings
+                    let sectionStatus: 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | null = null
+                    let tooltipMessage = ""
+                    
+                    if (hasSectionWiseTiming) {
+                      const sectionTiming = attemptData?.sectionTimings?.find(
+                        (st: any) => st.sectionId === section.sectionId
+                      )
+                      
+                      if (sectionTiming) {
+                        sectionStatus = sectionTiming.status as 'COMPLETED' | 'IN_PROGRESS'
+                      } else {
+                        // Section not started yet - check if it's before or after current section
+                        const currentSectionOrder = testSet.sections.find((s: any) => s.sectionId === currentSectionId)?.order || 0
+                        const sectionOrder = section.order
+                        if (sectionOrder < currentSectionOrder) {
+                          // This section should have been started but wasn't - treat as completed
+                          sectionStatus = 'COMPLETED'
+                        } else {
+                          // Section is pending (not started yet)
+                          sectionStatus = 'PENDING'
+                        }
+                      }
+                      
+                      // Determine tooltip message based on status
+                      if (sectionStatus === 'COMPLETED') {
+                        tooltipMessage = "You have submitted this section and cannot access it further."
+                      } else if (sectionStatus === 'PENDING') {
+                        tooltipMessage = "Submit the current section to open the next section."
+                      }
+                    }
+                    
+                    // Current section is enabled, others are disabled when section-wise timing is enabled
+                    const isDisabled = hasSectionWiseTiming && currentSectionId !== section.sectionId
+                    
+                    return (
+                      <div key={section.sectionId} className="relative group">
+                        <button
+                          onClick={() => {
+                            if (!isDisabled) {
+                              if (hasSectionWiseTiming) {
+                                // When section-wise timing is enabled, clicking current section does nothing
+                                // (it's already selected and enabled)
+                                return
+                              } else {
+                                setSelectedSectionId(section.sectionId)
+                                // Switch to first question of this section
+                                const firstQuestionInSection = questions.find((q: Question) => q.sectionId === section.sectionId)
+                                if (firstQuestionInSection) {
+                                  const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
+                                  setCurrentQuestionIndex(firstIndex)
+                                }
+                              }
+                            }
+                          }}
+                          disabled={isDisabled}
+                          className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                            isDisabled
+                              ? sectionStatus === 'COMPLETED'
+                              ? 'bg-green-100 text-green-700 cursor-not-allowed'
+                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                              : isSelected
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title={isDisabled ? tooltipMessage : undefined}
+                        >
+                          {section.name} ({sectionQuestionsCount})
+                          {sectionStatus === 'COMPLETED' && (
+                            <span className="ml-2 text-xs">✓</span>
+                          )}
+                        </button>
+                        {isDisabled && tooltipMessage && (
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                            {tooltipMessage}
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
+                              <div className="border-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Header with Timer */}
         <Card className="mb-6">
@@ -924,7 +1277,6 @@ export default function TestAttemptPage() {
                       </Button>
                       <Button
                         onClick={handleSaveAndNext}
-                        disabled={currentQuestionIndex === questions.length - 1}
                       >
                         Save & Next
                       </Button>
@@ -973,7 +1325,9 @@ export default function TestAttemptPage() {
                     const isCurrent = globalIndex === currentQuestionIndex
                     const isAnswered = !!selectedOptions[q._id]
                     const isMarked = markedForReview.has(q._id)
-                    const isVisited = isCurrent || visitedQuestions.has(q._id)
+                    // A question is visited if: it's current, in visitedQuestions set, or has time spent
+                    const hasTimeSpent = (questionTimes[q._id] || 0) > 0
+                    const isVisited = isCurrent || visitedQuestions.has(q._id) || hasTimeSpent
                     const isAnsweredAndMarked = isAnswered && isMarked
                     
                     // Determine status based on current state
@@ -1023,11 +1377,23 @@ export default function TestAttemptPage() {
                       <button
                         key={q._id}
                         onClick={() => {
-                          // Mark this question as visited immediately
+                          // Mark this question as visited immediately - use functional update to ensure we have latest state
                           setVisitedQuestions((prev) => {
+                            if (prev.has(q._id)) {
+                              return prev // Already visited, no change needed
+                            }
                             const newSet = new Set(prev)
                             newSet.add(q._id)
                             return newSet
+                          })
+                          
+                          // Always ensure questionTimes has an entry for this question (even if 0)
+                          // This ensures the question is tracked as visited
+                          setQuestionTimes((prev) => {
+                            if (prev[q._id] !== undefined) {
+                              return prev // Already has time, no change needed
+                            }
+                            return { ...prev, [q._id]: 0 }
                           })
                           
                           // If question hasn't been visited before (no time spent), save minimal time to backend
@@ -1051,6 +1417,11 @@ export default function TestAttemptPage() {
                             lastSavedTimesRef.current[q._id] = 1
                           }
                           
+                          // Update selected section if section-wise timing is disabled and question is from different section
+                          if (hasSections && !hasSectionWiseTiming && q.sectionId && selectedSectionId !== q.sectionId) {
+                            setSelectedSectionId(q.sectionId)
+                          }
+                          
                           // Then switch to this question
                           setCurrentQuestionIndex(globalIndex)
                         }}
@@ -1064,10 +1435,20 @@ export default function TestAttemptPage() {
                     )
                   })}
                 </div>
-                {testSet?.hasSectionWiseTiming && currentSectionId && (
+                {hasSectionWiseTiming && currentSectionId && (
                   <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                     <p className="text-sm text-blue-900">
-                      <strong>Current Section:</strong> {testSet.sections?.find((s: any) => s.sectionId === currentSectionId)?.sectionName || currentSectionId}
+                      <strong>Current Section:</strong> {testSet.sections?.find((s: any) => s.sectionId === currentSectionId)?.name || currentSectionId}
+                    </p>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Showing {sectionQuestions.length} of {questions.length} questions
+                    </p>
+                  </div>
+                )}
+                {hasSections && !hasSectionWiseTiming && selectedSectionId && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                      <strong>Selected Section:</strong> {testSet.sections?.find((s: any) => s.sectionId === selectedSectionId)?.name || selectedSectionId}
                     </p>
                     <p className="text-xs text-blue-700 mt-1">
                       Showing {sectionQuestions.length} of {questions.length} questions
@@ -1076,9 +1457,109 @@ export default function TestAttemptPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Submit Section Button (only when section-wise timing is enabled and not last section) */}
+            {hasSectionWiseTiming && currentSectionId && !isLastSection && (
+              <Card className="mt-4">
+                <CardContent className="pt-6">
+                  <Button
+                    variant="destructive"
+                    onClick={handleSubmitSection}
+                    className="w-full"
+                    disabled={submitSectionMutation.isPending}
+                  >
+                    {submitSectionMutation.isPending ? 'Submitting...' : 'Submit Section'}
+                  </Button>
+                  <p className="text-xs text-gray-600 mt-2 text-center">
+                    Submit the current section to proceed to the next section
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Last Question Dialog */}
+      <Dialog open={showLastQuestionDialog} onOpenChange={setShowLastQuestionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Last Question Reached</DialogTitle>
+            <DialogDescription>
+              {hasSectionWiseTiming && isLastSection
+                ? "You have reached the last question of this section. Please wait till the time allotted for this section is over or submit the test."
+                : hasSectionWiseTiming
+                ? "You have reached the last question of this section. Please wait till the time allotted for this section is over or submit the section to move to next section."
+                : "You have reached the last question of this test. Please wait till the time allotted is over or submit the test."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowLastQuestionDialog(false)}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Submit Section Confirmation Dialog */}
+      <Dialog open={showSubmitSectionConfirmation} onOpenChange={setShowSubmitSectionConfirmation}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Section Submission</DialogTitle>
+            <DialogDescription>
+              Please review your section status before submitting. Once submitted, you cannot return to this section.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-gray-900 mb-2">
+                Current Section: {testSet?.sections?.find((s: any) => s.sectionId === currentSectionId)?.name || currentSectionId}
+              </p>
+              {!isLastSection && (
+                <p className="text-xs text-gray-600">
+                  You will be moved to the next section after submission.
+                </p>
+              )}
+            </div>
+            {sectionStats && (
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 font-semibold">Status</th>
+                    <th className="text-right py-2 px-3 font-semibold">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b">
+                    <td className="py-2 px-3">Attempted</td>
+                    <td className="text-right py-2 px-3 font-medium text-green-600">{sectionStats.answered}</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 px-3">Unattempted</td>
+                    <td className="text-right py-2 px-3 font-medium text-red-600">{sectionStats.unanswered}</td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 px-3">Marked</td>
+                    <td className="text-right py-2 px-3 font-medium text-purple-600">{sectionStats.marked}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2 px-3 font-semibold">Total Questions</td>
+                    <td className="text-right py-2 px-3 font-semibold">{sectionStats.total}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCancelSubmitSection}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmSubmitSection} disabled={submitSectionMutation.isPending}>
+              {submitSectionMutation.isPending ? 'Submitting...' : 'Confirm & Submit Section'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   )
 }

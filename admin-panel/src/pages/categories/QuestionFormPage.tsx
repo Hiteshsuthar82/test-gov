@@ -33,7 +33,7 @@ interface ExplanationImage {
 }
 
 interface QuestionFormData {
-  sectionId: string
+  sectionId?: string
   direction: string
   directionImageUrl: string
   questionText: string
@@ -175,13 +175,18 @@ export default function QuestionFormPage() {
 
   // Initialize default options for new questions
   useEffect(() => {
-    if (!id && setData?.sections && setData.sections.length > 0) {
-      const currentSectionId = watch('sectionId')
+    if (!id) {
       const currentOptions = watch('options')
       
       // Only set defaults if form is still empty (new question)
-      if (currentSectionId === '' && currentOptions.length === 0) {
-        setValue('sectionId', setData.sections[0].sectionId)
+      if (currentOptions.length === 0) {
+        // Set sectionId only if sections exist
+        if (setData?.sections && setData.sections.length > 0) {
+          const currentSectionId = watch('sectionId')
+          if (currentSectionId === '') {
+            setValue('sectionId', setData.sections[0].sectionId)
+          }
+        }
         appendOption({ optionId: 'A', text: '' })
         appendOption({ optionId: 'B', text: '' })
         appendOption({ optionId: 'C', text: '' })
@@ -224,7 +229,10 @@ export default function QuestionFormPage() {
     }
 
     const formDataToSend = new FormData()
-    formDataToSend.append('sectionId', data.sectionId)
+    // Only append sectionId if sections exist
+    if (setData?.sections && setData.sections.length > 0 && data.sectionId) {
+      formDataToSend.append('sectionId', data.sectionId)
+    }
     formDataToSend.append('direction', data.direction || '')
     formDataToSend.append('questionText', data.questionText)
     formDataToSend.append('questionFormattedText', data.questionFormattedText || '')
@@ -368,24 +376,26 @@ export default function QuestionFormPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="sectionId">Section *</Label>
-                <Select
-                  id="sectionId"
-                  {...register('sectionId', { required: 'Section is required' })}
-                >
-                  <option value="">Select Section</option>
-                  {setData?.sections?.map((section: any) => (
-                    <option key={section.sectionId} value={section.sectionId}>
-                      {section.name}
-                    </option>
-                  ))}
-                </Select>
-                {errors.sectionId && (
-                  <p className="text-sm text-red-500 mt-1">{errors.sectionId.message}</p>
-                )}
-              </div>
+            <div className={`grid gap-4 ${setData?.sections && setData.sections.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {setData?.sections && setData.sections.length > 0 && (
+                <div>
+                  <Label htmlFor="sectionId">Section *</Label>
+                  <Select
+                    id="sectionId"
+                    {...register('sectionId', { required: 'Section is required' })}
+                  >
+                    <option value="">Select Section</option>
+                    {setData.sections.map((section: any) => (
+                      <option key={section.sectionId} value={section.sectionId}>
+                        {section.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {errors.sectionId && (
+                    <p className="text-sm text-red-500 mt-1">{errors.sectionId.message}</p>
+                  )}
+                </div>
+              )}
               <div>
                 <Label htmlFor="questionOrder">Question Order *</Label>
                 <Input

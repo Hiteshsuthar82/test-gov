@@ -201,8 +201,7 @@ export const adminQuestionController = {
         }
       }
 
-      const question = await adminQuestionService.create(setId, {
-        sectionId: req.body.sectionId,
+      const questionData: any = {
         direction: req.body.direction,
         directionImageUrl: directionImageUrl || undefined,
         questionText: req.body.questionText,
@@ -218,7 +217,14 @@ export const adminQuestionController = {
         explanationImageUrls: explanationImageUrls.length > 0 ? explanationImageUrls : undefined,
         questionOrder: parseInt(req.body.questionOrder) || 1,
         isActive: req.body.isActive === 'true' || req.body.isActive === true,
-      });
+      };
+
+      // Only include sectionId if it's provided and not empty
+      if (req.body.sectionId && req.body.sectionId.trim() !== '') {
+        questionData.sectionId = req.body.sectionId;
+      }
+
+      const question = await adminQuestionService.create(setId, questionData);
       sendSuccess(res, question, 'Question created successfully.');
     } catch (error: any) {
       sendError(res, error.message, 400);
@@ -565,7 +571,6 @@ export const adminQuestionController = {
       }
 
       const updateData: any = {
-        sectionId: req.body.sectionId,
         direction: req.body.direction,
         questionText: req.body.questionText,
         questionFormattedText: req.body.questionFormattedText,
@@ -577,6 +582,16 @@ export const adminQuestionController = {
         questionOrder: parseInt(req.body.questionOrder) || 1,
         isActive: req.body.isActive === 'true' || req.body.isActive === true,
       };
+
+      // Only include sectionId if it's provided and not empty
+      if (req.body.sectionId !== undefined && req.body.sectionId !== null) {
+        if (req.body.sectionId && req.body.sectionId.trim() !== '') {
+          updateData.sectionId = req.body.sectionId;
+        } else {
+          // Explicitly set to undefined if empty string is sent
+          updateData.sectionId = undefined;
+        }
+      }
       
       if (directionImageUrl !== undefined) {
         updateData.directionImageUrl = directionImageUrl || undefined;
