@@ -31,8 +31,13 @@ export default function TestAttemptPage() {
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set())
   const [visitedQuestions, setVisitedQuestions] = useState<Set<string>>(new Set())
   const [timeRemaining, setTimeRemaining] = useState(0)
+  const [timerBaseTime, setTimerBaseTime] = useState<number | null>(null) // Base remaining seconds calculated from question times
+  const [timerBaseTimestamp, setTimerBaseTimestamp] = useState<number | null>(null) // When we calculated the base time
   const [currentQuestionTime, setCurrentQuestionTime] = useState(0)
   const [questionTimes, setQuestionTimes] = useState<Record<string, number>>({}) // Simple object: questionId -> seconds
+  const [sectionTimeRemaining, setSectionTimeRemaining] = useState(0) // Section timer when section-wise timing is enabled
+  const [sectionTimerBaseTime, setSectionTimerBaseTime] = useState<number | null>(null) // Base remaining seconds from backend
+  const [sectionTimerBaseTimestamp, setSectionTimerBaseTimestamp] = useState<number | null>(null) // When we received the base time
   const [isPaused, setIsPaused] = useState(false)
   const [pauseStartTime, setPauseStartTime] = useState<Date | null>(null)
   const [totalPausedTime, setTotalPausedTime] = useState(0) // Track total paused time
@@ -47,6 +52,7 @@ export default function TestAttemptPage() {
   const questionStartTimeRef = useRef<Date | null>(null)
   const timerIntervalRef = useRef<number | null>(null)
   const questionTimerIntervalRef = useRef<number | null>(null)
+  const sectionTimerIntervalRef = useRef<number | null>(null) // Section timer interval
   const prevQuestionIndexRef = useRef<number>(-1)
   const autoPausedRef = useRef(false) // Track if auto-paused due to page visibility
   const lastSavedTimesRef = useRef<Record<string, number>>({}) // Track last saved time for each question
@@ -54,6 +60,13 @@ export default function TestAttemptPage() {
   const hasLocalUpdatesRef = useRef(false) // Track if we've made local state updates that shouldn't be overwritten
   const sectionIndexInitializedRef = useRef(false) // Track if we've initialized the question index for current section
   const prevSectionIdRef = useRef<string | undefined>(undefined) // Track previous section ID to detect section changes
+  const sectionTimerInitializedRef = useRef(false) // Track if section timer has been initialized
+  const sectionTimerCalculatedFromQuestionsRef = useRef(false) // Track if we've calculated from question times (for resume/refresh)
+  const [sectionTimerReady, setSectionTimerReady] = useState(false) // State to track section timer initialization (triggers re-renders)
+  const [questionReady, setQuestionReady] = useState(false) // State to track when question is initialized (triggers re-renders)
+  const sectionTimeRemainingRef = useRef(0) // Ref to track latest section time remaining
+  const timeRemainingRef = useRef(0) // Ref to track latest time remaining
+  const isPausedRef = useRef(false) // Ref to track latest paused state
 
   const { data: attemptData, isLoading: isLoadingAttempt } = useQuery({
     queryKey: ['attempt', attemptId],
@@ -63,6 +76,9 @@ export default function TestAttemptPage() {
     },
     enabled: !!attemptId,
   })
+
+  // Note: Section timer is now calculated from question times (like whole test timer)
+  // No need to query section timer from backend - we calculate it locally
 
   const questions = attemptData?.questions || []
 
@@ -82,12 +98,21 @@ export default function TestAttemptPage() {
       setQuestionTimes(initialQuestionTimes)
       lastSavedTimesRef.current = initialLastSaved
       
-      // Calculate initial timer from sum of all question times
-      if (attemptData?.testSet?.durationMinutes) {
-        const totalSeconds = attemptData.testSet.durationMinutes * 60
-        const totalQuestionTime = Object.values(initialQuestionTimes).reduce((sum, time) => sum + time, 0)
-        const remaining = Math.max(0, totalSeconds - totalQuestionTime)
-        setTimeRemaining(remaining)
+      // Reset timer base time to allow recalculation on resume/refresh
+      // This ensures timer is recalculated from question times on load/resume
+      const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+      if (!hasSectionWiseTiming) {
+        // Reset whole test timer base time
+        setTimerBaseTime(null)
+        setTimerBaseTimestamp(null)
+        timerInitializedRef.current = false
+      } else {
+        // Reset section timer base time for section-wise timing
+        setSectionTimerBaseTime(null)
+        setSectionTimerBaseTimestamp(null)
+        sectionTimerInitializedRef.current = false
+        sectionTimerCalculatedFromQuestionsRef.current = false // Reset flag to allow recalculation
+        setSectionTimerReady(false)
       }
       
       // Also sync totalPausedTime from backend
@@ -96,44 +121,157 @@ export default function TestAttemptPage() {
       }
       
       // Check if test is paused (lastActiveAt is null)
+      // When resuming from test details page, auto-resume instead of showing pause dialog
       if (attemptData.status === 'IN_PROGRESS' && !attemptData.lastActiveAt && !isPaused) {
-        // Test is paused - show pause dialog
-        setIsPaused(true)
-        setShowPauseDialog(true)
-        autoPausedRef.current = true
+        // Test is paused - auto resume when coming from resume button (don't show dialog)
+        // This handles the case when user clicks "Resume" from test details page
+        resumeMutation.mutate()
       } else if (attemptData.status === 'IN_PROGRESS' && attemptData.lastActiveAt && isPaused && autoPausedRef.current) {
         // Test was auto-paused but is now active - auto resume
         resumeMutation.mutate()
+      }
+      
+      // When resuming, ensure question is marked as ready after questionTimes are loaded
+      // Force the question initialization effect to run by ensuring questionReady is set
+      // This is a workaround for the resume case where the effect might not trigger properly
+      if (attemptData.questions && attemptData.questions.length > 0 && currentQuestionIndex >= 0) {
+        const currentQ = attemptData.questions[currentQuestionIndex]
+        if (currentQ && Object.keys(initialQuestionTimes).length > 0) {
+          // QuestionTimes have been loaded, ensure question is ready
+          // Use setTimeout to ensure this runs after setQuestionTimes state update completes
+          setTimeout(() => {
+            if (!questionStartTimeRef.current) {
+              questionStartTimeRef.current = new Date()
+            }
+            setQuestionReady(true)
+          }, 50) // Small delay to ensure state update has propagated
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptData, isPaused])
 
-  // Calculate timer from sum of all question times
+  // Calculate section timer from question times (only when section-wise timing is enabled)
+  // Similar to whole test timer - calculate from question times on refresh/resume, then countdown smoothly
   useEffect(() => {
-    if (attemptData?.testSet?.durationMinutes && questions.length > 0) {
-      const totalSeconds = attemptData.testSet.durationMinutes * 60
-      
-      // Sum all question times from state
-      const totalQuestionTime = Object.values(questionTimes).reduce((sum, time) => sum + time, 0)
-      
-      // Remaining = total duration - sum of all question times
-      const remaining = Math.max(0, totalSeconds - totalQuestionTime)
-      setTimeRemaining(remaining)
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    const currentSectionId = attemptData?.currentSectionId
+    
+    if (!hasSectionWiseTiming || !currentSectionId || !attemptData?.testSet?.sections) {
+      // Section timing is not active, reset
+      setSectionTimeRemaining(0)
+      setSectionTimerBaseTime(null)
+      setSectionTimerBaseTimestamp(null)
+      sectionTimerInitializedRef.current = false
+      setSectionTimerReady(false)
+      return
     }
-  }, [attemptData, questionTimes, questions.length])
 
-  // Initialize current question time when question changes
+    // Find current section to get its duration
+    const currentSection = attemptData.testSet.sections.find(
+      (s: any) => s.sectionId === currentSectionId
+    )
+    
+    if (!currentSection || !currentSection.durationMinutes) {
+      return
+    }
+
+    const sectionDurationSeconds = currentSection.durationMinutes * 60
+
+    // Only calculate if timer hasn't been initialized yet (initial load/resume/refresh)
+    // Similar to whole test timer logic
+    // Wait for questionTimes to be populated (from attemptData effect)
+    // Check if we have question times loaded - if questionTimes has keys, it means we loaded from DB (resume/refresh)
+    const hasQuestionTimes = Object.keys(questionTimes).length > 0
+    
+    // Only calculate if:
+    // 1. Timer hasn't been initialized yet (sectionTimerBaseTime === null)
+    // 2. We have questions loaded
+    // 3. If we have questionTimes, use them (resume/refresh), otherwise start fresh (initial start)
+    // 4. If we haven't calculated from questions yet but have questionTimes, recalculate
+    const shouldCalculate = sectionTimerBaseTime === null || 
+      (hasQuestionTimes && !sectionTimerCalculatedFromQuestionsRef.current)
+    
+    if (shouldCalculate && questions.length > 0) {
+      let remaining: number
+      
+      if (hasQuestionTimes) {
+        // On resume/refresh: Calculate from question times
+        // Sum time spent in current section's questions only
+        const currentSectionQuestions = questions.filter((q: Question) => {
+          // Ensure question has sectionId and it matches current section
+          return q.sectionId && q.sectionId === currentSectionId
+        })
+        
+        const totalSectionQuestionTime = currentSectionQuestions.reduce((sum: number, q: Question) => {
+          const time = questionTimes[q._id] || 0
+          return sum + time
+        }, 0)
+        
+        // Remaining = section duration - sum of time spent in current section's questions
+        remaining = Math.max(0, sectionDurationSeconds - totalSectionQuestionTime)
+        sectionTimerCalculatedFromQuestionsRef.current = true // Mark that we calculated from questions
+      } else {
+        // On initial start: Start from full section duration
+        // This happens when questionTimes is empty (no data loaded yet)
+        remaining = sectionDurationSeconds
+      }
+      
+      // Store base time and timestamp for smooth countdown
+      setSectionTimerBaseTime(remaining)
+      setSectionTimerBaseTimestamp(Date.now())
+      setSectionTimeRemaining(remaining)
+      sectionTimerInitializedRef.current = true
+      setSectionTimerReady(true) // Update state to trigger question timer effect
+    }
+  }, [attemptData, questionTimes, questions, sectionTimerBaseTime])
+
+  // Calculate initial timer from sum of all question times (only when section-wise timing is disabled)
+  // Only recalculate on initial load/resume/refresh, not every time questionTimes changes
   useEffect(() => {
-    if (questions.length > 0 && currentQuestionIndex >= 0) {
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    if (!hasSectionWiseTiming && attemptData?.testSet?.durationMinutes && questions.length > 0) {
+      // Only calculate if timer hasn't been initialized yet (initial load/resume/refresh)
+      if (timerBaseTime === null && Object.keys(questionTimes).length > 0) {
+        const totalSeconds = attemptData.testSet.durationMinutes * 60
+        
+        // Sum all question times from state
+        const totalQuestionTime = Object.values(questionTimes).reduce((sum, time) => sum + time, 0)
+        
+        // Remaining = total duration - sum of all question times
+        const remaining = Math.max(0, totalSeconds - totalQuestionTime)
+        
+        // Store base time and timestamp for smooth countdown
+        setTimerBaseTime(remaining)
+        setTimerBaseTimestamp(Date.now())
+        setTimeRemaining(remaining)
+        timerInitializedRef.current = true
+      }
+    } else if (hasSectionWiseTiming) {
+      // Reset timer when section-wise timing is enabled
+      setTimerBaseTime(null)
+      setTimerBaseTimestamp(null)
+      timerInitializedRef.current = false
+    }
+  }, [attemptData, questionTimes, questions.length, timerBaseTime])
+
+  // Initialize current question time when question changes or when questionTimes are loaded (for resume)
+  useEffect(() => {
+    // Only initialize if we have questions, a valid index, and questionTimes has been loaded
+    // This ensures it works on resume when questionTimes might load after questions
+    if (questions.length > 0 && currentQuestionIndex >= 0 && Object.keys(questionTimes).length > 0) {
       const currentQ = questions[currentQuestionIndex]
       if (currentQ) {
         // Get time from state (already loaded from DB)
         const questionTime = questionTimes[currentQ._id] || 0
         setCurrentQuestionTime(questionTime)
         
-        // Start tracking from now
-        questionStartTimeRef.current = new Date()
+        // Start tracking from now - set this immediately so question timer can start
+        // Only set if not already set (to avoid resetting on every render)
+        if (!questionStartTimeRef.current) {
+          questionStartTimeRef.current = new Date()
+        }
+        setQuestionReady(true) // Mark question as ready to trigger question timer effect
         
         // Always mark current question as visited
         setVisitedQuestions((prev) => {
@@ -142,9 +280,29 @@ export default function TestAttemptPage() {
           }
           return new Set([...prev, currentQ._id])
         })
+      } else {
+        setQuestionReady(false)
       }
+    } else if (questions.length === 0 || currentQuestionIndex < 0) {
+      // Reset if no question
+      questionStartTimeRef.current = null
+      setQuestionReady(false)
     }
-  }, [currentQuestionIndex, questions, questionTimes])
+    // Note: Don't set questionReady to false if questionTimes is empty yet - wait for it to load
+  }, [currentQuestionIndex, questions, questionTimes, attemptData]) // Add attemptData to ensure it runs on resume
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    sectionTimeRemainingRef.current = sectionTimeRemaining
+  }, [sectionTimeRemaining])
+
+  useEffect(() => {
+    timeRemainingRef.current = timeRemaining
+  }, [timeRemaining])
+
+  useEffect(() => {
+    isPausedRef.current = isPaused
+  }, [isPaused])
 
   // Increment current question time every second
   useEffect(() => {
@@ -154,25 +312,47 @@ export default function TestAttemptPage() {
       questionTimerIntervalRef.current = null
     }
 
-    // Stop timer if time is up or paused
-    if (isPaused || !questionStartTimeRef.current || questions.length === 0 || timeRemaining <= 0) {
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    
+    // Don't require section timer to be ready - start question timer independently
+    // Only check time expired if timers are initialized (but don't block starting)
+    const timeExpired = hasSectionWiseTiming 
+      ? (sectionTimerInitializedRef.current && sectionTimeRemainingRef.current <= 0)
+      : (timerInitializedRef.current && timeRemainingRef.current <= 0)
+
+    // Start timer if question is ready, not paused, has questions, and time not expired
+    if (!questionReady || isPausedRef.current || !questionStartTimeRef.current || questions.length === 0 || timeExpired) {
       return
     }
 
     const currentQ = questions[currentQuestionIndex]
     if (!currentQ) return
 
+    const questionId = currentQ._id
+
     // Increment question time every second
     questionTimerIntervalRef.current = setInterval(() => {
-      if (questionStartTimeRef.current && questions[currentQuestionIndex]?._id === currentQ._id && !isPaused && timeRemaining > 0) {
-        // Increment this question's time in state
-        setQuestionTimes((prev) => {
-          const newTime = (prev[currentQ._id] || 0) + 1
-          return { ...prev, [currentQ._id]: newTime }
-        })
+      // Use refs to get latest values inside interval
+      const paused = isPausedRef.current
+      const currentQuestion = questions[currentQuestionIndex]
+      
+      if (questionStartTimeRef.current && currentQuestion?._id === questionId && !paused) {
+        // Check time expired again inside interval using refs
+        // Only check if timer is initialized (don't block if not initialized yet)
+        const expired = hasSectionWiseTiming 
+          ? (sectionTimerInitializedRef.current && sectionTimeRemainingRef.current <= 0)
+          : (timerInitializedRef.current && timeRemainingRef.current <= 0)
         
-        // Update display
-        setCurrentQuestionTime((prev) => prev + 1)
+        if (!expired) {
+          // Increment this question's time in state
+          setQuestionTimes((prev) => {
+            const newTime = (prev[questionId] || 0) + 1
+            return { ...prev, [questionId]: newTime }
+          })
+          
+          // Update display
+          setCurrentQuestionTime((prev) => prev + 1)
+        }
       }
     }, 1000)
 
@@ -182,61 +362,181 @@ export default function TestAttemptPage() {
         questionTimerIntervalRef.current = null
       }
     }
-  }, [currentQuestionIndex, isPaused, questions, timeRemaining])
+  }, [currentQuestionIndex, questions, attemptData?.testSet?.hasSectionWiseTiming, sectionTimerReady, questionReady])
 
-  // Main timer - countdown every second
+  // Main timer - countdown every second (only when section-wise timing is disabled)
+  // Use base time approach for smooth countdown (like section timer)
   useEffect(() => {
-    // Mark timer as initialized once we start the countdown
-    if (timeRemaining > 0 && !isPaused && !timerInitializedRef.current) {
-      timerInitializedRef.current = true
-    }
-
-    if (isPaused || timeRemaining <= 0) {
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    
+    // Skip main timer if section-wise timing is enabled
+    if (hasSectionWiseTiming) {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
       }
+      return
+    }
+
+    // Need base time and timestamp to calculate remaining time
+    if (timerBaseTime === null || timerBaseTimestamp === null) {
+      return
+    }
+
+    if (isPaused) {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
+      }
+      return
+    }
+
+    // Calculate remaining time: base time minus seconds passed since we calculated it
+    const calculateRemaining = () => {
+      const now = Date.now()
+      const secondsPassed = Math.floor((now - timerBaseTimestamp) / 1000)
+      return Math.max(0, timerBaseTime - secondsPassed)
+    }
+
+    // Update immediately
+    const remaining = calculateRemaining()
+    setTimeRemaining(remaining)
+
+    // When time reaches 0, stop all timers and show submit dialog
+    if (remaining <= 0 && !showSubmitConfirmation && timerInitializedRef.current) {
+      // Stop question timer
+      if (questionTimerIntervalRef.current) {
+        clearInterval(questionTimerIntervalRef.current)
+        questionTimerIntervalRef.current = null
+      }
+      // Show submit dialog
+      setShowSubmitConfirmation(true)
+      setAutoSubmitCountdown(10)
+      return
+    }
+
+    // Timer countdown - recalculate from base time every second
+    timerIntervalRef.current = setInterval(() => {
+      const newRemaining = calculateRemaining()
+      setTimeRemaining(newRemaining)
       
-      // When time reaches 0, stop all timers and show submit dialog
-      // Only show dialog if timer was actually running (not on initial load)
-      if (timeRemaining <= 0 && !showSubmitConfirmation && timerInitializedRef.current) {
-        // Stop question timer
+      if (newRemaining <= 0) {
+        // Stop all timers
         if (questionTimerIntervalRef.current) {
           clearInterval(questionTimerIntervalRef.current)
           questionTimerIntervalRef.current = null
         }
-        // Show submit dialog
-        setShowSubmitConfirmation(true)
-        setAutoSubmitCountdown(10)
-      }
-      
-      return
-    }
-
-    // Simple countdown - timer is already calculated from question times sum
-    timerIntervalRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          // Stop all timers
-          if (questionTimerIntervalRef.current) {
-            clearInterval(questionTimerIntervalRef.current)
-            questionTimerIntervalRef.current = null
-          }
-          return 0
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current)
+          timerIntervalRef.current = null
         }
-        return prev - 1
-      })
+        
+        // Show submit dialog if not already showing
+        if (!showSubmitConfirmation && timerInitializedRef.current) {
+          setShowSubmitConfirmation(true)
+          setAutoSubmitCountdown(10)
+        }
+      }
     }, 1000)
 
     return () => {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current)
+        timerIntervalRef.current = null
       }
     }
-  }, [timeRemaining, isPaused, showSubmitConfirmation])
+  }, [timerBaseTime, timerBaseTimestamp, isPaused, showSubmitConfirmation, attemptData?.testSet?.hasSectionWiseTiming])
+
+  // Section timer - countdown every second when section-wise timing is enabled
+  // Use base time from backend and countdown from there, accounting for time passed
+  useEffect(() => {
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    const currentSectionId = attemptData?.currentSectionId
+    
+    // Only run section timer if section-wise timing is enabled
+    if (!hasSectionWiseTiming) {
+      if (sectionTimerIntervalRef.current) {
+        clearInterval(sectionTimerIntervalRef.current)
+        sectionTimerIntervalRef.current = null
+      }
+      return
+    }
+
+    // Need base time and timestamp to calculate remaining time
+    if (sectionTimerBaseTime === null || sectionTimerBaseTimestamp === null) {
+      return
+    }
+
+    if (isPaused) {
+      if (sectionTimerIntervalRef.current) {
+        clearInterval(sectionTimerIntervalRef.current)
+        sectionTimerIntervalRef.current = null
+      }
+      return
+    }
+
+    // Calculate remaining time: base time minus seconds passed since we received it
+    const calculateRemaining = () => {
+      const now = Date.now()
+      const secondsPassed = Math.floor((now - sectionTimerBaseTimestamp) / 1000)
+      return Math.max(0, sectionTimerBaseTime - secondsPassed)
+    }
+
+    // Update immediately
+    const remaining = calculateRemaining()
+    setSectionTimeRemaining(remaining)
+
+    // When section time reaches 0, auto-submit the section
+    if (remaining <= 0 && !showSubmitSectionConfirmation && sectionTimerInitializedRef.current && currentSectionId) {
+      // Stop question timer
+      if (questionTimerIntervalRef.current) {
+        clearInterval(questionTimerIntervalRef.current)
+        questionTimerIntervalRef.current = null
+      }
+      // Auto-submit section
+      submitSectionMutation.mutate(currentSectionId)
+      return
+    }
+
+    // Section timer countdown - recalculate from base time every second
+    sectionTimerIntervalRef.current = setInterval(() => {
+      const newRemaining = calculateRemaining()
+      setSectionTimeRemaining(newRemaining)
+      
+      if (newRemaining <= 0) {
+        // Stop all timers
+        if (questionTimerIntervalRef.current) {
+          clearInterval(questionTimerIntervalRef.current)
+          questionTimerIntervalRef.current = null
+        }
+        if (sectionTimerIntervalRef.current) {
+          clearInterval(sectionTimerIntervalRef.current)
+          sectionTimerIntervalRef.current = null
+        }
+        
+        // Auto-submit section if not already submitting
+        if (!showSubmitSectionConfirmation && sectionTimerInitializedRef.current && currentSectionId) {
+          submitSectionMutation.mutate(currentSectionId)
+        }
+      }
+    }, 1000)
+
+    return () => {
+      if (sectionTimerIntervalRef.current) {
+        clearInterval(sectionTimerIntervalRef.current)
+        sectionTimerIntervalRef.current = null
+      }
+    }
+  }, [sectionTimerBaseTime, sectionTimerBaseTimestamp, isPaused, showSubmitSectionConfirmation, attemptData?.testSet?.hasSectionWiseTiming, attemptData?.currentSectionId])
 
   // Auto-submit countdown when dialog is shown due to time expiry
   useEffect(() => {
-    if (showSubmitConfirmation && timeRemaining <= 0 && autoSubmitCountdown > 0) {
+    const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+    const timeExpired = hasSectionWiseTiming 
+      ? sectionTimeRemaining <= 0 
+      : timeRemaining <= 0
+    
+    if (showSubmitConfirmation && timeExpired && autoSubmitCountdown > 0) {
       const countdownInterval = setInterval(() => {
         setAutoSubmitCountdown((prev) => {
           if (prev <= 1) {
@@ -253,7 +553,7 @@ export default function TestAttemptPage() {
         clearInterval(countdownInterval)
       }
     }
-  }, [showSubmitConfirmation, autoSubmitCountdown, timeRemaining])
+  }, [showSubmitConfirmation, autoSubmitCountdown, timeRemaining, sectionTimeRemaining, attemptData?.testSet?.hasSectionWiseTiming])
 
   // Save time to backend when changing questions
   useEffect(() => {
@@ -358,6 +658,13 @@ export default function TestAttemptPage() {
       // Get the next section ID from response
       const nextSectionId = data.data?.currentSectionId
       
+      // Reset section timer for new section
+      setSectionTimeRemaining(0)
+      setSectionTimerBaseTime(null)
+      setSectionTimerBaseTimestamp(null)
+      sectionTimerInitializedRef.current = false
+      setSectionTimerReady(false)
+      
       // Refetch attempt data to get updated section info
       if (attemptId) {
         await queryClient.invalidateQueries({ queryKey: ['attempt', attemptId] })
@@ -405,9 +712,20 @@ export default function TestAttemptPage() {
       if (data.data?.totalPausedSeconds !== undefined) {
         setTotalPausedTime(data.data.totalPausedSeconds)
       }
-      // Refetch attempt data to get updated time
+      // Refetch attempt data and section timer to get updated time
       if (attemptId) {
         await queryClient.invalidateQueries({ queryKey: ['attempt', attemptId] })
+        await queryClient.invalidateQueries({ queryKey: ['section-timer', attemptId] })
+      }
+      // Ensure question timer starts after resume
+      if (questions.length > 0 && currentQuestionIndex >= 0) {
+        const currentQ = questions[currentQuestionIndex]
+        if (currentQ) {
+          if (!questionStartTimeRef.current) {
+            questionStartTimeRef.current = new Date()
+          }
+          setQuestionReady(true)
+        }
       }
     },
   })
@@ -736,6 +1054,18 @@ export default function TestAttemptPage() {
               setCurrentQuestionIndex(firstIndex)
             }
           }
+          
+          // Reset section timer - it will be initialized from backend
+          setSectionTimeRemaining(0)
+          setSectionTimerBaseTime(null)
+          setSectionTimerBaseTimestamp(null)
+          sectionTimerInitializedRef.current = false
+          setSectionTimerReady(false)
+          
+          // Refetch section timer for new section
+          if (attemptId) {
+            queryClient.invalidateQueries({ queryKey: ['section-timer', attemptId] })
+          }
         }
         
         // Update previous section ID (initialize on first load)
@@ -744,7 +1074,7 @@ export default function TestAttemptPage() {
         }
       }
     }
-  }, [attemptData?.currentSectionId, questions, attemptData?.testSet])
+  }, [attemptData?.currentSectionId, questions, attemptData?.testSet, attemptId, queryClient])
 
   // Initialize current question index to first question of current section when section-wise timing is enabled
   useEffect(() => {
@@ -905,20 +1235,45 @@ export default function TestAttemptPage() {
         {/* Submit Confirmation Dialog */}
         <Dialog 
           open={showSubmitConfirmation} 
-          onOpenChange={timeRemaining <= 0 ? () => {} : setShowSubmitConfirmation}
-          preventClose={timeRemaining <= 0}
+          onOpenChange={() => {
+            const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+            const timeExpired = hasSectionWiseTiming 
+              ? sectionTimeRemaining <= 0 
+              : timeRemaining <= 0
+            if (!timeExpired) {
+              setShowSubmitConfirmation(false)
+            }
+          }}
+          preventClose={(() => {
+            const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+            return hasSectionWiseTiming 
+              ? sectionTimeRemaining <= 0 
+              : timeRemaining <= 0
+          })()}
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
-                {timeRemaining <= 0 ? 'Time Up! Test Will Auto-Submit' : 'Confirm Test Submission'}
+                {(() => {
+                  const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+                  const timeExpired = hasSectionWiseTiming 
+                    ? sectionTimeRemaining <= 0 
+                    : timeRemaining <= 0
+                  return timeExpired ? 'Time Up! Test Will Auto-Submit' : 'Confirm Test Submission'
+                })()}
               </DialogTitle>
               <DialogDescription>
-                {timeRemaining <= 0 ? (
-                  <span>Your test time has ended. The test will be automatically submitted in <strong>{autoSubmitCountdown}</strong> seconds.</span>
-                ) : (
-                  'Please review your test status before submitting:'
-                )}
+                {(() => {
+                  const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+                  const timeExpired = hasSectionWiseTiming 
+                    ? sectionTimeRemaining <= 0 
+                    : timeRemaining <= 0
+                  return timeExpired ? (
+                    <span>Your test time has ended. The test will be automatically submitted in <strong>{autoSubmitCountdown}</strong> seconds.</span>
+                  ) : (
+                    'Please review your test status before submitting:'
+                  )
+                })()}
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
@@ -933,7 +1288,10 @@ export default function TestAttemptPage() {
                   <tr className="border-b">
                     <td className="py-2 px-3">Time Left</td>
                     <td className="text-right py-2 px-3 font-medium text-blue-600">
-                      {timeRemaining > 0 ? formatTime(timeRemaining) : '00:00'}
+                      {hasSectionWiseTiming 
+                        ? (sectionTimeRemaining > 0 ? formatTime(sectionTimeRemaining) : '00:00')
+                        : (timeRemaining > 0 ? formatTime(timeRemaining) : '00:00')
+                      }
                     </td>
                   </tr>
                   <tr className="border-b">
@@ -956,25 +1314,32 @@ export default function TestAttemptPage() {
               </table>
             </div>
             <DialogFooter>
-              {timeRemaining > 0 ? (
-                <>
-                  <Button variant="outline" onClick={handleCancelSubmit}>
-                    Cancel
-                  </Button>
-                  <Button variant="destructive" onClick={handleConfirmSubmit}>
-                    Confirm & Submit
-                  </Button>
-                </>
-              ) : (
-                <div className="w-full text-center">
-                  <p className="text-sm text-gray-600 mb-2">
-                    Auto-submitting in <span className="font-bold text-red-600">{autoSubmitCountdown}</span> seconds...
-                  </p>
-                  <Button variant="destructive" onClick={handleConfirmSubmit} className="w-full">
-                    Submit Now
-                  </Button>
-                </div>
-              )}
+              {(() => {
+                const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
+                const timeExpired = hasSectionWiseTiming 
+                  ? sectionTimeRemaining <= 0 
+                  : timeRemaining <= 0
+                
+                return timeExpired ? (
+                  <div className="w-full text-center">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Auto-submitting in <span className="font-bold text-red-600">{autoSubmitCountdown}</span> seconds...
+                    </p>
+                    <Button variant="destructive" onClick={handleConfirmSubmit} className="w-full">
+                      Submit Now
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={handleCancelSubmit}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleConfirmSubmit}>
+                      Confirm & Submit
+                    </Button>
+                  </>
+                )
+              })()}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1124,10 +1489,19 @@ export default function TestAttemptPage() {
                   <FiClock />
                   <span className="text-sm">Current: {formatShortTime(currentQuestionTime)}</span>
                 </div>
-                <div className="flex items-center space-x-2 text-red-600">
-                  <FiClock />
-                  <span className="font-mono font-bold">{formatTime(timeRemaining)}</span>
-                </div>
+                {hasSectionWiseTiming ? (
+                  <div className="flex items-center space-x-2 text-red-600">
+                    <FiClock />
+                    <span className="font-mono font-bold">
+                      Section: {formatTime(sectionTimeRemaining)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 text-red-600">
+                    <FiClock />
+                    <span className="font-mono font-bold">{formatTime(timeRemaining)}</span>
+                  </div>
+                )}
                 {isPaused ? (
                   <Button variant="outline" disabled>
                     <FiPause className="mr-2" />
