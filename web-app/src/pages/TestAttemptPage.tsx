@@ -54,6 +54,7 @@ export default function TestAttemptPage() {
   const questionTimerIntervalRef = useRef<number | null>(null)
   const sectionTimerIntervalRef = useRef<number | null>(null) // Section timer interval
   const prevQuestionIndexRef = useRef<number>(-1)
+  const prevQuestionIdRef = useRef<string | null>(null) // Track previous question ID to detect question changes
   const autoPausedRef = useRef(false) // Track if auto-paused due to page visibility
   const lastSavedTimesRef = useRef<Record<string, number>>({}) // Track last saved time for each question
   const timerInitializedRef = useRef(false) // Track if timer has been initialized and started
@@ -67,6 +68,8 @@ export default function TestAttemptPage() {
   const sectionTimeRemainingRef = useRef(0) // Ref to track latest section time remaining
   const timeRemainingRef = useRef(0) // Ref to track latest time remaining
   const isPausedRef = useRef(false) // Ref to track latest paused state
+  const justResumedRef = useRef(false) // Track if we just resumed to prevent flicker
+  const skipTimerRecalculationRef = useRef(false) // Track if we should skip timer recalculation (after pause calculation)
 
   const { data: attemptData, isLoading: isLoadingAttempt } = useQuery({
     queryKey: ['attempt', attemptId],
@@ -125,10 +128,32 @@ export default function TestAttemptPage() {
       if (attemptData.status === 'IN_PROGRESS' && !attemptData.lastActiveAt && !isPaused) {
         // Test is paused - auto resume when coming from resume button (don't show dialog)
         // This handles the case when user clicks "Resume" from test details page
-        resumeMutation.mutate()
+        // Calculate time spent increment for current question before auto-resuming
+        const currentQ = questions[currentQuestionIndex]
+        const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+        resumeMutation.mutate({ 
+          questionId: currentQ?._id, 
+          timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+        })
+        // Update last saved time if we sent time
+        if (currentQ && timeSpentIncrement > 0) {
+          const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+          lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+        }
       } else if (attemptData.status === 'IN_PROGRESS' && attemptData.lastActiveAt && isPaused && autoPausedRef.current) {
         // Test was auto-paused but is now active - auto resume
-        resumeMutation.mutate()
+        // Calculate time spent increment for current question before auto-resuming
+        const currentQ = questions[currentQuestionIndex]
+        const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+        resumeMutation.mutate({ 
+          questionId: currentQ?._id, 
+          timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+        })
+        // Update last saved time if we sent time
+        if (currentQ && timeSpentIncrement > 0) {
+          const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+          lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+        }
       }
       
       // When resuming, ensure question is marked as ready after questionTimes are loaded
@@ -164,6 +189,16 @@ export default function TestAttemptPage() {
       setSectionTimerBaseTimestamp(null)
       sectionTimerInitializedRef.current = false
       setSectionTimerReady(false)
+      return
+    }
+
+    // Don't recalculate timer when paused - preserve current timer values
+    if (isPaused) {
+      return
+    }
+
+    // Don't recalculate if we just calculated on pause - timers are already correct
+    if (skipTimerRecalculationRef.current && sectionTimerBaseTime !== null) {
       return
     }
 
@@ -204,7 +239,7 @@ export default function TestAttemptPage() {
         })
         
         const totalSectionQuestionTime = currentSectionQuestions.reduce((sum: number, q: Question) => {
-          const time = questionTimes[q._id] || 0
+          const time = (questionTimes[q._id] as number) || 0
           return sum + time
         }, 0)
         
@@ -224,13 +259,21 @@ export default function TestAttemptPage() {
       sectionTimerInitializedRef.current = true
       setSectionTimerReady(true) // Update state to trigger question timer effect
     }
-  }, [attemptData, questionTimes, questions, sectionTimerBaseTime])
+  }, [attemptData, questionTimes, questions, sectionTimerBaseTime, isPaused])
 
   // Calculate initial timer from sum of all question times (only when section-wise timing is disabled)
   // Only recalculate on initial load/resume/refresh, not every time questionTimes changes
   useEffect(() => {
     const hasSectionWiseTiming = attemptData?.testSet?.hasSectionWiseTiming === true
     if (!hasSectionWiseTiming && attemptData?.testSet?.durationMinutes && questions.length > 0) {
+      // Don't recalculate timer when paused - preserve current timer values
+      if (isPaused) {
+        return
+      }
+      // Don't recalculate if we just calculated on pause - timers are already correct
+      if (skipTimerRecalculationRef.current && timerBaseTime !== null) {
+        return
+      }
       // Only calculate if timer hasn't been initialized yet (initial load/resume/refresh)
       if (timerBaseTime === null && Object.keys(questionTimes).length > 0) {
         const totalSeconds = attemptData.testSet.durationMinutes * 60
@@ -253,21 +296,37 @@ export default function TestAttemptPage() {
       setTimerBaseTimestamp(null)
       timerInitializedRef.current = false
     }
-  }, [attemptData, questionTimes, questions.length, timerBaseTime])
+  }, [attemptData, questionTimes, questions.length, timerBaseTime, isPaused])
 
   // Initialize current question time when question changes or when questionTimes are loaded (for resume)
   useEffect(() => {
     // Only initialize if we have questions, a valid index, and questionTimes has been loaded
     // This ensures it works on resume when questionTimes might load after questions
-    if (questions.length > 0 && currentQuestionIndex >= 0 && Object.keys(questionTimes).length > 0) {
+    // Don't reset currentQuestionTime if test is paused (to preserve the time when paused)
+    if (questions.length > 0 && currentQuestionIndex >= 0 && Object.keys(questionTimes).length > 0 && !isPaused) {
       const currentQ = questions[currentQuestionIndex]
       if (currentQ) {
         // Get time from state (already loaded from DB)
         const questionTime = questionTimes[currentQ._id] || 0
-        setCurrentQuestionTime(questionTime)
+        const questionId = currentQ._id
         
-        // Start tracking from now - set this immediately so question timer can start
-        // Only set if not already set (to avoid resetting on every render)
+        // Check if question actually changed
+        const questionChanged = prevQuestionIdRef.current !== questionId
+        
+        // Always update currentQuestionTime when question changes, regardless of time values
+        // This ensures the display shows the correct time for each question
+        if (questionChanged) {
+          // Question changed - always update to show the new question's time
+          setCurrentQuestionTime(questionTime)
+          prevQuestionIdRef.current = questionId
+          // Reset questionStartTime when question changes (so timer starts fresh for new question)
+          questionStartTimeRef.current = new Date()
+        } else if (currentQuestionTime === 0 || questionTime > currentQuestionTime) {
+          // Same question but time needs updating (initial load or backend update)
+          setCurrentQuestionTime(questionTime)
+        }
+        
+        // Set questionStartTime if not already set (for initial load)
         if (!questionStartTimeRef.current) {
           questionStartTimeRef.current = new Date()
         }
@@ -286,10 +345,11 @@ export default function TestAttemptPage() {
     } else if (questions.length === 0 || currentQuestionIndex < 0) {
       // Reset if no question
       questionStartTimeRef.current = null
+      prevQuestionIdRef.current = null
       setQuestionReady(false)
     }
     // Note: Don't set questionReady to false if questionTimes is empty yet - wait for it to load
-  }, [currentQuestionIndex, questions, questionTimes, attemptData]) // Add attemptData to ensure it runs on resume
+  }, [currentQuestionIndex, questions, questionTimes, attemptData, isPaused]) // Dependencies: question index, questions array, questionTimes, attemptData, and pause state
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -493,8 +553,25 @@ export default function TestAttemptPage() {
         clearInterval(questionTimerIntervalRef.current)
         questionTimerIntervalRef.current = null
       }
-      // Auto-submit section
-      submitSectionMutation.mutate(currentSectionId)
+      // Calculate time spent increment for current question before auto-submitting section
+      const currentQ = questions[currentQuestionIndex]
+      const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+      // Auto-submit section with time spent
+      submitSectionMutation.mutate({ 
+        sectionId: currentSectionId, 
+        questionId: currentQ?._id,
+        timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+      })
+      // Update last saved time if we sent time
+      if (currentQ && timeSpentIncrement > 0) {
+        const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+        lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+        // Also update questionTimes to reflect saved time
+        setQuestionTimes((prev) => ({
+          ...prev,
+          [currentQ._id]: lastSaved + timeSpentIncrement,
+        }))
+      }
       return
     }
 
@@ -516,7 +593,21 @@ export default function TestAttemptPage() {
         
         // Auto-submit section if not already submitting
         if (!showSubmitSectionConfirmation && sectionTimerInitializedRef.current && currentSectionId) {
-          submitSectionMutation.mutate(currentSectionId)
+          // Calculate time spent increment for current question before auto-submitting section
+          const currentQ = questions[currentQuestionIndex]
+          const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+          // Auto-submit section with time spent
+          submitSectionMutation.mutate({ 
+            sectionId: currentSectionId, 
+            questionId: currentQ?._id,
+            timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+          })
+          // Update last saved time if we sent time
+          if (currentQ && timeSpentIncrement > 0) {
+            const currentTime = questionTimes[currentQ._id] || 0
+            const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+            lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+          }
         }
       }
     }, 1000)
@@ -542,7 +633,19 @@ export default function TestAttemptPage() {
           if (prev <= 1) {
             // Auto submit
             setShowSubmitConfirmation(false)
-            submitMutation.mutate()
+            // Calculate time spent increment for current question before auto-submitting
+            const currentQ = questions[currentQuestionIndex]
+            const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+            submitMutation.mutate({ 
+              questionId: currentQ?._id, 
+              timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+            })
+            // Update last saved time if we sent time
+            if (currentQ && timeSpentIncrement > 0) {
+              const currentTime = questionTimes[currentQ._id] || 0
+              const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+              lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+            }
             return 0
           }
           return prev - 1
@@ -603,6 +706,22 @@ export default function TestAttemptPage() {
     prevQuestionIndexRef.current = currentQuestionIndex
   }, [currentQuestionIndex, questions, questionTimes, selectedOptions, markedForReview, visitedQuestions])
 
+  // Helper function to calculate time spent increment for a question
+  const getTimeSpentIncrement = (questionId: string): number => {
+    const currentTime = questionTimes[questionId] || 0
+    const lastSaved = lastSavedTimesRef.current[questionId] || 0
+    const increment = currentTime - lastSaved
+    // Return increment if positive, otherwise return 0 (or 1 if question was visited but has no time)
+    if (increment > 0) {
+      return increment
+    }
+    // If question was visited but has no time saved, return 1 to mark as visited
+    if (visitedQuestions.has(questionId) && lastSaved === 0 && currentTime === 0) {
+      return 1
+    }
+    return 0
+  }
+
   const updateAnswerMutation = useMutation({
     mutationFn: async ({ questionId, optionId, timeSpent, markedForReview }: { questionId: string; optionId: string; timeSpent: number; markedForReview?: boolean }) => {
       return api.put(`/attempts/${attemptId}/answer`, {
@@ -615,16 +734,27 @@ export default function TestAttemptPage() {
   })
 
   const toggleReviewMutation = useMutation({
-    mutationFn: async ({ questionId, marked }: { questionId: string; marked: boolean }) => {
-      return api.put(`/attempts/${attemptId}/review`, { questionId, markedForReview: marked })
+    mutationFn: async ({ questionId, marked, timeSpentSeconds }: { questionId: string; marked: boolean; timeSpentSeconds?: number }) => {
+      const body: any = { questionId, markedForReview: marked }
+      if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+        body.timeSpentIncrementSeconds = timeSpentSeconds
+      }
+      return api.put(`/attempts/${attemptId}/review`, body)
     },
     // Don't invalidate queries - we update state immediately, so no need to refetch
     // This ensures instant UI updates without waiting for backend
   })
 
   const submitMutation = useMutation({
-    mutationFn: async () => {
-      return api.post(`/attempts/${attemptId}/submit`)
+    mutationFn: async ({ questionId, timeSpentSeconds }: { questionId?: string; timeSpentSeconds?: number }) => {
+      const body: any = {}
+      if (questionId) {
+        body.questionId = questionId
+      }
+      if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+        body.timeSpentIncrementSeconds = timeSpentSeconds
+      }
+      return api.post(`/attempts/${attemptId}/submit`, body)
     },
     onSuccess: () => {
       navigate(`/test/${testSetId}/results/${attemptId}`)
@@ -632,11 +762,18 @@ export default function TestAttemptPage() {
   })
 
   const submitSectionMutation = useMutation({
-    mutationFn: async (sectionId: string) => {
+    mutationFn: async ({ sectionId, questionId, timeSpentSeconds }: { sectionId: string; questionId?: string; timeSpentSeconds?: number }) => {
       // If test is paused, resume it first before submitting section
       if (isPaused && attemptId) {
         try {
-          await api.post(`/attempts/${attemptId}/resume`)
+          const resumeBody: any = {}
+          if (questionId) {
+            resumeBody.questionId = questionId
+          }
+          if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+            resumeBody.timeSpentIncrementSeconds = timeSpentSeconds
+          }
+          await api.post(`/attempts/${attemptId}/resume`, resumeBody)
           setIsPaused(false)
           setShowPauseDialog(false)
         } catch (error) {
@@ -644,7 +781,14 @@ export default function TestAttemptPage() {
           // Continue anyway, backend will handle it
         }
       }
-      return api.post(`/attempts/${attemptId}/submit-section`, { sectionId })
+      const body: any = { sectionId }
+      if (questionId) {
+        body.questionId = questionId
+      }
+      if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+        body.timeSpentIncrementSeconds = timeSpentSeconds
+      }
+      return api.post(`/attempts/${attemptId}/submit-section`, body)
     },
     onSuccess: async (data) => {
       setShowSubmitSectionConfirmation(false)
@@ -683,9 +827,15 @@ export default function TestAttemptPage() {
   })
 
   const pauseMutation = useMutation({
-    mutationFn: async () => {
-      // Time is already in state, just pause
-      return api.post(`/attempts/${attemptId}/pause`)
+    mutationFn: async ({ questionId, timeSpentSeconds }: { questionId?: string; timeSpentSeconds?: number }) => {
+      const body: any = {}
+      if (questionId) {
+        body.questionId = questionId
+      }
+      if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+        body.timeSpentIncrementSeconds = timeSpentSeconds
+      }
+      return api.post(`/attempts/${attemptId}/pause`, body)
     },
     onSuccess: (data) => {
       setIsPaused(true)
@@ -700,10 +850,41 @@ export default function TestAttemptPage() {
   })
 
   const resumeMutation = useMutation({
-    mutationFn: async () => {
-      return api.post(`/attempts/${attemptId}/resume`)
+    mutationFn: async ({ questionId, timeSpentSeconds }: { questionId?: string; timeSpentSeconds?: number }) => {
+      const body: any = {}
+      if (questionId) {
+        body.questionId = questionId
+      }
+      if (timeSpentSeconds !== undefined && timeSpentSeconds > 0) {
+        body.timeSpentIncrementSeconds = timeSpentSeconds
+      }
+      return api.post(`/attempts/${attemptId}/resume`, body)
     },
     onSuccess: async (data) => {
+      // Preserve current timer display values before resuming to prevent flicker
+      const currentSectionTimeRemaining = sectionTimeRemaining
+      const currentTimeRemaining = timeRemaining
+      
+      // Keep skipTimerRecalculationRef flag true to prevent recalculation
+      // Timers are already correct from pause calculation, no need to recalculate
+      // This prevents flicker when isPaused changes to false
+      skipTimerRecalculationRef.current = true
+      
+      // Update timestamp FIRST before setting isPaused to false
+      // This ensures countdown calculates correctly when it resumes
+      const now = Date.now()
+      if (sectionTimerBaseTime !== null && currentSectionTimeRemaining > 0) {
+        // Update section timer timestamp to continue countdown smoothly
+        // Base time is already correct from pause calculation
+        setSectionTimerBaseTimestamp(now)
+      }
+      if (timerBaseTime !== null && currentTimeRemaining > 0) {
+        // Update whole test timer timestamp to continue countdown smoothly
+        // Base time is already correct from pause calculation
+        setTimerBaseTimestamp(now)
+      }
+      
+      // Now set isPaused to false - countdown will use the updated timestamp
       setIsPaused(false)
       setPauseStartTime(null)
       setShowPauseDialog(false)
@@ -712,10 +893,19 @@ export default function TestAttemptPage() {
       if (data.data?.totalPausedSeconds !== undefined) {
         setTotalPausedTime(data.data.totalPausedSeconds)
       }
-      // Refetch attempt data and section timer to get updated time
+      
+      // Reset the flag after a delay to allow normal recalculation on refresh
+      setTimeout(() => {
+        skipTimerRecalculationRef.current = false
+      }, 2000) // Reset after 2 seconds to allow normal behavior on refresh
+      
+      // Don't reset calculation flags or invalidate queries - timers are already correct
+      // Just continue countdown from preserved values
+      // NOTE: Avoid refetching attempt/section timer here to prevent flicker on resume.
+      // If needed elsewhere, re-enable with care.
       if (attemptId) {
-        await queryClient.invalidateQueries({ queryKey: ['attempt', attemptId] })
-        await queryClient.invalidateQueries({ queryKey: ['section-timer', attemptId] })
+        queryClient.invalidateQueries({ queryKey: ['attempt', attemptId] })
+        queryClient.invalidateQueries({ queryKey: ['section-timer', attemptId] })
       }
       // Ensure question timer starts after resume
       if (questions.length > 0 && currentQuestionIndex >= 0) {
@@ -750,8 +940,25 @@ export default function TestAttemptPage() {
     })
     // Get the actual markedForReview status for this question
     const isMarkedForReview = markedForReview.has(questionId)
-    // Save to backend (time is already being tracked by interval)
-    updateAnswerMutation.mutate({ questionId, optionId: '', timeSpent: 0, markedForReview: isMarkedForReview })
+    // Calculate time spent increment for this question
+    const timeSpentIncrement = getTimeSpentIncrement(questionId)
+    // Save to backend with time spent
+    updateAnswerMutation.mutate({ 
+      questionId, 
+      optionId: '', 
+      timeSpent: timeSpentIncrement, 
+      markedForReview: isMarkedForReview 
+    })
+    // Update last saved time if we sent time
+    if (timeSpentIncrement > 0) {
+      const lastSaved = lastSavedTimesRef.current[questionId] || 0
+      lastSavedTimesRef.current[questionId] = lastSaved + timeSpentIncrement
+      // Also update questionTimes to reflect saved time
+      setQuestionTimes((prev) => ({
+        ...prev,
+        [questionId]: lastSaved + timeSpentIncrement,
+      }))
+    }
   }
 
   const handleToggleReview = (questionId: string) => {
@@ -775,6 +982,9 @@ export default function TestAttemptPage() {
     // If sections exist but section-wise timing is disabled, find next in same section
     if (willMark) {
       const currentQ = questions[currentQuestionIndex]
+      const testSet = attemptData?.testSet
+      const hasSections = testSet?.sections && testSet.sections.length > 0
+      const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
       if (currentQ) {
         let nextIndex = currentQuestionIndex + 1
         if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
@@ -797,8 +1007,11 @@ export default function TestAttemptPage() {
       }
     }
     
+    // Calculate time spent increment for this question
+    const timeSpentIncrement = getTimeSpentIncrement(questionId)
+    
     // Save to backend in background AFTER UI update (fire-and-forget, non-blocking)
-    toggleReviewMutation.mutate({ questionId, marked: willMark }, {
+    toggleReviewMutation.mutate({ questionId, marked: willMark, timeSpentSeconds: timeSpentIncrement }, {
       onError: (error) => {
         // If backend fails, revert the state change
         console.error('Failed to update review status:', error)
@@ -813,6 +1026,17 @@ export default function TestAttemptPage() {
         })
       }
     })
+    
+    // Update last saved time if we sent time
+    if (timeSpentIncrement > 0) {
+      const lastSaved = lastSavedTimesRef.current[questionId] || 0
+      lastSavedTimesRef.current[questionId] = lastSaved + timeSpentIncrement
+      // Also update questionTimes to reflect saved time
+      setQuestionTimes((prev) => ({
+        ...prev,
+        [questionId]: lastSaved + timeSpentIncrement,
+      }))
+    }
   }
 
   const handleSaveAndNext = () => {
@@ -899,8 +1123,107 @@ export default function TestAttemptPage() {
   }
 
   const handleConfirmPause = () => {
-    // After confirmation, actually pause the test
-    pauseMutation.mutate()
+    // Calculate time spent increment for current question before pausing
+    const currentQ = questions[currentQuestionIndex]
+    if (!currentQ) return
+    
+    // Set isPaused to true IMMEDIATELY to prevent timer recalculation
+    // This ensures timers stay at current values when we update questionTimes
+    setIsPaused(true)
+    
+    // Use the current display time (this is what user sees and what we want to save)
+    // currentQuestionTime is the actual current time being displayed
+    const currentDisplayTime = currentQuestionTime
+    const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+    const timeSpentIncrement = currentDisplayTime - lastSaved
+    
+    // Only proceed if there's time to save
+    if (timeSpentIncrement > 0) {
+      // Update last saved time to current display time
+      lastSavedTimesRef.current[currentQ._id] = currentDisplayTime
+      
+      // Update questionTimes to current display time (this is what we're pausing at)
+      // This ensures the time is persisted correctly
+      // Since isPaused is now true, timer recalculation will be prevented
+      const updatedQuestionTimes: Record<string, number> = {
+        ...questionTimes,
+        [currentQ._id]: currentDisplayTime,
+      }
+      setQuestionTimes(updatedQuestionTimes)
+      
+      // Ensure currentQuestionTime is set to the same value
+      // This prevents the useEffect from resetting it when questionTimes updates
+      setCurrentQuestionTime(currentDisplayTime)
+      
+      // Calculate and update timer display immediately from question times
+      // This ensures the timer shows the correct remaining time when paused
+      const testSet = attemptData?.testSet
+      const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
+      const currentSectionId = attemptData?.currentSectionId
+      const now = Date.now()
+      
+      if (hasSectionWiseTiming && currentSectionId && testSet?.sections) {
+        // Section-wise timing: Calculate from current section's questions
+        const currentSection = testSet.sections.find(
+          (s: any) => s.sectionId === currentSectionId
+        )
+        
+        if (currentSection && currentSection.durationMinutes) {
+          const sectionDurationSeconds = currentSection.durationMinutes * 60
+          
+          // Sum time spent in current section's questions
+          const currentSectionQuestions = questions.filter((q: Question) => 
+            q.sectionId && q.sectionId === currentSectionId
+          )
+          
+          const totalSectionQuestionTime = currentSectionQuestions.reduce((sum: number, q: Question) => {
+            const time = (updatedQuestionTimes[q._id] as number) || 0
+            return sum + time
+          }, 0)
+          
+          // Remaining = section duration - sum of time spent
+          const remaining = Math.max(0, sectionDurationSeconds - totalSectionQuestionTime)
+          
+          // Update section timer display and base time immediately
+          setSectionTimeRemaining(remaining)
+          setSectionTimerBaseTime(remaining)
+          setSectionTimerBaseTimestamp(now)
+          // Mark that we've calculated from questions to prevent recalculation on resume
+          sectionTimerCalculatedFromQuestionsRef.current = true
+          // Set flag to skip recalculation on resume (timers are already correct)
+          skipTimerRecalculationRef.current = true
+        }
+      } else if (testSet?.durationMinutes) {
+        // Whole test timing: Calculate from all questions
+        const totalSeconds = testSet.durationMinutes * 60
+        
+        // Sum all question times
+        const totalQuestionTime = Object.values(updatedQuestionTimes).reduce((sum: number, time: unknown) => {
+          return sum + (typeof time === 'number' ? time : 0)
+        }, 0)
+        
+        // Remaining = total duration - sum of all question times
+        const remaining = Math.max(0, totalSeconds - totalQuestionTime)
+        
+        // Update whole test timer display and base time immediately
+        setTimeRemaining(remaining)
+        setTimerBaseTime(remaining)
+        setTimerBaseTimestamp(now)
+        // Set flag to skip recalculation on resume (timers are already correct)
+        skipTimerRecalculationRef.current = true
+      }
+    }
+    
+    // Pause the test with time spent (onSuccess will confirm isPaused is true)
+    pauseMutation.mutate({ 
+      questionId: currentQ._id, 
+      timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+    }, {
+      onError: () => {
+        // If pause fails, revert isPaused to false
+        setIsPaused(false)
+      }
+    })
   }
 
   const handleCancelPause = () => {
@@ -908,8 +1231,24 @@ export default function TestAttemptPage() {
   }
 
   const handleResume = () => {
-    // Call backend resume endpoint
-    resumeMutation.mutate()
+    // Calculate time spent increment for current question before resuming
+    const currentQ = questions[currentQuestionIndex]
+    const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+    // Call backend resume endpoint with time spent
+    resumeMutation.mutate({ 
+      questionId: currentQ?._id, 
+      timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+    })
+    // Update last saved time if we sent time
+    if (currentQ && timeSpentIncrement > 0) {
+      const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+      lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+      // Also update questionTimes to reflect saved time
+      setQuestionTimes((prev) => ({
+        ...prev,
+        [currentQ._id]: lastSaved + timeSpentIncrement,
+      }))
+    }
   }
 
   // Handle page visibility changes (user navigates away/returns)
@@ -923,10 +1262,42 @@ export default function TestAttemptPage() {
       if (!isVisible && !isPaused) {
         // User navigated away - auto pause
         autoPausedRef.current = true
-        pauseMutation.mutate()
+        // Calculate time spent increment for current question before auto-pausing
+        const currentQ = questions[currentQuestionIndex]
+        const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+        pauseMutation.mutate({ 
+          questionId: currentQ?._id, 
+          timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+        })
+        // Update last saved time if we sent time
+        if (currentQ && timeSpentIncrement > 0) {
+          const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+          lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+          // Also update questionTimes to reflect saved time
+          setQuestionTimes((prev) => ({
+            ...prev,
+            [currentQ._id]: lastSaved + timeSpentIncrement,
+          }))
+        }
       } else if (isVisible && isPaused && autoPausedRef.current) {
         // User returned - auto resume
-        resumeMutation.mutate()
+        // Calculate time spent increment for current question before auto-resuming
+        const currentQ = questions[currentQuestionIndex]
+        const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+        resumeMutation.mutate({ 
+          questionId: currentQ?._id, 
+          timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+        })
+        // Update last saved time if we sent time
+        if (currentQ && timeSpentIncrement > 0) {
+          const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+          lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+          // Also update questionTimes to reflect saved time
+          setQuestionTimes((prev) => ({
+            ...prev,
+            [currentQ._id]: lastSaved + timeSpentIncrement,
+          }))
+        }
       }
     }
 
@@ -948,13 +1319,66 @@ export default function TestAttemptPage() {
     }
   }, [attemptId, attemptData, isPaused])
 
+  // Handle keyboard key press to auto-pause test
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only trigger if test is loaded, not paused, and pause dialog is not already showing
+      if (!attemptId || !attemptData || isPaused || showPauseDialog) {
+        return
+      }
+
+      // Check if the target is an input field, textarea, or select (to avoid pausing when user is typing)
+      const target = event.target as HTMLElement
+      const isInputElement = 
+        target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+
+      // If user is typing in an input field, don't trigger pause
+      // But if they press a key anywhere else on the page, trigger pause directly
+      if (!isInputElement) {
+        // Prevent default behavior and stop propagation
+        event.preventDefault()
+        event.stopPropagation()
+        
+        // Directly pause the test (same as clicking pause button and confirming)
+        handleConfirmPause()
+      }
+    }
+
+    // Add event listener to document
+    document.addEventListener('keydown', handleKeyPress, true) // Use capture phase to catch all keys
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyPress, true)
+    }
+  }, [attemptId, attemptData, isPaused, showPauseDialog, handleConfirmPause])
+
   const handleSubmitTest = () => {
     setShowSubmitConfirmation(true)
   }
 
   const handleConfirmSubmit = () => {
     setShowSubmitConfirmation(false)
-    submitMutation.mutate()
+    // Calculate time spent increment for current question before submitting
+    const currentQ = questions[currentQuestionIndex]
+    const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+    // Submit with time spent
+    submitMutation.mutate({ 
+      questionId: currentQ?._id, 
+      timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+    })
+    // Update last saved time if we sent time
+    if (currentQ && timeSpentIncrement > 0) {
+      const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+      lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+      // Also update questionTimes to reflect saved time
+      setQuestionTimes((prev) => ({
+        ...prev,
+        [currentQ._id]: lastSaved + timeSpentIncrement,
+      }))
+    }
   }
 
   const handleCancelSubmit = () => {
@@ -969,7 +1393,25 @@ export default function TestAttemptPage() {
 
   const handleConfirmSubmitSection = () => {
     if (currentSectionId) {
-      submitSectionMutation.mutate(currentSectionId)
+      // Calculate time spent increment for current question before submitting section
+      const currentQ = questions[currentQuestionIndex]
+      const timeSpentIncrement = currentQ ? getTimeSpentIncrement(currentQ._id) : 0
+      // Submit section with time spent
+      submitSectionMutation.mutate({ 
+        sectionId: currentSectionId, 
+        questionId: currentQ?._id,
+        timeSpentSeconds: timeSpentIncrement > 0 ? timeSpentIncrement : undefined 
+      })
+      // Update last saved time if we sent time
+      if (currentQ && timeSpentIncrement > 0) {
+        const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+        lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+        // Also update questionTimes to reflect saved time
+        setQuestionTimes((prev) => ({
+          ...prev,
+          [currentQ._id]: lastSaved + timeSpentIncrement,
+        }))
+      }
     }
   }
 

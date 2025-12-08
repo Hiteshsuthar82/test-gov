@@ -174,7 +174,13 @@ export const attemptService = {
     return attempt.questions[questionIndex];
   },
 
-  async submitSection(attemptId: string, userId: string, sectionId: string) {
+  async submitSection(
+    attemptId: string,
+    userId: string,
+    sectionId: string,
+    questionId?: string,
+    timeSpentIncrementSeconds?: number
+  ) {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
@@ -188,6 +194,27 @@ export const attemptService = {
     const testSet = attempt.testSetId as any;
     if (!testSet.hasSectionWiseTiming) {
       throw new Error('Section-wise timing is not enabled for this test');
+    }
+
+    // Update time spent for current question if provided
+    if (questionId && timeSpentIncrementSeconds !== undefined && timeSpentIncrementSeconds > 0) {
+      const question = attempt.questions.find(
+        (q) => q.questionId.toString() === questionId
+      );
+      
+      if (question) {
+        // If section-wise timing is enabled, update section timing
+        if (attempt.sectionTimings && attempt.currentSectionId) {
+          const sectionTiming = attempt.sectionTimings.find(
+            (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+          );
+          if (sectionTiming) {
+            sectionTiming.timeSpentSeconds += timeSpentIncrementSeconds;
+          }
+        }
+        
+        question.timeSpentSeconds += timeSpentIncrementSeconds;
+      }
     }
 
     // Find and end the current section
@@ -297,7 +324,13 @@ export const attemptService = {
     };
   },
 
-  async submitAttempt(attemptId: string, userId: string, reason?: string) {
+  async submitAttempt(
+    attemptId: string,
+    userId: string,
+    reason?: string,
+    questionId?: string,
+    timeSpentIncrementSeconds?: number
+  ) {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
@@ -306,6 +339,29 @@ export const attemptService = {
 
     if (!attempt) {
       throw new Error('Attempt not found or not in progress');
+    }
+
+    // Update time spent for current question if provided
+    if (questionId && timeSpentIncrementSeconds !== undefined && timeSpentIncrementSeconds > 0) {
+      const question = attempt.questions.find(
+        (q) => q.questionId.toString() === questionId
+      );
+      
+      if (question) {
+        const testSet = attempt.testSetId as any;
+        
+        // If section-wise timing is enabled, update section timing
+        if (testSet.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+          const sectionTiming = attempt.sectionTimings.find(
+            (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+          );
+          if (sectionTiming) {
+            sectionTiming.timeSpentSeconds += timeSpentIncrementSeconds;
+          }
+        }
+        
+        question.timeSpentSeconds += timeSpentIncrementSeconds;
+      }
     }
 
     const testSet = attempt.testSetId as any;
@@ -561,11 +617,17 @@ export const attemptService = {
     };
   },
 
-  async updateReview(attemptId: string, userId: string, questionId: string, markedForReview: boolean) {
+  async updateReview(
+    attemptId: string,
+    userId: string,
+    questionId: string,
+    markedForReview: boolean,
+    timeSpentIncrementSeconds?: number
+  ) {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
-    });
+    }).populate('testSetId');
 
     if (!attempt) {
       throw new Error('Attempt not found');
@@ -577,6 +639,24 @@ export const attemptService = {
 
     if (question) {
       question.markedForReview = markedForReview;
+      
+      // Update time spent if provided
+      if (timeSpentIncrementSeconds !== undefined && timeSpentIncrementSeconds > 0) {
+        const testSet = attempt.testSetId as any;
+        
+        // If section-wise timing is enabled, update section timing
+        if (testSet.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+          const sectionTiming = attempt.sectionTimings.find(
+            (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+          );
+          if (sectionTiming) {
+            sectionTiming.timeSpentSeconds += timeSpentIncrementSeconds;
+          }
+        }
+        
+        question.timeSpentSeconds += timeSpentIncrementSeconds;
+      }
+      
       await attempt.save();
     }
 
@@ -595,18 +675,46 @@ export const attemptService = {
     return attempts;
   },
 
-  async pauseAttempt(attemptId: string, userId: string) {
+  async pauseAttempt(
+    attemptId: string,
+    userId: string,
+    questionId?: string,
+    timeSpentIncrementSeconds?: number
+  ) {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
       status: 'IN_PROGRESS',
-    });
+    }).populate('testSetId');
 
     if (!attempt) {
       throw new Error('Attempt not found or not in progress');
     }
 
     const now = new Date();
+    
+    // Update time spent for current question if provided
+    if (questionId && timeSpentIncrementSeconds !== undefined && timeSpentIncrementSeconds > 0) {
+      const question = attempt.questions.find(
+        (q) => q.questionId.toString() === questionId
+      );
+      
+      if (question) {
+        const testSet = attempt.testSetId as any;
+        
+        // If section-wise timing is enabled, update section timing
+        if (testSet.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+          const sectionTiming = attempt.sectionTimings.find(
+            (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+          );
+          if (sectionTiming) {
+            sectionTiming.timeSpentSeconds += timeSpentIncrementSeconds;
+          }
+        }
+        
+        question.timeSpentSeconds += timeSpentIncrementSeconds;
+      }
+    }
     
     // If lastActiveAt exists, calculate pause time and add to totalPausedSeconds
     if (attempt.lastActiveAt) {
@@ -620,7 +728,7 @@ export const attemptService = {
     attempt.lastActiveAt = undefined;
     
     // Update section timing if section-wise
-    const testSet = await TestSet.findById(attempt.testSetId);
+    const testSet = attempt.testSetId as any;
     if (testSet?.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
       const sectionTiming = attempt.sectionTimings.find(
         (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
@@ -641,18 +749,46 @@ export const attemptService = {
     };
   },
 
-  async resumeAttempt(attemptId: string, userId: string) {
+  async resumeAttempt(
+    attemptId: string,
+    userId: string,
+    questionId?: string,
+    timeSpentIncrementSeconds?: number
+  ) {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
       status: 'IN_PROGRESS',
-    });
+    }).populate('testSetId');
 
     if (!attempt) {
       throw new Error('Attempt not found or not in progress');
     }
 
     const now = new Date();
+    
+    // Update time spent for current question if provided
+    if (questionId && timeSpentIncrementSeconds !== undefined && timeSpentIncrementSeconds > 0) {
+      const question = attempt.questions.find(
+        (q) => q.questionId.toString() === questionId
+      );
+      
+      if (question) {
+        const testSet = attempt.testSetId as any;
+        
+        // If section-wise timing is enabled, update section timing
+        if (testSet.hasSectionWiseTiming && attempt.sectionTimings && attempt.currentSectionId) {
+          const sectionTiming = attempt.sectionTimings.find(
+            (st) => st.sectionId === attempt.currentSectionId && st.status === 'IN_PROGRESS'
+          );
+          if (sectionTiming) {
+            sectionTiming.timeSpentSeconds += timeSpentIncrementSeconds;
+          }
+        }
+        
+        question.timeSpentSeconds += timeSpentIncrementSeconds;
+      }
+    }
     
     // If lastActiveAt was null (test was paused), calculate pause duration since pause
     if (!attempt.lastActiveAt) {

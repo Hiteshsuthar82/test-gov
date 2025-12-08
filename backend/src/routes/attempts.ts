@@ -26,12 +26,15 @@ const updateReviewSchema = z.object({
   body: z.object({
     questionId: z.string().min(1),
     markedForReview: z.boolean(),
+    timeSpentIncrementSeconds: z.number().min(0).optional(),
   }),
 });
 
 const submitSectionSchema = z.object({
   body: z.object({
     sectionId: z.string().min(1),
+    questionId: z.string().optional(),
+    timeSpentIncrementSeconds: z.number().min(0).optional(),
   }),
 });
 
