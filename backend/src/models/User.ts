@@ -8,6 +8,7 @@ export interface IUser extends Document {
   deviceId?: string;
   fcmToken?: string;
   partnerId?: mongoose.Types.ObjectId;
+  profileImageUrl?: string;
   isBlocked: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +23,7 @@ const UserSchema = new Schema<IUser>(
     deviceId: { type: String },
     fcmToken: { type: String },
     partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
+    profileImageUrl: { type: String },
     isBlocked: { type: Boolean, default: false },
   },
   { timestamps: true }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController } from '../controllers/authController';
 import { studentAuthMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validator';
+import { upload } from '../middleware/upload';
 import { z } from 'zod';
 
 const router = Router();
@@ -59,7 +60,15 @@ router.post('/web/signup', validate(signupWebSchema), authController.signupWeb);
 router.post('/web/send-otp', validate(sendOTPSchema), authController.sendOTP);
 router.post('/web/verify-otp', validate(verifyOTPWebSchema), authController.verifyOTPWeb);
 
+const updateProfileSchema = z.object({
+  body: z.object({
+    name: z.string().min(1).optional(),
+    preparingForExam: z.string().optional(),
+  }),
+});
+
 router.get('/me', studentAuthMiddleware, authController.me);
+router.patch('/profile', studentAuthMiddleware, upload.single('profileImage'), validate(updateProfileSchema), authController.updateProfile);
 
 export default router;
 

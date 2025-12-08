@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { authService } from '../services/authService';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../middleware/auth';
+import { uploadToCloudinary } from '../utils/cloudinary';
 
 export const authController = {
   signup: async (req: Request, res: Response) => {
@@ -47,9 +48,53 @@ export const authController = {
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
         deviceId: user.deviceId,
+        profileImageUrl: user.profileImageUrl,
         partnerId: user.partnerId?._id,
         partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
       });
+    } catch (error: any) {
+      sendError(res, error.message, 500);
+    }
+  },
+
+  updateProfile: async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user;
+      const { name, preparingForExam } = req.body;
+      
+      // Update fields if provided
+      if (name !== undefined) {
+        user.name = name;
+      }
+      if (preparingForExam !== undefined) {
+        user.preparingForExam = preparingForExam;
+      }
+
+      // Handle profile image upload if file is provided
+      if (req.file) {
+        const uploadResult = await uploadToCloudinary(
+          req.file.buffer,
+          'profiles',
+          `profile-${user._id}`
+        );
+        user.profileImageUrl = uploadResult.secure_url;
+      }
+
+      await user.save();
+      await user.populate('partnerId', 'name discountPercentage');
+
+      sendSuccess(res, {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        preparingForExam: user.preparingForExam,
+        profileImageUrl: user.profileImageUrl,
+        partnerId: user.partnerId?._id,
+        partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
+      }, 'Profile updated successfully');
     } catch (error: any) {
       sendError(res, error.message, 500);
     }

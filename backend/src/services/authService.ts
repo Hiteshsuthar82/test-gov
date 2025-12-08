@@ -150,8 +150,10 @@ export const authService = {
         email: user.email,
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
+        profileImageUrl: user.profileImageUrl,
         partnerId: user.partnerId?._id,
         partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
       },
     };
   },
@@ -254,8 +256,10 @@ export const authService = {
         email: user.email,
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
+        profileImageUrl: user.profileImageUrl,
         partnerId: user.partnerId?._id,
         partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
       },
     };
   },
