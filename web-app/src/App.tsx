@@ -11,6 +11,7 @@ import ProfilePage from './pages/ProfilePage'
 import PaymentPage from './pages/PaymentPage'
 import MySubscriptionsPage from './pages/MySubscriptionsPage'
 import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
+import LeaderboardPage from './pages/LeaderboardPage'
 
 const queryClient = new QueryClient()
 
@@ -82,6 +83,10 @@ function App() {
                 <TestAttemptsHistoryPage />
               </ProtectedRoute>
             }
+          />
+          <Route
+            path="/leaderboard"
+            element={<LeaderboardPage />}
           />
         </Routes>
       </BrowserRouter>

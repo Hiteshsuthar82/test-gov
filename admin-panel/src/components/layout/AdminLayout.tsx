@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { Button } from '../ui/button'
-import { LogOut, LayoutDashboard, Image, Bell, BookOpen, Users, CreditCard, FileText, MessageSquare, Briefcase } from 'lucide-react'
+import { LogOut, LayoutDashboard, Image, Bell, BookOpen, Users, CreditCard, FileText, MessageSquare, Briefcase, Trophy } from 'lucide-react'
 
 const menuItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -12,6 +12,7 @@ const menuItems = [
   { path: '/partners', label: 'Partners', icon: Briefcase },
   { path: '/payments', label: 'Payments', icon: CreditCard },
   { path: '/subscriptions', label: 'Subscriptions', icon: FileText },
+  { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   { path: '/notifications', label: 'Notifications', icon: MessageSquare },
 ]
 

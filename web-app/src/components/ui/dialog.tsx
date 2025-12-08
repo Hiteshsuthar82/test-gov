@@ -44,7 +44,7 @@ export const DialogContent: React.FC<DialogContentProps> = ({
   return (
     <div
       className={cn(
-        "bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[90vh] mx-4",
+        "bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-auto mx-4",
         className
       )}
       {...props}
@@ -58,7 +58,7 @@ export const DialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
 }) => {
-  return <div className={cn("", className)} {...props} />
+  return <div className={cn("mb-4", className)} {...props} />
 }
 
 export const DialogTitle: React.FC<React.HTMLAttributes<HTMLHeadingElement>> = ({
@@ -79,6 +79,6 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
   className,
   ...props
 }) => {
-  return <div className={cn("flex justify-end gap-2", className)} {...props} />
+  return <div className={cn("flex justify-end gap-2 mt-4", className)} {...props} />
 }
 

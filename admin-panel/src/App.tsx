@@ -22,6 +22,7 @@ import SendNotificationPage from './pages/notifications/SendNotificationPage'
 import NotificationsHistoryPage from './pages/notifications/NotificationsHistoryPage'
 import PartnersListPage from './pages/partners/PartnersListPage'
 import PartnerFormPage from './pages/partners/PartnerFormPage'
+import LeaderboardListPage from './pages/leaderboard/LeaderboardListPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token)
@@ -65,6 +66,7 @@ function App() {
           <Route path="partners" element={<PartnersListPage />} />
           <Route path="partners/new" element={<PartnerFormPage />} />
           <Route path="partners/:id/edit" element={<PartnerFormPage />} />
+          <Route path="leaderboard" element={<LeaderboardListPage />} />
           <Route path="notifications/send" element={<SendNotificationPage />} />
           <Route path="notifications" element={<NotificationsHistoryPage />} />
         </Route>

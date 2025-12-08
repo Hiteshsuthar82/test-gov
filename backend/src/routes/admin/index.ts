@@ -11,6 +11,7 @@ import subscriptionRoutes from './subscriptions';
 import notificationRoutes from './notifications';
 import uploadRoutes from './upload';
 import partnerRoutes from '../partners';
+import leaderboardRoutes from './leaderboard';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.use('/subscriptions', subscriptionRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/partners', partnerRoutes);
+router.use('/leaderboard', leaderboardRoutes);
 
 export default router;
 

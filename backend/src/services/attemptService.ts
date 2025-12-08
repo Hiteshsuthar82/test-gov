@@ -319,9 +319,14 @@ export const attemptService = {
     let totalUnanswered = 0;
     let totalScore = 0;
 
+    let totalTimeSeconds = 0; // Sum of all question times
+    
     attempt.questions.forEach((qa) => {
       const question = questionMap.get(qa.questionId.toString());
       if (!question) return;
+
+      // Sum up time spent on each question
+      totalTimeSeconds += qa.timeSpentSeconds || 0;
 
       if (!qa.selectedOptionId) {
         totalUnanswered++;
@@ -338,7 +343,6 @@ export const attemptService = {
     });
 
     const endedAt = new Date();
-    const totalTimeSeconds = Math.floor((endedAt.getTime() - attempt.startedAt.getTime()) / 1000);
 
     attempt.status = reason === 'AUTO_SUBMIT' ? 'AUTO_SUBMITTED' : 'SUBMITTED';
     attempt.endedAt = endedAt;
@@ -392,13 +396,24 @@ export const attemptService = {
         });
       }
 
-      // Recalculate ranks
+      // Recalculate ranks - sort by bestScore (desc) and then by attempt time (asc)
       const allEntries = await Leaderboard.find({
         categoryId,
         testSetId,
       })
-        .sort({ bestScore: -1, totalTimeSeconds: 1 })
+        .populate('bestAttemptId', 'totalTimeSeconds')
+        .sort({ bestScore: -1 })
         .exec();
+
+      // Sort by score first, then by time (faster time = better rank for same score)
+      allEntries.sort((a: any, b: any) => {
+        if (b.bestScore !== a.bestScore) {
+          return b.bestScore - a.bestScore;
+        }
+        const timeA = a.bestAttemptId?.totalTimeSeconds || 0;
+        const timeB = b.bestAttemptId?.totalTimeSeconds || 0;
+        return timeA - timeB;
+      });
 
       let rank = 1;
       for (const entry of allEntries) {
