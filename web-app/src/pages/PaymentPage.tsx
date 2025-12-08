@@ -11,6 +11,8 @@ import Layout from '@/components/layout/Layout'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { FiCheckCircle, FiArrowLeft, FiCreditCard, FiClock } from 'react-icons/fi'
+import { useAuthStore } from '@/store/authStore'
+import { formatPriceWithDiscount, calculateDiscountedPrice } from '@/utils/pricing'
 
 interface PaymentFormData {
   payerName: string
@@ -22,6 +24,7 @@ interface PaymentFormData {
 export default function PaymentPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [countdown, setCountdown] = useState(10)
   
@@ -80,9 +83,14 @@ export default function PaymentPage() {
       return
     }
 
+    const { discountedPrice } = calculateDiscountedPrice(
+      category?.price || 0,
+      user?.partnerDiscountPercentage
+    )
+
     const formDataToSend = new FormData()
     formDataToSend.append('categoryId', categoryId || '')
-    formDataToSend.append('amount', (category?.price || 0).toString())
+    formDataToSend.append('amount', discountedPrice.toString())
     formDataToSend.append('payerName', data.payerName)
     formDataToSend.append('payerUpiId', data.payerUpiId)
     if (data.upiTransactionId) {
@@ -103,7 +111,11 @@ export default function PaymentPage() {
   })
 
   const upiId = paymentConfig?.upiId || 'your-upi@paytm'
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${upiId}&am=${category?.price || 0}&cu=INR&tn=TestPrep-${category?.name || 'Category'}`)}`
+  const { discountedPrice } = calculateDiscountedPrice(
+    category?.price || 0,
+    user?.partnerDiscountPercentage
+  )
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${upiId}&am=${discountedPrice}&cu=INR&tn=TestPrep-${category?.name || 'Category'}`)}`
 
   if (categoryLoading) {
     return (
@@ -200,7 +212,24 @@ export default function PaymentPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Amount:</span>
-                    <span className="text-2xl font-bold text-purple-600">₹{category?.price}</span>
+                    {(() => {
+                      const { discountedPrice, originalPrice, hasDiscount } = formatPriceWithDiscount(
+                        category?.price || 0,
+                        user?.partnerDiscountPercentage
+                      )
+                      return (
+                        <div className="text-right">
+                          {hasDiscount ? (
+                            <div>
+                              <div className="text-2xl font-bold text-purple-600">₹{discountedPrice}</div>
+                              <div className="text-sm text-gray-500 line-through">₹{originalPrice}</div>
+                            </div>
+                          ) : (
+                            <div className="text-2xl font-bold text-purple-600">₹{originalPrice}</div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
 
@@ -346,7 +375,15 @@ export default function PaymentPage() {
                       </div>
                       <div className="flex items-start">
                         <FiCheckCircle className="mr-2 mt-1 text-blue-600 flex-shrink-0" />
-                        <span>Enter the amount: <strong>₹{category?.price}</strong></span>
+                        <span>
+                          Enter the amount: <strong>₹{(() => {
+                            const { discountedPrice, originalPrice, hasDiscount } = formatPriceWithDiscount(
+                              category?.price || 0,
+                              user?.partnerDiscountPercentage
+                            )
+                            return hasDiscount ? `${discountedPrice} (Original: ₹${originalPrice})` : originalPrice
+                          })()}</strong>
+                        </span>
                       </div>
                       <div className="flex items-start">
                         <FiCheckCircle className="mr-2 mt-1 text-blue-600 flex-shrink-0" />

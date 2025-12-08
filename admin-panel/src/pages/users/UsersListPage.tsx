@@ -1,32 +1,62 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { Button } from '../../components/ui/button'
 import { SearchInput } from '../../components/ui/search-input'
 import { Pagination } from '../../components/ui/pagination'
 import { Loader } from '../../components/ui/loader'
+import { Select } from '../../components/ui/select'
 
 export default function UsersListPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(searchParams.get('partnerId') || '')
   const pageSize = 20
 
+  // Fetch partners for filter dropdown
+  const { data: partnersData } = useQuery({
+    queryKey: ['partners'],
+    queryFn: async () => {
+      const response = await api.get('/admin/partners')
+      return response.data.data?.partners || []
+    },
+  })
+
+  useEffect(() => {
+    const partnerId = searchParams.get('partnerId')
+    if (partnerId) {
+      setSelectedPartnerId(partnerId)
+    }
+  }, [searchParams])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['users', search, page, pageSize],
+    queryKey: ['users', search, page, pageSize, selectedPartnerId],
     queryFn: async () => {
       const response = await api.get('/admin/users', {
         params: { 
           search: search || undefined, 
           page, 
-          limit: pageSize 
+          limit: pageSize,
+          partnerId: selectedPartnerId || undefined,
         },
       })
       return response.data.data
     },
   })
+
+  const handlePartnerChange = (partnerId: string) => {
+    setSelectedPartnerId(partnerId)
+    setPage(1)
+    if (partnerId) {
+      setSearchParams({ partnerId })
+    } else {
+      setSearchParams({})
+    }
+  }
 
   const handleSearchChange = (value: string) => {
     setSearch(value)
@@ -43,13 +73,26 @@ export default function UsersListPage() {
           <h1 className="text-3xl font-bold text-gray-900">Users</h1>
         </div>
         
-        <div className="mb-4">
+        <div className="mb-4 flex gap-4">
           <SearchInput
             value={search}
             onChange={handleSearchChange}
             placeholder="Search users by name, email, or mobile..."
             className="max-w-md"
           />
+          <Select
+            value={selectedPartnerId}
+            onChange={handlePartnerChange}
+            placeholder="Filter by Partner"
+            className="max-w-xs"
+          >
+            <option value="">All Partners</option>
+            {partnersData?.map((partner: any) => (
+              <option key={partner._id} value={partner._id}>
+                {partner.name} ({partner.code})
+              </option>
+            ))}
+          </Select>
         </div>
       </div>
 

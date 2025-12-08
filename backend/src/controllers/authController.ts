@@ -39,6 +39,7 @@ export const authController = {
   me: async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user;
+      await user.populate('partnerId', 'name discountPercentage');
       sendSuccess(res, {
         id: user._id,
         name: user.name,
@@ -46,6 +47,8 @@ export const authController = {
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
         deviceId: user.deviceId,
+        partnerId: user.partnerId?._id,
+        partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
       });
     } catch (error: any) {
       sendError(res, error.message, 500);

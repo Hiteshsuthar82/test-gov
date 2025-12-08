@@ -22,6 +22,7 @@ import attemptRoutes from './routes/attempts';
 import leaderboardRoutes from './routes/leaderboard';
 import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
+import partnerRoutes from './routes/partners';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +52,7 @@ app.use('/sets', testSetRoutes);
 app.use('/attempts', attemptRoutes);
 app.use('/leaderboard', leaderboardRoutes);
 app.use('/notifications', notificationRoutes);
+app.use('/partners', partnerRoutes);
 
 // Admin routes
 app.use('/admin/auth', adminAuthRoutes);

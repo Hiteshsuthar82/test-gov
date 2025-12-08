@@ -10,6 +10,7 @@ import paymentRoutes from './payments';
 import subscriptionRoutes from './subscriptions';
 import notificationRoutes from './notifications';
 import uploadRoutes from './upload';
+import partnerRoutes from '../partners';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use('/payments', paymentRoutes);
 router.use('/subscriptions', subscriptionRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/partners', partnerRoutes);
 
 export default router;
 

@@ -13,6 +13,7 @@ const signupSchema = z.object({
     mobile: z.string().min(10),
     preparingForExam: z.string().optional(),
     deviceId: z.string().optional(),
+    invitationCode: z.string().optional(),
   }),
 });
 
@@ -37,6 +38,7 @@ const signupWebSchema = z.object({
     email: z.string().email(),
     mobile: z.string().min(10),
     preparingForExam: z.string().optional(),
+    invitationCode: z.string().optional(),
   }),
 });
 

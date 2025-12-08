@@ -7,6 +7,7 @@ export interface IUser extends Document {
   preparingForExam?: string;
   deviceId?: string;
   fcmToken?: string;
+  partnerId?: mongoose.Types.ObjectId;
   isBlocked: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +21,7 @@ const UserSchema = new Schema<IUser>(
     preparingForExam: { type: String },
     deviceId: { type: String },
     fcmToken: { type: String },
+    partnerId: { type: Schema.Types.ObjectId, ref: 'Partner' },
     isBlocked: { type: Boolean, default: false },
   },
   { timestamps: true }
@@ -27,6 +29,7 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ email: 1 });
 UserSchema.index({ deviceId: 1 });
+UserSchema.index({ partnerId: 1 });
 
 export const User = mongoose.model<IUser>('User', UserSchema);
 

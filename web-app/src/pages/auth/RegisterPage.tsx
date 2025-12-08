@@ -13,7 +13,9 @@ export default function RegisterPage() {
     email: '',
     mobile: '',
     preparingForExam: '',
+    invitationCode: '',
   })
+  const [showInviteCode, setShowInviteCode] = useState(false)
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -125,6 +127,41 @@ export default function RegisterPage() {
                   value={formData.preparingForExam}
                   onChange={(e) => setFormData({ ...formData, preparingForExam: e.target.value })}
                 />
+              </div>
+              <div>
+                {!showInviteCode ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowInviteCode(true)}
+                    className="text-sm text-purple-600 hover:text-purple-700 underline"
+                  >
+                    Have an invitation code?
+                  </button>
+                ) : (
+                  <div>
+                    <label htmlFor="invitationCode" className="block text-sm font-medium mb-2">
+                      Invitation Code (Optional)
+                    </label>
+                    <Input
+                      id="invitationCode"
+                      type="text"
+                      placeholder="Enter invitation code"
+                      value={formData.invitationCode}
+                      onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value.toUpperCase() })}
+                      className="uppercase"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInviteCode(false)
+                        setFormData({ ...formData, invitationCode: '' })
+                      }}
+                      className="text-xs text-gray-500 hover:text-gray-700 mt-1"
+                    >
+                      Remove code
+                    </button>
+                  </div>
+                )}
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Signing up...' : 'Sign Up'}

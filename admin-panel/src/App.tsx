@@ -20,6 +20,8 @@ import PaymentDetailPage from './pages/payments/PaymentDetailPage'
 import SubscriptionsListPage from './pages/subscriptions/SubscriptionsListPage'
 import SendNotificationPage from './pages/notifications/SendNotificationPage'
 import NotificationsHistoryPage from './pages/notifications/NotificationsHistoryPage'
+import PartnersListPage from './pages/partners/PartnersListPage'
+import PartnerFormPage from './pages/partners/PartnerFormPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token)
@@ -60,6 +62,9 @@ function App() {
           <Route path="payments" element={<PaymentsListPage />} />
           <Route path="payments/:id" element={<PaymentDetailPage />} />
           <Route path="subscriptions" element={<SubscriptionsListPage />} />
+          <Route path="partners" element={<PartnersListPage />} />
+          <Route path="partners/new" element={<PartnerFormPage />} />
+          <Route path="partners/:id/edit" element={<PartnerFormPage />} />
           <Route path="notifications/send" element={<SendNotificationPage />} />
           <Route path="notifications" element={<NotificationsHistoryPage />} />
         </Route>

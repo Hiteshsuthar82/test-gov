@@ -1,5 +1,6 @@
 import { Payment } from '../models/Payment';
 import { Subscription } from '../models/Subscription';
+import { User } from '../models/User';
 import { notificationService } from './notificationService';
 import { Types } from 'mongoose';
 
@@ -7,6 +8,7 @@ export const adminPaymentService = {
   async getAll(query: {
     status?: string;
     categoryId?: string;
+    partnerId?: string;
     page?: number;
     limit?: number;
   }) {
@@ -21,10 +23,29 @@ export const adminPaymentService = {
     if (query.categoryId) {
       filter.categoryId = new Types.ObjectId(query.categoryId);
     }
+    
+    // Filter by partnerId - need to find users with this partnerId first
+    if (query.partnerId) {
+      const usersWithPartner = await User.find({ partnerId: query.partnerId }).select('_id');
+      const userIds = usersWithPartner.map(u => u._id);
+      if (userIds.length > 0) {
+        filter.userId = { $in: userIds };
+      } else {
+        // No users with this partner, return empty result
+        filter.userId = { $in: [] };
+      }
+    }
 
     const [payments, total] = await Promise.all([
       Payment.find(filter)
-        .populate('userId', 'name email mobile')
+        .populate({
+          path: 'userId',
+          select: 'name email mobile',
+          populate: {
+            path: 'partnerId',
+            select: 'name businessName code discountPercentage'
+          }
+        })
         .populate('categoryId', 'name price')
         .sort({ createdAt: -1 })
         .skip(skip)
