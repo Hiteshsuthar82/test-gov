@@ -1,15 +1,14 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { FiTarget, FiArrowRight } from "react-icons/fi";
-import { useAuthStore } from "@/store/authStore";
-import { formatPriceWithDiscount } from "@/utils/pricing";
-
 interface Category {
   _id: string;
   name: string;
   description: string;
   price: number;
+  originalPrice?: number;
+  discountedPrice?: number;
+  hasDiscount?: boolean;
   bannerImageUrl?: string;
   isActive: boolean;
 }
@@ -23,7 +22,6 @@ export default function CategoriesSection({
   categories,
   isLoading,
 }: CategoriesSectionProps) {
-  const { user } = useAuthStore();
 
   return (
     <div className="mb-16 relative">
@@ -110,31 +108,20 @@ export default function CategoriesSection({
                     </div>
                   </Link>
                   <div>
-                    {(() => {
-                      const { discountedPrice, originalPrice, hasDiscount } =
-                        formatPriceWithDiscount(
-                          category.price,
-                          user?.partnerDiscountPercentage
-                        );
-                      return (
-                        <div>
-                          {hasDiscount ? (
-                            <div>
-                              <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
-                                ₹{discountedPrice}
-                              </div>
-                              <div className="text-sm text-gray-500 line-through">
-                                ₹{originalPrice}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
-                              ₹{originalPrice}
-                            </div>
-                          )}
+                    {category.hasDiscount ? (
+                      <div>
+                        <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
+                          ₹{category.discountedPrice}
                         </div>
-                      );
-                    })()}
+                        <div className="text-sm text-gray-500 line-through">
+                          ₹{category.originalPrice}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
+                        ₹{category.price}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

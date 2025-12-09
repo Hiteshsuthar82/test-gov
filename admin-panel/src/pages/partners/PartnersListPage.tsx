@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/button'
 import { SearchInput } from '../../components/ui/search-input'
 import { Loader } from '../../components/ui/loader'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog'
+import { Edit, Users, FileText, CreditCard, Trash2 } from 'lucide-react'
 
 interface Partner {
   _id: string
@@ -140,37 +141,42 @@ export default function PartnersListPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => navigate(`/partners/${partner._id}/edit`)}
+                        title="Edit Partner"
                       >
-                        Edit
+                        <Edit className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewUsers(partner._id)}
+                        title="View Users"
                       >
-                        View Users
+                        <Users className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewSubscriptions(partner._id)}
+                        title="View Subscriptions"
                       >
-                        View Subscriptions
+                        <FileText className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewPayments(partner._id)}
+                        title="View Payments"
                       >
-                        View Payments
+                        <CreditCard className="w-4 h-4" />
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleDelete(partner)}
-                        className="text-red-600 hover:text-red-700"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="Delete Partner"
                       >
-                        Delete
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>

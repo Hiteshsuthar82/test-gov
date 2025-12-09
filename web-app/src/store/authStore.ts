@@ -9,7 +9,6 @@ interface User {
   preparingForExam?: string
   profileImageUrl?: string
   partnerId?: string
-  partnerDiscountPercentage?: number
   createdAt?: string
 }
 

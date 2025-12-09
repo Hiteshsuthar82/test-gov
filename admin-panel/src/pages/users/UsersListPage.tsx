@@ -8,6 +8,7 @@ import { SearchInput } from '../../components/ui/search-input'
 import { Pagination } from '../../components/ui/pagination'
 import { Loader } from '../../components/ui/loader'
 import { Select } from '../../components/ui/select'
+import { Eye } from 'lucide-react'
 
 export default function UsersListPage() {
   const navigate = useNavigate()
@@ -137,7 +138,7 @@ export default function UsersListPage() {
                   </TableCell>
                   <TableCell>
                     <Button variant="outline" size="sm" onClick={() => navigate(`/users/${user._id}`)}>
-                      View
+                      <Eye className="w-4 h-4" />
                     </Button>
                   </TableCell>
                 </TableRow>

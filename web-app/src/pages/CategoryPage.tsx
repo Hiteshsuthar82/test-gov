@@ -6,8 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
 import { FiClock, FiFileText, FiCheckCircle, FiLock, FiX, FiPlay, FiEye } from 'react-icons/fi'
-import { useAuthStore } from '@/store/authStore'
-import { formatPriceWithDiscount } from '@/utils/pricing'
 
 interface TestSet {
   _id: string
@@ -23,7 +21,6 @@ interface TestSet {
 
 export default function CategoryPage() {
   const { categoryId } = useParams()
-  const { user } = useAuthStore()
 
   const { data: categoryData } = useQuery({
     queryKey: ['category', categoryId],
@@ -244,25 +241,17 @@ export default function CategoryPage() {
                   Get unlimited access to all test series in this category
                 </p>
                 <div className="flex items-center justify-center gap-4 mb-4">
-                  {(() => {
-                    const { discountedPrice, originalPrice, hasDiscount } = formatPriceWithDiscount(
-                      category?.price || 0,
-                      user?.partnerDiscountPercentage
-                    )
-                    return (
-                      <div className="text-center">
-                        {hasDiscount ? (
-                          <div>
-                            <div className="text-3xl font-bold text-purple-600">₹{discountedPrice}</div>
-                            <div className="text-lg text-gray-500 line-through">₹{originalPrice}</div>
-                          </div>
-                        ) : (
-                          <div className="text-3xl font-bold text-purple-600">₹{originalPrice}</div>
-                        )}
-                        <div className="text-sm text-gray-600 mt-1">One-time payment</div>
+                  <div className="text-center">
+                    {category?.hasDiscount ? (
+                      <div>
+                        <div className="text-3xl font-bold text-purple-600">₹{category.discountedPrice}</div>
+                        <div className="text-lg text-gray-500 line-through">₹{category.originalPrice}</div>
                       </div>
-                    )
-                  })()}
+                    ) : (
+                      <div className="text-3xl font-bold text-purple-600">₹{category?.price || 0}</div>
+                    )}
+                    <div className="text-sm text-gray-600 mt-1">One-time payment</div>
+                  </div>
                 </div>
                 <Link to={`/categories/${categoryId}/payment`}>
                   <Button size="lg" className="bg-purple-600 hover:bg-purple-700">
