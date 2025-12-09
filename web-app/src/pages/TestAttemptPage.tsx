@@ -998,23 +998,43 @@ export default function TestAttemptPage() {
   }
 
   const handleClearAnswer = (questionId: string) => {
+    // Store previous answer for potential rollback
+    const previousAnswer = savedAnswers[questionId]
+    
     // Update state immediately for instant UI feedback
     setSelectedOptions((prev) => {
       const newOptions = { ...prev }
       delete newOptions[questionId]
       return newOptions
     })
+    // Optimistically update savedAnswers immediately for instant palette update
+    setSavedAnswers((prev) => {
+      const newAnswers = { ...prev }
+      delete newAnswers[questionId]
+      return newAnswers
+    })
     // Get the actual markedForReview status for this question
     const isMarkedForReview = markedForReview.has(questionId)
     // Calculate time spent increment for this question
     const timeSpentIncrement = getTimeSpentIncrement(questionId)
     // Save to backend with time spent
-    // The onSuccess handler will update savedAnswers
     updateAnswerMutation.mutate({ 
       questionId, 
       optionId: '', 
       timeSpent: timeSpentIncrement, 
       markedForReview: isMarkedForReview 
+    }, {
+      onError: (error) => {
+        // If backend fails, revert the optimistic update
+        console.error('Failed to clear answer:', error)
+        // Restore the previous saved answer if it existed
+        if (previousAnswer) {
+          setSavedAnswers((prev) => ({
+            ...prev,
+            [questionId]: previousAnswer,
+          }))
+        }
+      }
     })
     // Update last saved time if we sent time
     if (timeSpentIncrement > 0) {
@@ -1151,11 +1171,50 @@ export default function TestAttemptPage() {
       
       // Always save answer to backend (even if no option selected, to save time spent)
       const selectedOptionId = selectedOptions[currentQ._id] || ''
+      
+      // Store previous answer for potential rollback (before optimistic update)
+      const previousAnswer = savedAnswers[currentQ._id]
+      
+      // Optimistically update savedAnswers immediately for instant palette update
+      setSavedAnswers((prev) => {
+        if (selectedOptionId) {
+          // Save the answer
+          return {
+            ...prev,
+            [currentQ._id]: selectedOptionId,
+          }
+        } else {
+          // Clear the answer
+          const newAnswers = { ...prev }
+          delete newAnswers[currentQ._id]
+          return newAnswers
+        }
+      })
+      
       updateAnswerMutation.mutate({
         questionId: currentQ._id,
         optionId: selectedOptionId,
         timeSpent: timeSpentIncrement,
         markedForReview: isMarkedForReview,
+      }, {
+        onError: (error) => {
+          // If backend fails, revert the optimistic update
+          console.error('Failed to save answer:', error)
+          setSavedAnswers((prev) => {
+            if (previousAnswer) {
+              // Restore previous answer
+              return {
+                ...prev,
+                [currentQ._id]: previousAnswer,
+              }
+            } else {
+              // Remove the answer we optimistically added
+              const newAnswers = { ...prev }
+              delete newAnswers[currentQ._id]
+              return newAnswers
+            }
+          })
+        }
       })
       
       // Update last saved time if we sent time
