@@ -19,6 +19,7 @@ export interface IQuestion extends Document {
   options: IOption[];
   correctOptionId: string;
   marks: number;
+  averageTimeSeconds?: number; // Average time in seconds expected to solve this question
   explanationText?: string;
   explanationFormattedText?: string;
   explanationImageUrl?: string; // Legacy field for backward compatibility
@@ -52,6 +53,7 @@ const QuestionSchema = new Schema<IQuestion>(
     options: { type: [OptionSchema], required: true, minlength: 2 },
     correctOptionId: { type: String, required: true },
     marks: { type: Number, default: 1 },
+    averageTimeSeconds: { type: Number }, // Average time in seconds expected to solve this question
     explanationText: { type: String },
     explanationFormattedText: { type: String },
     explanationImageUrl: { type: String }, // Legacy field for backward compatibility

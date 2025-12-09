@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
-import { FiClock, FiFileText, FiCheckCircle, FiLock, FiList, FiX } from 'react-icons/fi'
+import { FiClock, FiFileText, FiCheckCircle, FiLock, FiX, FiPlay, FiEye } from 'react-icons/fi'
 import { useAuthStore } from '@/store/authStore'
 import { formatPriceWithDiscount } from '@/utils/pricing'
 
@@ -75,6 +75,21 @@ export default function CategoryPage() {
   const [showResumeDialog, setShowResumeDialog] = useState(false)
   const [selectedTestSetId, setSelectedTestSetId] = useState<string | null>(null)
 
+  // Fetch all attempts for all test sets in this category
+  const { data: allAttempts } = useQuery({
+    queryKey: ['allAttempts', categoryId],
+    queryFn: async () => {
+      try {
+        const response = await api.get(`/attempts`)
+        return response.data.data || []
+      } catch {
+        return []
+      }
+    },
+    enabled: !!categoryId && isSubscriptionApproved,
+  })
+
+  // Fetch in-progress attempts for dialog
   const { data: inProgressAttempts } = useQuery({
     queryKey: ['inProgressAttempts', selectedTestSetId],
     queryFn: async () => {
@@ -83,6 +98,34 @@ export default function CategoryPage() {
     },
     enabled: showResumeDialog && !!selectedTestSetId,
   })
+
+  // Helper function to get attempt status for a test set
+  const getAttemptStatus = (testSetId: string) => {
+    if (!allAttempts || !Array.isArray(allAttempts)) return null
+    
+    const attempts = allAttempts.filter((attempt: any) => {
+      const attemptTestSetId = attempt.testSetId?._id || attempt.testSetId?._id?.toString() || attempt.testSetId?.toString() || attempt.testSetId
+      return attemptTestSetId === testSetId || attemptTestSetId?.toString() === testSetId
+    })
+    
+    if (attempts.length === 0) return null
+    
+    // Check for in-progress attempts first
+    const inProgress = attempts.find((a: any) => a.status === 'IN_PROGRESS')
+    if (inProgress) {
+      return { status: 'IN_PROGRESS', attemptId: inProgress._id }
+    }
+    
+    // Check for completed attempts
+    const completed = attempts.find((a: any) => 
+      a.status === 'SUBMITTED' || a.status === 'AUTO_SUBMITTED'
+    )
+    if (completed) {
+      return { status: 'COMPLETED', attemptId: completed._id }
+    }
+    
+    return null
+  }
 
   const startAttemptMutation = useMutation({
     mutationFn: async ({ testSetId, forceNew }: { testSetId: string; forceNew?: boolean }) => {
@@ -97,6 +140,14 @@ export default function CategoryPage() {
   const handleStartTest = async (testSetId: string) => {
     if (!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') {
       alert('Please subscribe to this category first')
+      return
+    }
+
+    // Check if test is already completed
+    const attemptStatus = getAttemptStatus(testSetId)
+    if (attemptStatus?.status === 'COMPLETED') {
+      // Navigate to results page instead
+      window.location.href = `/test/${testSetId}/results/${attemptStatus.attemptId}`
       return
     }
 
@@ -137,26 +188,49 @@ export default function CategoryPage() {
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {category && (
-          <div className="mb-8">
-            {category.bannerImageUrl && (
-              <img
-                src={category.bannerImageUrl}
-                alt={category.name}
-                className="w-full h-64 object-cover rounded-lg mb-6"
-              />
-            )}
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">{category.name}</h1>
-            <p className="text-lg text-gray-600">{category.description}</p>
-            {category.detailsFormatted || category.details ? (
-              <div className="mt-4 prose prose-sm max-w-none">
-                {category.detailsFormatted ? (
-                  <div dangerouslySetInnerHTML={{ __html: category.detailsFormatted }} />
-                ) : (
-                  <p className="text-gray-700 whitespace-pre-wrap">{category.details}</p>
-                )}
+          <Card className="mb-8 overflow-hidden shadow-lg">
+            <div className={`grid gap-0 ${category.bannerImageUrl ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+              {/* Image Section - Left Side on Desktop */}
+              {category.bannerImageUrl && (
+                <div className="lg:order-1 relative">
+                  <img
+                    src={category.bannerImageUrl}
+                    alt={category.name}
+                    className="w-full h-64 lg:h-full lg:min-h-[450px] object-cover"
+                  />
+                </div>
+              )}
+              
+              {/* Details Section - Right Side on Desktop */}
+              <div className={`lg:order-2 p-6 lg:p-10 ${category.bannerImageUrl ? 'bg-white' : 'bg-white'}`}>
+                <div className="h-full flex flex-col justify-center space-y-4">
+                  <div>
+                    <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">
+                      {category.name}
+                    </h1>
+                    {category.description && (
+                      <p className="text-lg text-gray-600 leading-relaxed">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {category.detailsFormatted || category.details ? (
+                    <div className="mt-2 prose prose-sm lg:prose-base max-w-none text-gray-700">
+                      {category.detailsFormatted ? (
+                        <div 
+                          className="prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900"
+                          dangerouslySetInnerHTML={{ __html: category.detailsFormatted }} 
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap leading-relaxed">{category.details}</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            ) : null}
-          </div>
+            </div>
+          </Card>
         )}
 
         {!subscriptionStatus || subscriptionStatus.status !== 'APPROVED' ? (
@@ -221,7 +295,6 @@ export default function CategoryPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {testSets.map((testSet: TestSet) => {
               const isLocked = !isSubscriptionApproved
-              const hasAttempts = (testSet.attemptCount || 0) > 0
               return (
                 <Card 
                   key={testSet._id} 
@@ -230,16 +303,6 @@ export default function CategoryPage() {
                   <div className="absolute top-4 right-4 z-10 flex gap-2">
                     {isLocked && (
                       <FiLock className="text-2xl text-gray-400" />
-                    )}
-                    {!isLocked && hasAttempts && (
-                      <Link to={`/test/${testSet._id}/attempts`}>
-                        <button
-                          className="p-2 rounded-full bg-purple-100 hover:bg-purple-200 transition-colors"
-                          title="View Past Attempts"
-                        >
-                          <FiList className="text-purple-600 text-lg" />
-                        </button>
-                      </Link>
                     )}
                   </div>
                   <CardHeader>
@@ -264,12 +327,6 @@ export default function CategoryPage() {
                         <FiCheckCircle className="mr-2" />
                         {testSet.totalMarks} marks
                       </div>
-                      {hasAttempts && (
-                        <div className="flex items-center text-sm text-purple-600">
-                          <FiList className="mr-2" />
-                          {testSet.attemptCount} past attempt{testSet.attemptCount !== 1 ? 's' : ''}
-                        </div>
-                      )}
                     </div>
                     {isLocked ? (
                       <Link to={`/categories/${categoryId}/payment`} className="block">
@@ -278,15 +335,41 @@ export default function CategoryPage() {
                           Unlock to Start
                         </Button>
                       </Link>
-                    ) : (
-                      <Button
-                        className="w-full"
-                        onClick={() => handleStartTest(testSet._id)}
-                        disabled={startAttemptMutation.isPending}
-                      >
-                        {startAttemptMutation.isPending ? 'Starting...' : 'Start Test'}
-                      </Button>
-                    )}
+                    ) : (() => {
+                      const attemptStatus = getAttemptStatus(testSet._id)
+                      
+                      if (attemptStatus?.status === 'IN_PROGRESS') {
+                        return (
+                          <Link to={`/test/${testSet._id}/attempt/${attemptStatus.attemptId}`} className="block">
+                            <Button className="w-full bg-green-600 hover:bg-green-700">
+                              <FiPlay className="mr-2" />
+                              Resume
+                            </Button>
+                          </Link>
+                        )
+                      }
+                      
+                      if (attemptStatus?.status === 'COMPLETED') {
+                        return (
+                          <Link to={`/test/${testSet._id}/results/${attemptStatus.attemptId}`} className="block">
+                            <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                              <FiEye className="mr-2" />
+                              Show Result
+                            </Button>
+                          </Link>
+                        )
+                      }
+                      
+                      return (
+                        <Button
+                          className="w-full"
+                          onClick={() => handleStartTest(testSet._id)}
+                          disabled={startAttemptMutation.isPending}
+                        >
+                          {startAttemptMutation.isPending ? 'Starting...' : 'Attempt'}
+                        </Button>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               )

@@ -19,6 +19,7 @@ interface Question {
   conclusionImageUrl?: string
   options: Array<{ optionId: string; text: string; imageUrl?: string }>
   marks: number
+  averageTimeSeconds?: number
   sectionId: string
 }
 
@@ -2102,6 +2103,23 @@ export default function TestAttemptPage() {
                 <p className="text-sm text-gray-600">
                   Question {currentQuestionIndex + 1} of {questions.length}
                 </p>
+                <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
+                  {attemptData?.testSet && currentQuestion && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600">Marking Scheme:</span>
+                      <span className="text-green-600 font-semibold">+{currentQuestion.marks || 1}</span>
+                      {attemptData.testSet.negativeMarking > 0 && (
+                        <span className="text-red-600 font-semibold">-{attemptData.testSet.negativeMarking}</span>
+                      )}
+                    </div>
+                  )}
+                  {currentQuestion?.averageTimeSeconds && (
+                    <div className="flex items-center gap-1 text-blue-600">
+                      <FiClock className="w-4 h-4" />
+                      <span>Average Time: {currentQuestion.averageTimeSeconds} seconds</span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex items-center space-x-4 flex-wrap">
                 <div className="flex items-center space-x-2 text-blue-600">

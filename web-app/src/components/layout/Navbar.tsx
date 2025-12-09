@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
-import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList } from 'react-icons/fi'
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
@@ -71,6 +71,12 @@ export default function Navbar() {
                     <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
                       <FiBook className="mr-2" />
                       My Subscriptions
+                    </Button>
+                  </Link>
+                  <Link to="/results">
+                    <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
+                      <FiList className="mr-2" />
+                      Results
                     </Button>
                   </Link>
                   <Link to="/profile">
@@ -220,6 +226,18 @@ export default function Navbar() {
                   >
                     <FiBook className="w-5 h-5" />
                     <span>My Subscriptions</span>
+                  </Link>
+                  <Link
+                    to="/results"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      location.pathname === '/results'
+                        ? 'bg-purple-50 text-purple-700 font-medium'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FiList className="w-5 h-5" />
+                    <span>Results</span>
                   </Link>
                   <Link
                     to="/profile"

@@ -44,6 +44,7 @@ interface QuestionFormData {
   options: OptionWithFile[]
   correctOptionId: string
   marks: number
+  averageTimeSeconds: number
   explanationText: string
   explanationFormattedText: string
   explanationImageUrls: string[]
@@ -80,6 +81,7 @@ export default function QuestionFormPage() {
       options: [],
       correctOptionId: '',
       marks: 1,
+      averageTimeSeconds: 0,
       explanationText: '',
       explanationFormattedText: '',
       explanationImageUrls: [],
@@ -149,6 +151,7 @@ export default function QuestionFormPage() {
         options: questionData.options || [],
         correctOptionId: questionData.correctOptionId || '',
         marks: questionData.marks || 1,
+        averageTimeSeconds: questionData.averageTimeSeconds !== undefined ? questionData.averageTimeSeconds : 0,
         explanationText: questionData.explanationText || '',
         // Use explanationFormattedText if it exists (even if empty), otherwise fall back to explanationText
         explanationFormattedText: questionData.explanationFormattedText !== undefined && questionData.explanationFormattedText !== null
@@ -239,6 +242,7 @@ export default function QuestionFormPage() {
     formDataToSend.append('conclusion', data.conclusion || '')
     formDataToSend.append('correctOptionId', data.correctOptionId)
     formDataToSend.append('marks', data.marks.toString())
+    formDataToSend.append('averageTimeSeconds', data.averageTimeSeconds.toString())
     formDataToSend.append('explanationText', data.explanationText || '')
     formDataToSend.append('explanationFormattedText', data.explanationFormattedText || '')
     formDataToSend.append('questionOrder', data.questionOrder.toString())
@@ -651,6 +655,21 @@ export default function QuestionFormPage() {
                 />
                 {errors.marks && (
                   <p className="text-sm text-red-500 mt-1">{errors.marks.message}</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="averageTimeSeconds">Average Time (seconds)</Label>
+                <Input
+                  id="averageTimeSeconds"
+                  type="number"
+                  {...register('averageTimeSeconds', { 
+                    min: { value: 0, message: 'Time must be at least 0' },
+                    valueAsNumber: true
+                  })}
+                  min="0"
+                />
+                {errors.averageTimeSeconds && (
+                  <p className="text-sm text-red-500 mt-1">{errors.averageTimeSeconds.message}</p>
                 )}
               </div>
             </div>

@@ -11,6 +11,7 @@ import ProfilePage from './pages/ProfilePage'
 import PaymentPage from './pages/PaymentPage'
 import MySubscriptionsPage from './pages/MySubscriptionsPage'
 import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
+import AllResultsPage from './pages/AllResultsPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 
 const queryClient = new QueryClient()
@@ -81,6 +82,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TestAttemptsHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/results"
+            element={
+              <ProtectedRoute>
+                <AllResultsPage />
               </ProtectedRoute>
             }
           />

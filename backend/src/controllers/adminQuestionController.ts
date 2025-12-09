@@ -577,6 +577,7 @@ export const adminQuestionController = {
         conclusion: req.body.conclusion,
         correctOptionId: req.body.correctOptionId,
         marks: parseInt(req.body.marks) || 1,
+        averageTimeSeconds: req.body.averageTimeSeconds !== undefined ? parseInt(req.body.averageTimeSeconds) : undefined,
         explanationText: req.body.explanationText,
         explanationFormattedText: req.body.explanationFormattedText,
         questionOrder: parseInt(req.body.questionOrder) || 1,
