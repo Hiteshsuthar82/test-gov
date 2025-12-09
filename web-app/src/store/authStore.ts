@@ -7,6 +7,10 @@ interface User {
   email: string
   mobile: string
   preparingForExam?: string
+  profileImageUrl?: string
+  partnerId?: string
+  partnerDiscountPercentage?: number
+  createdAt?: string
 }
 
 interface AuthState {

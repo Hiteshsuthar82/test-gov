@@ -3,6 +3,7 @@ import { OTPRequest } from '../models/OTPRequest';
 import { generateOTP, hashOTP, compareOTP } from '../utils/otp';
 import { sendOTPEmail } from '../utils/email';
 import { generateToken } from '../utils/jwt';
+import { partnerService } from './partnerService';
 
 const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || '10', 10);
 
@@ -13,7 +14,19 @@ export const authService = {
     mobile: string;
     preparingForExam?: string;
     deviceId?: string;
+    invitationCode?: string;
   }) {
+    let partnerId = undefined;
+    
+    // Validate invitation code if provided
+    if (data.invitationCode) {
+      const partner = await partnerService.validateCode(data.invitationCode);
+      if (!partner) {
+        throw new Error('Invalid or inactive invitation code');
+      }
+      partnerId = partner._id;
+    }
+
     const existingUser = await User.findOne({ email: data.email.toLowerCase() });
     if (existingUser) {
       if (existingUser.isBlocked) {
@@ -28,6 +41,7 @@ export const authService = {
         mobile: data.mobile,
         preparingForExam: data.preparingForExam,
         deviceId: data.deviceId,
+        partnerId: partnerId,
       });
     }
 
@@ -125,6 +139,9 @@ export const authService = {
     // Generate token
     const token = generateToken({ userId: user._id.toString(), role: 'STUDENT' });
 
+    // Populate partner info if exists
+    await user.populate('partnerId', 'name discountPercentage');
+    
     return {
       token,
       user: {
@@ -133,6 +150,10 @@ export const authService = {
         email: user.email,
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
+        profileImageUrl: user.profileImageUrl,
+        partnerId: user.partnerId?._id,
+        partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
       },
     };
   },
@@ -143,7 +164,19 @@ export const authService = {
     email: string;
     mobile: string;
     preparingForExam?: string;
+    invitationCode?: string;
   }) {
+    let partnerId = undefined;
+    
+    // Validate invitation code if provided
+    if (data.invitationCode) {
+      const partner = await partnerService.validateCode(data.invitationCode);
+      if (!partner) {
+        throw new Error('Invalid or inactive invitation code');
+      }
+      partnerId = partner._id;
+    }
+
     const existingUser = await User.findOne({ email: data.email.toLowerCase() });
     if (existingUser) {
       if (existingUser.isBlocked) {
@@ -157,6 +190,7 @@ export const authService = {
         email: data.email.toLowerCase(),
         mobile: data.mobile,
         preparingForExam: data.preparingForExam,
+        partnerId: partnerId,
       });
     }
 
@@ -211,6 +245,9 @@ export const authService = {
     // Generate token
     const token = generateToken({ userId: user._id.toString(), role: 'STUDENT' });
 
+    // Populate partner info if exists
+    await user.populate('partnerId', 'name discountPercentage');
+
     return {
       token,
       user: {
@@ -219,6 +256,10 @@ export const authService = {
         email: user.email,
         mobile: user.mobile,
         preparingForExam: user.preparingForExam,
+        profileImageUrl: user.profileImageUrl,
+        partnerId: user.partnerId?._id,
+        partnerDiscountPercentage: (user.partnerId as any)?.discountPercentage,
+        createdAt: user.createdAt,
       },
     };
   },

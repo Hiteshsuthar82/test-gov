@@ -15,6 +15,7 @@ interface TestAttempt {
   status: 'SUBMITTED' | 'AUTO_SUBMITTED' | 'IN_PROGRESS'
   startedAt: string
   endedAt?: string
+  totalTimeSeconds?: number // Sum of time spent on all questions
   createdAt: string
 }
 
@@ -56,10 +57,27 @@ export default function TestAttemptsHistoryPage() {
     })
   }
 
-  const getDuration = (startedAt: string, endedAt?: string) => {
-    if (!endedAt) return 'N/A'
-    const start = new Date(startedAt).getTime()
-    const end = new Date(endedAt).getTime()
+  const getDuration = (attempt: TestAttempt) => {
+    // Use totalTimeSeconds (sum of question times) if available, otherwise calculate from dates
+    if (attempt.totalTimeSeconds !== undefined && attempt.totalTimeSeconds > 0) {
+      const totalSeconds = attempt.totalTimeSeconds
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`
+      } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`
+      } else {
+        return `${seconds}s`
+      }
+    }
+    
+    // Fallback to date calculation if totalTimeSeconds is not available
+    if (!attempt.endedAt) return 'N/A'
+    const start = new Date(attempt.startedAt).getTime()
+    const end = new Date(attempt.endedAt).getTime()
     const minutes = Math.floor((end - start) / 60000)
     return `${minutes} minutes`
   }
@@ -222,7 +240,7 @@ export default function TestAttemptsHistoryPage() {
                         {attempt.endedAt && (
                           <div className="flex items-center">
                             <FiClock className="mr-2" />
-                            <span>Duration: {getDuration(attempt.startedAt, attempt.endedAt)}</span>
+                            <span>Duration: {getDuration(attempt)}</span>
                           </div>
                         )}
                       </div>

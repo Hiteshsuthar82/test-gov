@@ -1,10 +1,13 @@
 import { Subscription } from '../models/Subscription';
+import { User } from '../models/User';
+import { Types } from 'mongoose';
 
 export const adminSubscriptionService = {
   async getAll(query: {
     status?: string;
     categoryId?: string;
     userId?: string;
+    partnerId?: string;
     page?: number;
     limit?: number;
   }) {
@@ -22,10 +25,29 @@ export const adminSubscriptionService = {
     if (query.userId) {
       filter.userId = query.userId;
     }
+    
+    // Filter by partnerId - need to find users with this partnerId first
+    if (query.partnerId) {
+      const usersWithPartner = await User.find({ partnerId: query.partnerId }).select('_id');
+      const userIds = usersWithPartner.map(u => u._id);
+      if (userIds.length > 0) {
+        filter.userId = { $in: userIds };
+      } else {
+        // No users with this partner, return empty result
+        filter.userId = { $in: [] };
+      }
+    }
 
     const [subscriptions, total] = await Promise.all([
       Subscription.find(filter)
-        .populate('userId', 'name email')
+        .populate({
+          path: 'userId',
+          select: 'name email',
+          populate: {
+            path: 'partnerId',
+            select: 'name businessName code discountPercentage'
+          }
+        })
         .populate('categoryId', 'name price')
         .populate('paymentReferenceId', 'amount status')
         .sort({ createdAt: -1 })

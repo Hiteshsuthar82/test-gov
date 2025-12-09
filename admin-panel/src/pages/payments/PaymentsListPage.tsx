@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { Select } from '../../components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
@@ -11,25 +11,54 @@ import { Loader } from '../../components/ui/loader'
 
 export default function PaymentsListPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>(searchParams.get('partnerId') || '')
   const pageSize = 20
 
+  // Fetch partners for filter dropdown
+  const { data: partnersData } = useQuery({
+    queryKey: ['partners'],
+    queryFn: async () => {
+      const response = await api.get('/admin/partners')
+      return response.data.data?.partners || []
+    },
+  })
+
+  useEffect(() => {
+    const partnerId = searchParams.get('partnerId')
+    if (partnerId) {
+      setSelectedPartnerId(partnerId)
+    }
+  }, [searchParams])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['payments', status, search, page, pageSize],
+    queryKey: ['payments', status, search, page, pageSize, selectedPartnerId],
     queryFn: async () => {
       const response = await api.get('/admin/payments', {
         params: { 
           status: status || undefined, 
           search: search || undefined,
           page, 
-          limit: pageSize 
+          limit: pageSize,
+          partnerId: selectedPartnerId || undefined,
         },
       })
       return response.data.data
     },
   })
+
+  const handlePartnerChange = (partnerId: string) => {
+    setSelectedPartnerId(partnerId)
+    setPage(1)
+    if (partnerId) {
+      setSearchParams({ partnerId })
+    } else {
+      setSearchParams({})
+    }
+  }
 
   const handleSearchChange = (value: string) => {
     setSearch(value)
@@ -61,13 +90,26 @@ export default function PaymentsListPage() {
           </Select>
         </div>
         
-        <div className="mb-4">
+        <div className="mb-4 flex gap-4">
           <SearchInput
             value={search}
             onChange={handleSearchChange}
             placeholder="Search payments by user name or category..."
             className="max-w-md"
           />
+          <Select
+            value={selectedPartnerId}
+            onChange={(e) => handlePartnerChange(e.target.value)}
+            placeholder="Filter by Partner"
+            className="max-w-xs"
+          >
+            <option value="">All Partners</option>
+            {partnersData?.map((partner: any) => (
+              <option key={partner._id} value={partner._id}>
+                {partner.name} ({partner.code})
+              </option>
+            ))}
+          </Select>
         </div>
       </div>
 

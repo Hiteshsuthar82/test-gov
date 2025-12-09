@@ -3,7 +3,7 @@ import { Subscription } from '../models/Subscription';
 import { TestAttempt } from '../models/TestAttempt';
 
 export const adminUserService = {
-  async getAll(query: { page?: number; limit?: number; search?: string }) {
+  async getAll(query: { page?: number; limit?: number; search?: string; partnerId?: string }) {
     const page = parseInt(query.page?.toString() || '1', 10);
     const limit = parseInt(query.limit?.toString() || '20', 10);
     const skip = (page - 1) * limit;
@@ -16,14 +16,23 @@ export const adminUserService = {
         { mobile: { $regex: query.search, $options: 'i' } },
       ];
     }
+    if (query.partnerId) {
+      filter.partnerId = query.partnerId;
+    }
 
     const [users, total] = await Promise.all([
-      User.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).select('-__v'),
+      User.find(filter)
+        .populate('partnerId', 'name businessName code discountPercentage')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-__v'),
       User.countDocuments(filter),
     ]);
 
     return {
       users,
+      total,
       pagination: {
         page,
         limit,
