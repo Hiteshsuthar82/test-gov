@@ -28,6 +28,7 @@ export default function TestAttemptPage() {
   const queryClient = useQueryClient()
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
+  const [savedAnswers, setSavedAnswers] = useState<Record<string, string>>({}) // Track answers saved to backend
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set())
   const [visitedQuestions, setVisitedQuestions] = useState<Set<string>>(new Set())
   const [timeRemaining, setTimeRemaining] = useState(0)
@@ -671,6 +672,26 @@ export default function TestAttemptPage() {
         // Calculate increment
         const increment = currentTime - lastSaved
         
+        // Clear unsaved selection from local state when navigating away
+        // Restore saved answer if it exists, otherwise clear the selection
+        const currentSelection = selectedOptions[prevQ._id]
+        const savedAnswer = savedAnswers[prevQ._id]
+        const hasUnsavedSelection = currentSelection && currentSelection !== savedAnswer
+        
+        if (hasUnsavedSelection) {
+          setSelectedOptions((prev) => {
+            const newOptions = { ...prev }
+            if (savedAnswer) {
+              // Restore the saved answer
+              newOptions[prevQ._id] = savedAnswer
+            } else {
+              // No saved answer, clear the unsaved selection
+              delete newOptions[prevQ._id]
+            }
+            return newOptions
+          })
+        }
+        
         // Save if there's an increment OR if question was visited but has no time saved yet
         const shouldSave = increment > 0 || (visitedQuestions.has(prevQ._id) && lastSaved === 0 && currentTime === 0)
         
@@ -682,10 +703,14 @@ export default function TestAttemptPage() {
           const timeToSave = increment > 0 ? increment : (visitedQuestions.has(prevQ._id) ? 1 : 0)
           
           if (timeToSave > 0) {
+            // Only save the optionId if it's already been saved before (in savedAnswers)
+            // Don't save unsaved selections when just navigating
+            const optionIdToSave = savedAnswers[prevQ._id] || ''
+            
             // Save to backend with correct markedForReview value
             updateAnswerMutation.mutate({
               questionId: prevQ._id,
-              optionId: selectedOptions[prevQ._id] || '',
+              optionId: optionIdToSave,
               timeSpent: timeToSave,
               markedForReview: isMarkedForReview,
             })
@@ -704,7 +729,34 @@ export default function TestAttemptPage() {
     
     // Update previous question index
     prevQuestionIndexRef.current = currentQuestionIndex
-  }, [currentQuestionIndex, questions, questionTimes, selectedOptions, markedForReview, visitedQuestions])
+  }, [currentQuestionIndex, questions, questionTimes, selectedOptions, savedAnswers, markedForReview, visitedQuestions])
+
+  // Restore saved answer when viewing a question (if it exists and differs from current selection)
+  // Only restore when question changes, not when selectedOptions changes
+  useEffect(() => {
+    if (currentQuestionIndex >= 0 && questions[currentQuestionIndex]) {
+      const currentQ = questions[currentQuestionIndex]
+      const savedAnswer = savedAnswers[currentQ._id]
+      
+      // Use functional update to read the latest selectedOptions state
+      if (savedAnswer) {
+        setSelectedOptions((prev) => {
+          const currentSelection = prev[currentQ._id]
+          // If current selection differs from saved answer, restore the saved answer
+          if (currentSelection !== savedAnswer) {
+            return {
+              ...prev,
+              [currentQ._id]: savedAnswer,
+            }
+          }
+          return prev // No change needed
+        })
+      }
+    }
+    // Only depend on currentQuestionIndex and savedAnswers, not selectedOptions
+    // This ensures we only restore when navigating to a question, not when user makes a selection
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, questions, savedAnswers])
 
   // Helper function to calculate time spent increment for a question
   const getTimeSpentIncrement = (questionId: string): number => {
@@ -729,6 +781,23 @@ export default function TestAttemptPage() {
         selectedOptionId: optionId,
         markedForReview: markedForReview ?? false,
         timeSpentIncrementSeconds: timeSpent,
+      })
+    },
+    onSuccess: (data, variables) => {
+      // Update saved answers when mutation succeeds
+      setSavedAnswers((prev) => {
+        if (variables.optionId) {
+          // Save the answer
+          return {
+            ...prev,
+            [variables.questionId]: variables.optionId,
+          }
+        } else {
+          // Clear the answer
+          const newAnswers = { ...prev }
+          delete newAnswers[variables.questionId]
+          return newAnswers
+        }
       })
     },
   })
@@ -923,12 +992,9 @@ export default function TestAttemptPage() {
   const handleSelectOption = (questionId: string, optionId: string) => {
     // Mark that we've made local updates
     hasLocalUpdatesRef.current = true
-    // Update state immediately for instant UI feedback
+    // Update state immediately for instant UI feedback (local only, no API call)
     setSelectedOptions((prev) => ({ ...prev, [questionId]: optionId }))
-    // Get the actual markedForReview status for this question
-    const isMarkedForReview = markedForReview.has(questionId)
-    // Save answer to backend (time is already being tracked by interval)
-    updateAnswerMutation.mutate({ questionId, optionId, timeSpent: 0, markedForReview: isMarkedForReview })
+    // API call will be made on Save & Next or Mark for Review
   }
 
   const handleClearAnswer = (questionId: string) => {
@@ -943,6 +1009,7 @@ export default function TestAttemptPage() {
     // Calculate time spent increment for this question
     const timeSpentIncrement = getTimeSpentIncrement(questionId)
     // Save to backend with time spent
+    // The onSuccess handler will update savedAnswers
     updateAnswerMutation.mutate({ 
       questionId, 
       optionId: '', 
@@ -979,13 +1046,28 @@ export default function TestAttemptPage() {
     setMarkedForReview(newMarked)
     
     // If marking for review, automatically move to next question immediately
+    // BUT: If section-wise timing is enabled AND it's the last question of current section, don't navigate - just save
     // If sections exist but section-wise timing is disabled, find next in same section
     if (willMark) {
       const currentQ = questions[currentQuestionIndex]
       const testSet = attemptData?.testSet
       const hasSections = testSet?.sections && testSet.sections.length > 0
       const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
-      if (currentQ) {
+      const currentSectionId = attemptData?.currentSectionId
+      
+      // Check if it's the last question of the current section when section-wise timing is enabled
+      let isLastQuestionOfSection = false
+      if (hasSectionWiseTiming && currentQ?.sectionId && currentSectionId && currentQ.sectionId === currentSectionId) {
+        const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentSectionId)
+        const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
+        isLastQuestionOfSection = currentSectionIndex === currentSectionQuestions.length - 1
+      }
+      
+      // If section-wise timing is enabled AND it's the last question of the section, don't navigate - just save
+      if (hasSectionWiseTiming && isLastQuestionOfSection) {
+        // Don't navigate, just save the preference (mutation will be called below)
+        // Exit early from navigation logic
+      } else if (currentQ) {
         let nextIndex = currentQuestionIndex + 1
         if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
           // Find next question in the same section
@@ -997,7 +1079,7 @@ export default function TestAttemptPage() {
             nextIndex = questions.findIndex((q: Question) => q._id === nextQuestionInSection._id)
           } else {
             // No more questions in this section, don't move
-            return
+            // Don't return here - we still need to save the preference
           }
         }
         
@@ -1010,11 +1092,19 @@ export default function TestAttemptPage() {
     // Calculate time spent increment for this question
     const timeSpentIncrement = getTimeSpentIncrement(questionId)
     
-    // Save to backend in background AFTER UI update (fire-and-forget, non-blocking)
-    toggleReviewMutation.mutate({ questionId, marked: willMark, timeSpentSeconds: timeSpentIncrement }, {
+    // Get the selected option for this question (if any)
+    const selectedOptionId = selectedOptions[questionId] || ''
+    
+    // Save answer to backend (with option and review status) in background AFTER UI update
+    updateAnswerMutation.mutate({
+      questionId,
+      optionId: selectedOptionId,
+      timeSpent: timeSpentIncrement,
+      markedForReview: willMark,
+    }, {
       onError: (error) => {
         // If backend fails, revert the state change
-        console.error('Failed to update review status:', error)
+        console.error('Failed to update answer/review status:', error)
         setMarkedForReview((prev) => {
           const reverted = new Set(prev)
           if (willMark) {
@@ -1037,6 +1127,17 @@ export default function TestAttemptPage() {
         [questionId]: lastSaved + timeSpentIncrement,
       }))
     }
+    
+    // Update last saved time if we sent time
+    if (timeSpentIncrement > 0) {
+      const lastSaved = lastSavedTimesRef.current[questionId] || 0
+      lastSavedTimesRef.current[questionId] = lastSaved + timeSpentIncrement
+      // Also update questionTimes to reflect saved time
+      setQuestionTimes((prev) => ({
+        ...prev,
+        [questionId]: lastSaved + timeSpentIncrement,
+      }))
+    }
   }
 
   const handleSaveAndNext = () => {
@@ -1045,14 +1146,27 @@ export default function TestAttemptPage() {
       // Get the actual markedForReview status for this question
       const isMarkedForReview = markedForReview.has(currentQ._id)
       
-      // Save answer to backend in background (don't wait for response)
-      if (selectedOptions[currentQ._id]) {
-        updateAnswerMutation.mutate({
-          questionId: currentQ._id,
-          optionId: selectedOptions[currentQ._id],
-          timeSpent: 0,
-          markedForReview: isMarkedForReview,
-        })
+      // Calculate time spent increment for this question
+      const timeSpentIncrement = getTimeSpentIncrement(currentQ._id)
+      
+      // Always save answer to backend (even if no option selected, to save time spent)
+      const selectedOptionId = selectedOptions[currentQ._id] || ''
+      updateAnswerMutation.mutate({
+        questionId: currentQ._id,
+        optionId: selectedOptionId,
+        timeSpent: timeSpentIncrement,
+        markedForReview: isMarkedForReview,
+      })
+      
+      // Update last saved time if we sent time
+      if (timeSpentIncrement > 0) {
+        const lastSaved = lastSavedTimesRef.current[currentQ._id] || 0
+        lastSavedTimesRef.current[currentQ._id] = lastSaved + timeSpentIncrement
+        // Also update questionTimes to reflect saved time
+        setQuestionTimes((prev) => ({
+          ...prev,
+          [currentQ._id]: lastSaved + timeSpentIncrement,
+        }))
       }
       
       // Calculate section-related variables
@@ -1433,7 +1547,8 @@ export default function TestAttemptPage() {
   }
 
   const currentQuestion = questions?.[currentQuestionIndex]
-  const answeredCount = Object.keys(selectedOptions).length
+  // Use savedAnswers for count (only count answers that have been saved)
+  const answeredCount = Object.keys(savedAnswers).filter(key => savedAnswers[key]).length
   const reviewCount = markedForReview.size
   const totalQuestions = questions.length
   const notAnsweredCount = totalQuestions - answeredCount
@@ -1443,6 +1558,7 @@ export default function TestAttemptPage() {
   useEffect(() => {
     if (attemptData?.questions && attemptData.questions.length > 0 && !hasLocalUpdatesRef.current) {
       const initialSelectedOptions: Record<string, string> = {}
+      const initialSavedAnswers: Record<string, string> = {}
       const initialMarkedForReview = new Set<string>()
       const initialVisited = new Set<string>()
 
@@ -1452,6 +1568,7 @@ export default function TestAttemptPage() {
         
         if (q.selectedOptionId) {
           initialSelectedOptions[questionId] = q.selectedOptionId
+          initialSavedAnswers[questionId] = q.selectedOptionId // Track saved answers separately
         }
         // Check markedForReview - explicitly check for true boolean value
         // Also handle string "true" or any truthy value that represents marked
@@ -1472,6 +1589,7 @@ export default function TestAttemptPage() {
 
       // Only set from backend data if we haven't made local updates
       setSelectedOptions(initialSelectedOptions)
+      setSavedAnswers(initialSavedAnswers)
       setMarkedForReview(initialMarkedForReview)
       setVisitedQuestions(initialVisited)
     }
@@ -1603,7 +1721,7 @@ export default function TestAttemptPage() {
       return null
     }
     const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentSectionId)
-    const sectionAnsweredCount = currentSectionQuestions.filter((q: Question) => selectedOptions[q._id]).length
+    const sectionAnsweredCount = currentSectionQuestions.filter((q: Question) => savedAnswers[q._id]).length
     const sectionMarkedCount = currentSectionQuestions.filter((q: Question) => markedForReview.has(q._id)).length
     const sectionTotalCount = currentSectionQuestions.length
     const sectionUnansweredCount = sectionTotalCount - sectionAnsweredCount
@@ -2139,7 +2257,8 @@ export default function TestAttemptPage() {
                     
                     // Calculate status directly from current state (not from cached status)
                     const isCurrent = globalIndex === currentQuestionIndex
-                    const isAnswered = !!selectedOptions[q._id]
+                    // Use savedAnswers for palette display (only show green after save)
+                    const isAnswered = !!savedAnswers[q._id]
                     const isMarked = markedForReview.has(q._id)
                     // A question is visited if: it's current, in visitedQuestions set, or has time spent
                     const hasTimeSpent = (questionTimes[q._id] || 0) > 0
@@ -2218,9 +2337,12 @@ export default function TestAttemptPage() {
                           if (currentTime === 0 && lastSaved === 0) {
                             // Save 1 second to mark as visited in backend
                             const isMarkedForReview = markedForReview.has(q._id)
+                            // Only save optionId if it's already been saved before (in savedAnswers)
+                            // Don't save unsaved selections when just navigating
+                            const optionIdToSave = savedAnswers[q._id] || ''
                             updateAnswerMutation.mutate({
                               questionId: q._id,
-                              optionId: selectedOptions[q._id] || '',
+                              optionId: optionIdToSave,
                               timeSpent: 1, // Minimal time to mark as visited
                               markedForReview: isMarkedForReview,
                             })
@@ -2231,6 +2353,16 @@ export default function TestAttemptPage() {
                             }))
                             // Update lastSavedTimesRef to prevent duplicate saves
                             lastSavedTimesRef.current[q._id] = 1
+                          }
+                          
+                          // Restore saved answer when navigating to this question (if it exists)
+                          // This ensures that if user had changed selection but didn't save, they see the saved answer
+                          const savedAnswer = savedAnswers[q._id]
+                          if (savedAnswer && selectedOptions[q._id] !== savedAnswer) {
+                            setSelectedOptions((prev) => ({
+                              ...prev,
+                              [q._id]: savedAnswer,
+                            }))
                           }
                           
                           // Update selected section if section-wise timing is disabled and question is from different section
