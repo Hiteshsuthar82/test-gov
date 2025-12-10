@@ -120,5 +120,13 @@ export const adminQuestionService = {
 
     return createdQuestions;
   },
+
+  async getTestSetForValidation(testSetId: string) {
+    const testSet = await TestSet.findById(testSetId);
+    if (!testSet) {
+      throw new Error('Test set not found');
+    }
+    return testSet;
+  },
 };
 
