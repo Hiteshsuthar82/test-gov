@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
-import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList, FiChevronDown } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList, FiChevronDown, FiBell } from 'react-icons/fi'
 import type { IconType } from 'react-icons'
 
 interface NavItem {
@@ -23,6 +23,7 @@ export default function Navbar() {
   // Navigation items for profile popup
   const profileNavItems: NavItem[] = [
     { path: '/profile', label: 'Profile', icon: FiUser },
+    { path: '/notices', label: 'Notice Board', icon: FiBell },
     { path: '/results', label: 'Results', icon: FiList },
     { path: '/leaderboard', label: 'Leaderboard', icon: FiAward },
     { path: '/subscriptions', label: 'My Subscriptions', icon: FiBook },
@@ -89,6 +90,20 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center space-x-2">
               {isAuthenticated ? (
                 <>
+                  {/* Notice Board Icon */}
+                  <Link to="/notices">
+                    <button
+                      className={`p-2 rounded-lg transition-colors ${
+                        location.pathname === '/notices'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title="Notice Board"
+                    >
+                      <FiBell className="w-5 h-5" />
+                    </button>
+                  </Link>
+
                   {/* Profile Menu */}
                   <div className="relative" ref={profileMenuRef}>
                     <button
@@ -268,6 +283,18 @@ export default function Navbar() {
                   >
                     <FiHome className="w-5 h-5" />
                     <span>Home</span>
+                  </Link>
+                  <Link
+                    to="/notices"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      location.pathname === '/notices'
+                        ? 'bg-purple-50 text-purple-700 font-medium'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FiBell className="w-5 h-5" />
+                    <span>Notice Board</span>
                   </Link>
                   <Link
                     to="/leaderboard"

@@ -13,6 +13,7 @@ import MySubscriptionsPage from './pages/MySubscriptionsPage'
 import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
 import AllResultsPage from './pages/AllResultsPage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import NoticesPage from './pages/NoticesPage'
 
 const queryClient = new QueryClient()
 
@@ -96,6 +97,10 @@ function App() {
           <Route
             path="/leaderboard"
             element={<LeaderboardPage />}
+          />
+          <Route
+            path="/notices"
+            element={<NoticesPage />}
           />
         </Routes>
       </BrowserRouter>

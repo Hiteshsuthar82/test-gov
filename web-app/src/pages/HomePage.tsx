@@ -52,14 +52,14 @@ export default function HomePage() {
           {/* Notice Board */}
           <NoticeBoard notices={notices} isLoading={noticesLoading} />
 
+          {/* Categories Section */}
+          <CategoriesSection categories={categories} isLoading={categoriesLoading} />
+
           {/* Key Features Section */}
           <FeaturesSection />
 
           {/* Weekly Live Exam Banner */}
           <WeeklyLiveExamBanner />
-
-          {/* Categories Section */}
-          <CategoriesSection categories={categories} isLoading={categoriesLoading} />
 
           {/* How It Works Section */}
           <HowItWorksSection />
