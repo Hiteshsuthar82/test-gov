@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
-import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList, FiChevronDown } from 'react-icons/fi'
+import type { IconType } from 'react-icons'
+
+interface NavItem {
+  path: string
+  label: string
+  icon: IconType
+}
 
 export default function Navbar() {
   const { user, logout } = useAuthStore()
@@ -10,11 +17,38 @@ export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
+
+  // Navigation items for profile popup
+  const profileNavItems: NavItem[] = [
+    { path: '/profile', label: 'Profile', icon: FiUser },
+    { path: '/results', label: 'Results', icon: FiList },
+    { path: '/leaderboard', label: 'Leaderboard', icon: FiAward },
+    { path: '/subscriptions', label: 'My Subscriptions', icon: FiBook },
+  ]
 
   // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false)
   }, [location.pathname])
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false)
+      }
+    }
+
+    if (isProfileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isProfileMenuOpen])
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
@@ -55,48 +89,80 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center space-x-2">
               {isAuthenticated ? (
                 <>
-                  <Link to="/">
-                    <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
-                      <FiHome className="mr-2" />
-                      Home
-                    </Button>
-                  </Link>
-                  <Link to="/leaderboard">
-                    <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
-                      <FiAward className="mr-2" />
-                      Leaderboard
-                    </Button>
-                  </Link>
-                  <Link to="/subscriptions">
-                    <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
-                      <FiBook className="mr-2" />
-                      My Subscriptions
-                    </Button>
-                  </Link>
-                  <Link to="/results">
-                    <Button variant="ghost" size="sm" className="text-slate-700 hover:text-slate-900">
-                      <FiList className="mr-2" />
-                      Results
-                    </Button>
-                  </Link>
-                  <Link to="/profile">
-                    <Button variant="ghost" size="sm" className="flex items-center gap-2 text-slate-700 hover:text-slate-900">
+                  {/* Profile Menu */}
+                  <div className="relative" ref={profileMenuRef}>
+                    <button
+                      onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
                       {user?.profileImageUrl ? (
                         <img
                           src={user.profileImageUrl}
                           alt={user.name}
-                          className="w-6 h-6 rounded-full object-cover"
+                          className="w-10 h-10 rounded-full object-cover"
                         />
                       ) : (
-                        <FiUser className="w-4 h-4" />
+                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                          <FiUser className="w-5 h-5 text-slate-600" />
+                        </div>
                       )}
-                      <span>{user?.name}</span>
-                    </Button>
-                  </Link>
-                  <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-700 hover:text-slate-900">
-                    <FiLogOut className="mr-2" />
-                    Logout
-                  </Button>
+                      <div className="flex flex-col items-start">
+                        <span className="text-sm font-medium text-slate-800">{user?.name}</span>
+                        <span className="text-xs text-slate-500">{user?.email}</span>
+                      </div>
+                      <FiChevronDown className={`w-4 h-4 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Profile Dropdown Menu */}
+                    {isProfileMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
+                        {/* User Info */}
+                        {user && (
+                          <div className="px-4 py-3 border-b border-slate-200">
+                            <p className="font-semibold text-slate-800 truncate">{user.name}</p>
+                            <p className="text-sm text-slate-500 truncate">{user.email}</p>
+                          </div>
+                        )}
+
+                        {/* Navigation Links */}
+                        <div className="py-1">
+                          {profileNavItems.map((item) => {
+                            const Icon = item.icon
+                            const isActive = location.pathname === item.path
+                            return (
+                              <Link
+                                key={item.path}
+                                to={item.path}
+                                onClick={() => setIsProfileMenuOpen(false)}
+                                className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
+                                  isActive
+                                    ? 'bg-purple-50 text-purple-700 font-medium'
+                                    : 'text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <Icon className="w-4 h-4" />
+                                <span>{item.label}</span>
+                              </Link>
+                            )
+                          })}
+                        </div>
+
+                        {/* Logout */}
+                        <div className="border-t border-slate-200 pt-1">
+                          <button
+                            onClick={() => {
+                              setIsProfileMenuOpen(false)
+                              handleLogout()
+                            }}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full transition-colors"
+                          >
+                            <FiLogOut className="w-4 h-4" />
+                            <span>Logout</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
