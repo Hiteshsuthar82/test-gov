@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ interface TestSet {
 
 export default function CategoryPage() {
   const { categoryId } = useParams()
+  const navigate = useNavigate()
 
   const { data: categoryData } = useQuery({
     queryKey: ['category', categoryId],
@@ -124,16 +125,6 @@ export default function CategoryPage() {
     return null
   }
 
-  const startAttemptMutation = useMutation({
-    mutationFn: async ({ testSetId, forceNew }: { testSetId: string; forceNew?: boolean }) => {
-      const response = await api.post(`/attempts/start`, { testSetId, forceNew })
-      return response.data.data
-    },
-    onSuccess: (data) => {
-      window.location.href = `/test/${data.testSet?.id || data.testSetId}/attempt/${data.attemptId}`
-    },
-  })
-
   const handleStartTest = async (testSetId: string) => {
     if (!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') {
       alert('Please subscribe to this category first')
@@ -157,11 +148,12 @@ export default function CategoryPage() {
         setSelectedTestSetId(testSetId)
         setShowResumeDialog(true)
       } else {
-        startAttemptMutation.mutate({ testSetId, forceNew: false })
+        // Navigate to instructions page instead of starting attempt directly
+        navigate(`/test/${testSetId}/instructions`)
       }
     } catch (error) {
-      // If check fails, just start new test
-      startAttemptMutation.mutate({ testSetId, forceNew: false })
+      // If check fails, navigate to instructions page
+      navigate(`/test/${testSetId}/instructions`)
     }
   }
 
@@ -174,10 +166,11 @@ export default function CategoryPage() {
 
   const handleStartNewTest = () => {
     if (selectedTestSetId) {
-      // Force creating a new attempt even if one exists
-      startAttemptMutation.mutate({ testSetId: selectedTestSetId, forceNew: true })
+      // Navigate to instructions page for new test
       setShowResumeDialog(false)
+      const testSetId = selectedTestSetId
       setSelectedTestSetId(null)
+      navigate(`/test/${testSetId}/instructions`)
     }
   }
 
@@ -353,9 +346,8 @@ export default function CategoryPage() {
                         <Button
                           className="w-full"
                           onClick={() => handleStartTest(testSet._id)}
-                          disabled={startAttemptMutation.isPending}
                         >
-                          {startAttemptMutation.isPending ? 'Starting...' : 'Attempt'}
+                          Attempt
                         </Button>
                       )
                     })()}

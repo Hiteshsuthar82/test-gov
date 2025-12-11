@@ -14,6 +14,7 @@ import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
 import AllResultsPage from './pages/AllResultsPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import NoticesPage from './pages/NoticesPage'
+import TestAttemptInstructionsPage from './pages/TestAttemptInstructionsPage'
 
 const queryClient = new QueryClient()
 
@@ -43,6 +44,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test/:testSetId/instructions"
+            element={
+              <ProtectedRoute>
+                <TestAttemptInstructionsPage />
               </ProtectedRoute>
             }
           />

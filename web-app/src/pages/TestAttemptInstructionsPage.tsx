@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 
 const MAIN_INSTRUCTIONS: string[] = [
@@ -11,9 +14,26 @@ const MAIN_INSTRUCTIONS: string[] = [
 ];
 
 export default function TestAttemptInstructionsPage() {
+  const { testSetId } = useParams<{ testSetId: string }>();
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState<1 | 2>(1); // 1 = General instructions, 2 = Dynamic/test-specific instructions
   const [language, setLanguage] = useState<string>("");
   const [isDeclarationAccepted, setIsDeclarationAccepted] = useState(false);
+
+  const startAttemptMutation = useMutation({
+    mutationFn: async ({ testSetId, forceNew }: { testSetId: string; forceNew?: boolean }) => {
+      const response = await api.post(`/attempts/start`, { testSetId, forceNew });
+      return response.data.data;
+    },
+    onSuccess: (data) => {
+      // Navigate to the attempt page after successfully starting the attempt
+      navigate(`/test/${data.testSet?.id || data.testSetId}/attempt/${data.attemptId}`);
+    },
+    onError: (error: any) => {
+      console.error("Failed to start attempt:", error);
+      alert(error?.response?.data?.message || "Failed to start the test. Please try again.");
+    },
+  });
 
   const handleNext = () => {
     setActiveStep(2);
@@ -25,14 +45,17 @@ export default function TestAttemptInstructionsPage() {
 
   const handleStartTest = () => {
     if (!isDeclarationAccepted) return;
+    if (!testSetId) {
+      alert("Test set ID is missing. Please go back and try again.");
+      return;
+    }
 
-    console.log("Start Test clicked - navigate user to test attempt page here.");
-    // TODO: Add navigation logic here, for example:
-    // navigate("/test/attempt");  // using react-router's useNavigate
+    // Start the attempt
+    startAttemptMutation.mutate({ testSetId, forceNew: false });
   };
 
   return (
-    <div className="relative min-h-screen bg-slate-50 pb-40">
+    <div className="relative min-h-screen bg-slate-50 pb-96">
       {/* Decorative Background */}
       <div className="absolute -top-10 -right-10 w-80 h-80 opacity-5 pointer-events-none">
         <svg viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -300,10 +323,20 @@ export default function TestAttemptInstructionsPage() {
       {/* BOTTOM FIXED FOOTER: CONTROLS */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white/95 backdrop-blur-sm z-50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-          {/* Left side: Placeholder or "Go to Tests" if you want later */}
-          <div className="text-sm text-slate-500">
-            {/* You can add "Go to Tests" link here later if required */}
-          </div>
+          {/* Left side: "Go to Tests" link - only show on step 1 */}
+          {activeStep === 1 && (
+            <Link
+              to="/"
+              className="text-sm font-medium text-slate-700 underline hover:text-slate-900 transition"
+            >
+              Go to Tests
+            </Link>
+          )}
+          {activeStep === 2 && (
+            <div className="text-sm text-slate-500">
+              {/* Empty space for step 2 */}
+            </div>
+          )}
 
           {/* Right side: Buttons */}
           <div className="flex items-center gap-3">
@@ -332,14 +365,14 @@ export default function TestAttemptInstructionsPage() {
                 <button
                   type="button"
                   onClick={handleStartTest}
-                  disabled={!isDeclarationAccepted}
+                  disabled={!isDeclarationAccepted || startAttemptMutation.isPending}
                   className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                    isDeclarationAccepted
+                    isDeclarationAccepted && !startAttemptMutation.isPending
                       ? "bg-emerald-600 text-white hover:bg-emerald-700"
                       : "bg-emerald-100 text-emerald-400 cursor-not-allowed"
                   }`}
                 >
-                  I am ready to begin
+                  {startAttemptMutation.isPending ? "Starting..." : "I am ready to begin"}
                 </button>
                 {!isDeclarationAccepted && (
                   <p className="mt-1 text-xs text-red-500">
