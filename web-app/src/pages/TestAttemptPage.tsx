@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import Layout from '@/components/layout/Layout'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { FiClock, FiFlag, FiCheck, FiPause, FiPlay, FiX } from 'react-icons/fi'
+import { FiClock, FiFlag, FiCheck, FiPause, FiPlay, FiX, FiChevronsLeft, FiChevronsRight } from 'react-icons/fi'
+import { useAuthStore } from '@/store/authStore'
 
 interface Question {
   _id: string
@@ -27,6 +28,9 @@ export default function TestAttemptPage() {
   const { testSetId, attemptId } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('en')
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
   const [savedAnswers, setSavedAnswers] = useState<Record<string, string>>({}) // Track answers saved to backend
@@ -1606,6 +1610,16 @@ export default function TestAttemptPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // New format for timer display (minutes and seconds only, no hours)
+  const formatTimerMinutesSeconds = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return {
+      minutes: mins.toString().padStart(2, '0'),
+      seconds: secs.toString().padStart(2, '0')
+    }
+  }
+
   const currentQuestion = questions?.[currentQuestionIndex]
   // Use savedAnswers for count (only count answers that have been saved)
   const answeredCount = Object.keys(savedAnswers).filter(key => savedAnswers[key]).length
@@ -1829,9 +1843,18 @@ export default function TestAttemptPage() {
     return 'not-visited' // White
   }
 
+  // Get timer values for display
+  const displayTimer = hasSectionWiseTiming ? sectionTimeRemaining : timeRemaining
+  const timerDisplay = formatTimerMinutesSeconds(Math.max(0, displayTimer))
+  const currentSectionName = hasSectionWiseTiming && currentSectionId
+    ? testSet?.sections?.find((s: any) => s.sectionId === currentSectionId)?.name || currentSectionId
+    : hasSections && !hasSectionWiseTiming && selectedSectionId
+    ? testSet?.sections?.find((s: any) => s.sectionId === selectedSectionId)?.name || selectedSectionId
+    : null
+
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="h-screen flex flex-col overflow-hidden">
         {/* Pause Confirmation Dialog */}
         <Dialog open={showPauseConfirmation} onOpenChange={setShowPauseConfirmation}>
           <DialogContent>
@@ -1993,182 +2016,125 @@ export default function TestAttemptPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Section Selection Tabs (show when sections exist) */}
-        {hasSections && testSet?.sections && (
-          <Card className="mb-4">
-            <CardContent className="pt-4">
-              <div className="flex flex-wrap gap-2">
-                {testSet.sections
+        {/* Top Header */}
+        <div className="border-b bg-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="text-xl font-bold">{attemptData?.testSet?.name}</div>
+          <div className="flex items-center gap-4">
+            {isPaused ? (
+              <Button variant="outline" disabled size="sm">
+                <FiPause className="mr-2" />
+                Paused
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={handlePause} size="sm">
+                <FiPause className="mr-2" />
+                Pause
+              </Button>
+            )}
+            {/* Timer Display */}
+            <div className="flex items-center gap-2 border rounded-lg px-4 py-2 bg-slate-50">
+              <span className="text-sm font-medium text-slate-700">Time Left</span>
+              <div className="flex items-center gap-1">
+                <div className="bg-white border border-slate-300 rounded px-3 py-1 font-mono font-bold text-slate-700">
+                  {timerDisplay.minutes}
+                </div>
+                <span className="text-slate-700 font-bold">:</span>
+                <div className="bg-white border border-slate-300 rounded px-3 py-1 font-mono font-bold text-slate-700">
+                  {timerDisplay.seconds}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Area - Left and Right Split */}
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Left Side - Scrollable Content */}
+          <div className="flex-1 flex flex-col overflow-hidden border-r">
+            {/* First Row: Sections and Question Timer */}
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {hasSections && testSet?.sections && testSet.sections
                   .sort((a: any, b: any) => a.order - b.order)
                   .map((section: any) => {
-                    const sectionQuestionsCount = questions.filter((q: Question) => q.sectionId === section.sectionId).length
                     const isSelected = hasSectionWiseTiming 
                       ? currentSectionId === section.sectionId
                       : selectedSectionId === section.sectionId
-                    
-                    // Get section status from sectionTimings
-                    let sectionStatus: 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | null = null
-                    let tooltipMessage = ""
-                    
-                    if (hasSectionWiseTiming) {
-                      const sectionTiming = attemptData?.sectionTimings?.find(
-                        (st: any) => st.sectionId === section.sectionId
-                      )
-                      
-                      if (sectionTiming) {
-                        sectionStatus = sectionTiming.status as 'COMPLETED' | 'IN_PROGRESS'
-                      } else {
-                        // Section not started yet - check if it's before or after current section
-                        const currentSectionOrder = testSet.sections.find((s: any) => s.sectionId === currentSectionId)?.order || 0
-                        const sectionOrder = section.order
-                        if (sectionOrder < currentSectionOrder) {
-                          // This section should have been started but wasn't - treat as completed
-                          sectionStatus = 'COMPLETED'
-                        } else {
-                          // Section is pending (not started yet)
-                          sectionStatus = 'PENDING'
-                        }
-                      }
-                      
-                      // Determine tooltip message based on status
-                      if (sectionStatus === 'COMPLETED') {
-                        tooltipMessage = "You have submitted this section and cannot access it further."
-                      } else if (sectionStatus === 'PENDING') {
-                        tooltipMessage = "Submit the current section to open the next section."
-                      }
-                    }
-                    
-                    // Current section is enabled, others are disabled when section-wise timing is enabled
                     const isDisabled = hasSectionWiseTiming && currentSectionId !== section.sectionId
                     
                     return (
-                      <div key={section.sectionId} className="relative group">
-                        <button
-                          onClick={() => {
-                            if (!isDisabled) {
-                              if (hasSectionWiseTiming) {
-                                // When section-wise timing is enabled, clicking current section does nothing
-                                // (it's already selected and enabled)
-                                return
-                              } else {
-                                setSelectedSectionId(section.sectionId)
-                                // Switch to first question of this section
-                                const firstQuestionInSection = questions.find((q: Question) => q.sectionId === section.sectionId)
-                                if (firstQuestionInSection) {
-                                  const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
-                                  setCurrentQuestionIndex(firstIndex)
-                                }
-                              }
+                      <button
+                        key={section.sectionId}
+                        onClick={() => {
+                          if (!isDisabled && !hasSectionWiseTiming) {
+                            setSelectedSectionId(section.sectionId)
+                            const firstQuestionInSection = questions.find((q: Question) => q.sectionId === section.sectionId)
+                            if (firstQuestionInSection) {
+                              const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
+                              setCurrentQuestionIndex(firstIndex)
                             }
-                          }}
-                          disabled={isDisabled}
-                          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                            isDisabled
-                              ? sectionStatus === 'COMPLETED'
-                              ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                              : isSelected
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                          title={isDisabled ? tooltipMessage : undefined}
-                        >
-                          {section.name} ({sectionQuestionsCount})
-                          {sectionStatus === 'COMPLETED' && (
-                            <span className="ml-2 text-xs">✓</span>
-                          )}
-                        </button>
-                        {isDisabled && tooltipMessage && (
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                            {tooltipMessage}
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-                              <div className="border-4 border-transparent border-t-gray-900"></div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                          }
+                        }}
+                        disabled={isDisabled}
+                        className={`px-3 py-1 rounded text-sm font-medium ${
+                          isDisabled
+                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            : isSelected
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {section.name}
+                      </button>
                     )
                   })}
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Header with Timer */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center flex-wrap gap-4">
-              <div>
-                <h1 className="text-2xl font-bold">{attemptData?.testSet?.name}</h1>
-                <p className="text-sm text-gray-600">
-                  Question {currentQuestionIndex + 1} of {questions.length}
-                </p>
-                <div className="flex items-center gap-4 mt-2 text-sm flex-wrap">
-                  {attemptData?.testSet && currentQuestion && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-600">Marking Scheme:</span>
-                      <span className="text-green-600 font-semibold">+{currentQuestion.marks || 1}</span>
-                      {attemptData.testSet.negativeMarking > 0 && (
-                        <span className="text-red-600 font-semibold">-{attemptData.testSet.negativeMarking}</span>
-                      )}
-                    </div>
-                  )}
-                  {currentQuestion?.averageTimeSeconds && (
-                    <div className="flex items-center gap-1 text-blue-600">
-                      <FiClock className="w-4 h-4" />
-                      <span>Average Time: {currentQuestion.averageTimeSeconds} seconds</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center space-x-4 flex-wrap">
-                <div className="flex items-center space-x-2 text-blue-600">
-                  <FiClock />
-                  <span className="text-sm">Current: {formatShortTime(currentQuestionTime)}</span>
-                </div>
-                {hasSectionWiseTiming ? (
-                  <div className="flex items-center space-x-2 text-red-600">
-                    <FiClock />
-                    <span className="font-mono font-bold">
-                      Section: {formatTime(sectionTimeRemaining)}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2 text-red-600">
-                    <FiClock />
-                    <span className="font-mono font-bold">{formatTime(timeRemaining)}</span>
-                  </div>
-                )}
-                {isPaused ? (
-                  <Button variant="outline" disabled>
-                    <FiPause className="mr-2" />
-                    Paused
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={handlePause}>
-                    <FiPause className="mr-2" />
-                    Pause
-                  </Button>
-                )}
-                <Button variant="destructive" onClick={handleSubmitTest}>
-                  Submit Test
-                </Button>
+              <div className="flex items-center gap-2 text-sm text-blue-600">
+                <FiClock />
+                <span>Question Timer: {formatShortTime(currentQuestionTime)}</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Question Panel */}
-          <div className="lg:col-span-3">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="space-y-4">
-                  {/* Direction */}
-                  {currentQuestion.direction && (
-                    <div className="bg-blue-50 p-4 rounded-lg">
+            {/* Second Row: Question Number and Info */}
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50 flex-shrink-0">
+              <div className="text-lg font-semibold">
+                Question {currentQuestionIndex + 1} of {questions.length}
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-green-600 font-semibold">+{currentQuestion.marks || 1}</span>
+                  {attemptData?.testSet?.negativeMarking > 0 && (
+                    <span className="text-red-600 font-semibold">-{attemptData.testSet.negativeMarking}</span>
+                  )}
+                  {currentQuestion?.averageTimeSeconds && (
+                    <span className="text-blue-600">
+                      <FiClock className="inline w-4 h-4 mr-1" />
+                      {currentQuestion.averageTimeSeconds}s
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm"
+                >
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Content Box - Scrollable */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4">
+                {currentQuestion.direction || currentQuestion.directionImageUrl ? (
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    {/* Left Box: Direction */}
+                    <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
                       <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
-                      <p className="text-gray-700">{currentQuestion.direction}</p>
+                      {currentQuestion.direction && (
+                        <p className="text-gray-700 mb-2">{currentQuestion.direction}</p>
+                      )}
                       {currentQuestion.directionImageUrl && (
                         <img
                           src={currentQuestion.directionImageUrl}
@@ -2177,316 +2143,351 @@ export default function TestAttemptPage() {
                         />
                       )}
                     </div>
-                  )}
+                    {/* Right Box: Question, Conclusion, Options */}
+                    <div className="overflow-y-auto max-h-full">
+                      {/* Question */}
+                      <div className="mb-4">
+                        <div className="text-lg font-medium mb-2">
+                          {currentQuestionIndex + 1}.{' '}
+                          {currentQuestion.questionFormattedText ? (
+                            <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
+                          ) : (
+                            <span>{currentQuestion.questionText}</span>
+                          )}
+                        </div>
+                        {currentQuestion.questionImageUrl && (
+                          <img
+                            src={currentQuestion.questionImageUrl}
+                            alt="Question"
+                            className="mt-2 max-w-full rounded"
+                          />
+                        )}
+                      </div>
 
-                  {/* Question */}
-                  <div>
-                    <div className="text-lg font-medium mb-4">
-                      {currentQuestionIndex + 1}.{' '}
-                      {currentQuestion.questionFormattedText ? (
-                        <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
-                      ) : (
-                        <span>{currentQuestion.questionText}</span>
+                      {/* Conclusion */}
+                      {currentQuestion.conclusion && (
+                        <div className="bg-green-50 p-4 rounded-lg mb-4">
+                          <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
+                          <p className="text-gray-700">{currentQuestion.conclusion}</p>
+                          {currentQuestion.conclusionImageUrl && (
+                            <img
+                              src={currentQuestion.conclusionImageUrl}
+                              alt="Conclusion"
+                              className="mt-2 max-w-full rounded"
+                            />
+                          )}
+                        </div>
                       )}
-                    </div>
-                    {currentQuestion.questionImageUrl && (
-                      <img
-                        src={currentQuestion.questionImageUrl}
-                        alt="Question"
-                        className="mb-4 max-w-full rounded"
-                      />
-                    )}
-                  </div>
 
-                  {/* Conclusion */}
-                  {currentQuestion.conclusion && (
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
-                      <p className="text-gray-700">{currentQuestion.conclusion}</p>
-                      {currentQuestion.conclusionImageUrl && (
+                      {/* Options */}
+                      <div className="space-y-3">
+                        {currentQuestion.options.map((option: { optionId: string; text: string; imageUrl?: string }) => (
+                          <button
+                            key={option.optionId}
+                            onClick={() => handleSelectOption(currentQuestion._id, option.optionId)}
+                            className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                              selectedOptions[currentQuestion._id] === option.optionId
+                                ? 'border-purple-600 bg-purple-50'
+                                : 'border-gray-200 hover:border-purple-300'
+                            }`}
+                          >
+                            <div className="flex items-center">
+                              <div
+                                className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                  selectedOptions[currentQuestion._id] === option.optionId
+                                    ? 'border-purple-600 bg-purple-600'
+                                    : 'border-gray-300'
+                                }`}
+                              >
+                                {selectedOptions[currentQuestion._id] === option.optionId && (
+                                  <div className="w-2 h-2 rounded-full bg-white" />
+                                )}
+                              </div>
+                              <span className="font-medium mr-2">{option.optionId}.</span>
+                              <span>{option.text}</span>
+                            </div>
+                            {option.imageUrl && (
+                              <img
+                                src={option.imageUrl}
+                                alt={`Option ${option.optionId}`}
+                                className="mt-2 max-w-xs rounded"
+                              />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Single Box: Question, Conclusion, Options */
+                  <div className="overflow-y-auto">
+                    {/* Question */}
+                    <div className="mb-4">
+                      <div className="text-lg font-medium mb-2">
+                        {currentQuestionIndex + 1}.{' '}
+                        {currentQuestion.questionFormattedText ? (
+                          <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
+                        ) : (
+                          <span>{currentQuestion.questionText}</span>
+                        )}
+                      </div>
+                      {currentQuestion.questionImageUrl && (
                         <img
-                          src={currentQuestion.conclusionImageUrl}
-                          alt="Conclusion"
+                          src={currentQuestion.questionImageUrl}
+                          alt="Question"
                           className="mt-2 max-w-full rounded"
                         />
                       )}
                     </div>
-                  )}
 
-                  {/* Options */}
-                  <div className="space-y-3">
-                    {currentQuestion.options.map((option: { optionId: string; text: string; imageUrl?: string }) => (
-                      <button
-                        key={option.optionId}
-                        onClick={() => handleSelectOption(currentQuestion._id, option.optionId)}
-                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                          selectedOptions[currentQuestion._id] === option.optionId
-                            ? 'border-purple-600 bg-purple-50'
-                            : 'border-gray-200 hover:border-purple-300'
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <div
-                            className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
-                              selectedOptions[currentQuestion._id] === option.optionId
-                                ? 'border-purple-600 bg-purple-600'
-                                : 'border-gray-300'
-                            }`}
-                          >
-                            {selectedOptions[currentQuestion._id] === option.optionId && (
-                              <div className="w-2 h-2 rounded-full bg-white" />
-                            )}
-                          </div>
-                          <span className="font-medium mr-2">{option.optionId}.</span>
-                          <span>{option.text}</span>
-                        </div>
-                        {option.imageUrl && (
+                    {/* Conclusion */}
+                    {currentQuestion.conclusion && (
+                      <div className="bg-green-50 p-4 rounded-lg mb-4">
+                        <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
+                        <p className="text-gray-700">{currentQuestion.conclusion}</p>
+                        {currentQuestion.conclusionImageUrl && (
                           <img
-                            src={option.imageUrl}
-                            alt={`Option ${option.optionId}`}
-                            className="mt-2 max-w-xs rounded"
+                            src={currentQuestion.conclusionImageUrl}
+                            alt="Conclusion"
+                            className="mt-2 max-w-full rounded"
                           />
                         )}
-                      </button>
-                    ))}
-                  </div>
+                      </div>
+                    )}
 
-                  {/* Navigation */}
-                  <div className="flex justify-between pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const prevIndex = Math.max(0, currentQuestionIndex - 1)
-                        if (prevIndex < currentQuestionIndex && questions[prevIndex]) {
-                          // Mark previous question as visited
-                          setVisitedQuestions((prev) => new Set([...prev, questions[prevIndex]._id]))
-                        }
-                        setCurrentQuestionIndex(prevIndex)
-                      }}
-                      disabled={currentQuestionIndex === 0}
-                    >
-                      Previous
-                    </Button>
-                    <div className="flex gap-2">
-                      {selectedOptions[currentQuestion._id] && (
-                        <Button
-                          variant="outline"
-                          onClick={() => handleClearAnswer(currentQuestion._id)}
-                          className="text-red-600 hover:text-red-700"
+                    {/* Options */}
+                    <div className="space-y-3">
+                      {currentQuestion.options.map((option: { optionId: string; text: string; imageUrl?: string }) => (
+                        <button
+                          key={option.optionId}
+                          onClick={() => handleSelectOption(currentQuestion._id, option.optionId)}
+                          className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                            selectedOptions[currentQuestion._id] === option.optionId
+                              ? 'border-purple-600 bg-purple-50'
+                              : 'border-gray-200 hover:border-purple-300'
+                          }`}
                         >
-                          <FiX className="mr-2" />
-                          Clear
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        onClick={() => handleToggleReview(currentQuestion._id)}
-                        className={markedForReview.has(currentQuestion._id) ? 'bg-yellow-50' : ''}
-                      >
-                        <FiFlag className="mr-2" />
-                        {markedForReview.has(currentQuestion._id) ? 'Unmark Review' : 'Mark for Review'}
-                      </Button>
-                      <Button
-                        onClick={handleSaveAndNext}
-                      >
-                        Save & Next
-                      </Button>
+                          <div className="flex items-center">
+                            <div
+                              className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                selectedOptions[currentQuestion._id] === option.optionId
+                                  ? 'border-purple-600 bg-purple-600'
+                                  : 'border-gray-300'
+                              }`}
+                            >
+                              {selectedOptions[currentQuestion._id] === option.optionId && (
+                                <div className="w-2 h-2 rounded-full bg-white" />
+                              )}
+                            </div>
+                            <span className="font-medium mr-2">{option.optionId}.</span>
+                            <span>{option.text}</span>
+                          </div>
+                          {option.imageUrl && (
+                            <img
+                              src={option.imageUrl}
+                              alt={`Option ${option.optionId}`}
+                              className="mt-2 max-w-xs rounded"
+                            />
+                          )}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Action Bar */}
+            <div className="border-t bg-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleToggleReview(currentQuestion._id)}
+                  className={markedForReview.has(currentQuestion._id) ? 'bg-yellow-50' : ''}
+                  size="sm"
+                >
+                  <FiFlag className="mr-2" />
+                  Mark for Review & Next
+                </Button>
+                {selectedOptions[currentQuestion._id] && (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleClearAnswer(currentQuestion._id)}
+                    className="text-red-600 hover:text-red-700"
+                    size="sm"
+                  >
+                    <FiX className="mr-2" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <Button
+                onClick={handleSaveAndNext}
+                size="sm"
+              >
+                Save & Next
+              </Button>
+            </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardContent className="pt-6">
-                <h3 className="font-semibold mb-4">Question Palette</h3>
-                <div className="mb-4 space-y-2 text-sm">
+          {/* Right Side - Fixed Sidebar */}
+          <div className={`relative flex flex-col border-l bg-white flex-shrink-0 transition-all duration-300 ease-in-out ${
+            isSidebarOpen ? 'w-80' : 'w-0 overflow-hidden'
+          }`}>
+            {/* Collapse Button - Left Arrow (when open) */}
+            {isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full bg-white border border-r-0 border-gray-300 rounded-l-lg p-2 hover:bg-gray-50 transition-colors z-20 shadow-sm"
+                aria-label="Collapse sidebar"
+              >
+                <FiChevronsRight className="w-5 h-5 text-gray-600" />
+              </button>
+            )}
+
+            {/* User Greeting */}
+            {isSidebarOpen && (
+              <div className="px-4 py-3 border-b">
+                <p className="text-sm font-medium">Hello {user?.name || 'User'}</p>
+              </div>
+            )}
+
+            {/* Guidelines */}
+            {isSidebarOpen && (
+              <div className="px-4 py-3 border-b">
+                <h3 className="font-semibold mb-3 text-sm">Guidelines</h3>
+                <div className="space-y-2 text-xs">
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-green-500 rounded-t-lg mr-2" />
+                    <div className="w-4 h-4 bg-green-500 rounded-t-lg mr-2 flex-shrink-0" />
                     <span>Answered ({answeredCount})</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-2" />
+                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-2 flex-shrink-0" />
                     <span>Marked for Review ({reviewCount})</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-2 relative">
+                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-2 relative flex-shrink-0">
                       <FiCheck className="absolute top-0 right-0 w-2.5 h-2.5 text-green-600" />
                     </div>
                     <span>Answered & Marked</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-red-500 rounded-b-lg mr-2" />
+                    <div className="w-4 h-4 bg-red-500 rounded-b-lg mr-2 flex-shrink-0" />
                     <span>Visited</span>
                   </div>
                   <div className="flex items-center">
-                    <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded mr-2" />
+                    <div className="w-4 h-4 bg-white border-2 border-gray-300 rounded mr-2 flex-shrink-0" />
                     <span>Not Visited</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Section Name Row */}
+            {isSidebarOpen && currentSectionName && (
+              <div className="px-4 py-2 bg-gray-100 border-b">
+                <p className="text-sm font-medium">Section: {currentSectionName}</p>
+              </div>
+            )}
+
+            {/* Question Palette - Scrollable */}
+            {isSidebarOpen && (
+              <div className="flex-1 overflow-y-auto px-4 py-3">
                 <div className="grid grid-cols-5 gap-3">
                   {sectionQuestions.map((q: Question) => {
-                    // Find the global index for this question
-                    const globalIndex = questions.findIndex((q2: Question) => q2._id === q._id)
-                    
-                    // Calculate status directly from current state (not from cached status)
-                    const isCurrent = globalIndex === currentQuestionIndex
-                    // Use savedAnswers for palette display (only show green after save)
-                    const isAnswered = !!savedAnswers[q._id]
-                    const isMarked = markedForReview.has(q._id)
-                    // A question is visited if: it's current, in visitedQuestions set, or has time spent
-                    const hasTimeSpent = (questionTimes[q._id] || 0) > 0
-                    const isVisited = isCurrent || visitedQuestions.has(q._id) || hasTimeSpent
-                    const isAnsweredAndMarked = isAnswered && isMarked
-                    
-                    // Determine status based on current state
-                    let status: string
-                    if (isCurrent) {
-                      status = 'current'
-                    } else if (isAnswered && isMarked) {
-                      status = 'answered-and-marked'
+                  const globalIndex = questions.findIndex((q2: Question) => q2._id === q._id)
+                  const isCurrent = globalIndex === currentQuestionIndex
+                  const isAnswered = !!savedAnswers[q._id]
+                  const isMarked = markedForReview.has(q._id)
+                  const hasTimeSpent = (questionTimes[q._id] || 0) > 0
+                  const isVisited = isCurrent || visitedQuestions.has(q._id) || hasTimeSpent
+                  const isAnsweredAndMarked = isAnswered && isMarked
+
+                  let boxClasses = 'w-8 h-8 flex items-center justify-center text-xs font-medium relative'
+                  
+                  if (isCurrent) {
+                    if (isAnsweredAndMarked) {
+                      boxClasses += ' bg-purple-500 rounded-lg text-white border-2 border-yellow-400'
                     } else if (isMarked) {
-                      status = 'marked'
+                      boxClasses += ' bg-purple-500 rounded-lg text-white border-2 border-yellow-400'
                     } else if (isAnswered) {
-                      status = 'answered'
-                    } else if (isVisited) {
-                      status = 'visited'
+                      boxClasses += ' bg-green-500 rounded-lg text-white border-2 border-yellow-400'
+                    } else if (visitedQuestions.has(q._id)) {
+                      boxClasses += ' bg-red-500 rounded-lg text-white border-2 border-yellow-400'
                     } else {
-                      status = 'not-visited'
+                      boxClasses += ' border-2 border-yellow-400 bg-white text-black rounded-lg'
                     }
+                  } else if (isAnsweredAndMarked) {
+                    boxClasses += ' bg-purple-500 rounded-full text-white'
+                  } else if (isMarked) {
+                    boxClasses += ' bg-purple-500 rounded-full text-white'
+                  } else if (isAnswered) {
+                    boxClasses += ' bg-green-500 rounded-t-full text-white'
+                  } else if (isVisited) {
+                    boxClasses += ' bg-red-500 rounded-b-full text-white'
+                  } else {
+                    boxClasses += ' border-2 border-gray-300 bg-white text-black'
+                  }
 
-                    let boxClasses = 'w-8 h-8 flex items-center justify-center text-xs font-medium relative'
-                    
-                    if (isCurrent) {
-                      // Current question: use actual status color but with rounded rectangle shape
-                      if (isAnsweredAndMarked) {
-                        boxClasses += ' bg-purple-500 rounded-lg text-white border-2 border-yellow-400'
-                      } else if (isMarked) {
-                        boxClasses += ' bg-purple-500 rounded-lg text-white border-2 border-yellow-400'
-                      } else if (isAnswered) {
-                        boxClasses += ' bg-green-500 rounded-lg text-white border-2 border-yellow-400'
-                      } else if (visitedQuestions.has(q._id)) {
-                        boxClasses += ' bg-red-500 rounded-lg text-white border-2 border-yellow-400'
-                      } else {
-                        boxClasses += ' border-2 border-yellow-400 bg-white text-black rounded-lg'
-                      }
-                    } else if (status === 'answered-and-marked') {
-                      boxClasses += ' bg-purple-500 rounded-full text-white'
-                    } else if (status === 'marked') {
-                      boxClasses += ' bg-purple-500 rounded-full text-white'
-                    } else if (status === 'answered') {
-                      boxClasses += ' bg-green-500 rounded-t-full text-white'
-                    } else if (status === 'visited') {
-                      boxClasses += ' bg-red-500 rounded-b-full text-white'
-                    } else {
-                      boxClasses += ' border-2 border-gray-300 bg-white text-black'
-                    }
-
-                    return (
-                      <button
-                        key={q._id}
-                        onClick={() => {
-                          // Mark this question as visited immediately - use functional update to ensure we have latest state
-                          setVisitedQuestions((prev) => {
-                            if (prev.has(q._id)) {
-                              return prev // Already visited, no change needed
-                            }
-                            const newSet = new Set(prev)
-                            newSet.add(q._id)
-                            return newSet
+                  return (
+                    <button
+                      key={q._id}
+                      onClick={() => {
+                        setVisitedQuestions((prev) => {
+                          if (prev.has(q._id)) return prev
+                          const newSet = new Set(prev)
+                          newSet.add(q._id)
+                          return newSet
+                        })
+                        
+                        setQuestionTimes((prev) => {
+                          if (prev[q._id] !== undefined) return prev
+                          return { ...prev, [q._id]: 0 }
+                        })
+                        
+                        const currentTime = questionTimes[q._id] || 0
+                        const lastSaved = lastSavedTimesRef.current[q._id] || 0
+                        if (currentTime === 0 && lastSaved === 0) {
+                          const isMarkedForReview = markedForReview.has(q._id)
+                          const optionIdToSave = savedAnswers[q._id] || ''
+                          updateAnswerMutation.mutate({
+                            questionId: q._id,
+                            optionId: optionIdToSave,
+                            timeSpent: 1,
+                            markedForReview: isMarkedForReview,
                           })
-                          
-                          // Always ensure questionTimes has an entry for this question (even if 0)
-                          // This ensures the question is tracked as visited
-                          setQuestionTimes((prev) => {
-                            if (prev[q._id] !== undefined) {
-                              return prev // Already has time, no change needed
-                            }
-                            return { ...prev, [q._id]: 0 }
-                          })
-                          
-                          // If question hasn't been visited before (no time spent), save minimal time to backend
-                          const currentTime = questionTimes[q._id] || 0
-                          const lastSaved = lastSavedTimesRef.current[q._id] || 0
-                          if (currentTime === 0 && lastSaved === 0) {
-                            // Save 1 second to mark as visited in backend
-                            const isMarkedForReview = markedForReview.has(q._id)
-                            // Only save optionId if it's already been saved before (in savedAnswers)
-                            // Don't save unsaved selections when just navigating
-                            const optionIdToSave = savedAnswers[q._id] || ''
-                            updateAnswerMutation.mutate({
-                              questionId: q._id,
-                              optionId: optionIdToSave,
-                              timeSpent: 1, // Minimal time to mark as visited
-                              markedForReview: isMarkedForReview,
-                            })
-                            // Update local state immediately
-                            setQuestionTimes((prev) => ({
-                              ...prev,
-                              [q._id]: 1,
-                            }))
-                            // Update lastSavedTimesRef to prevent duplicate saves
-                            lastSavedTimesRef.current[q._id] = 1
-                          }
-                          
-                          // Restore saved answer when navigating to this question (if it exists)
-                          // This ensures that if user had changed selection but didn't save, they see the saved answer
-                          const savedAnswer = savedAnswers[q._id]
-                          if (savedAnswer && selectedOptions[q._id] !== savedAnswer) {
-                            setSelectedOptions((prev) => ({
-                              ...prev,
-                              [q._id]: savedAnswer,
-                            }))
-                          }
-                          
-                          // Update selected section if section-wise timing is disabled and question is from different section
-                          if (hasSections && !hasSectionWiseTiming && q.sectionId && selectedSectionId !== q.sectionId) {
-                            setSelectedSectionId(q.sectionId)
-                          }
-                          
-                          // Then switch to this question
-                          setCurrentQuestionIndex(globalIndex)
-                        }}
-                        className={boxClasses}
-                      >
-                        {globalIndex + 1}
-                        {isAnsweredAndMarked && (
-                          <FiCheck className="absolute top-0 right-0 w-3 h-3 text-green-300" strokeWidth={3} />
-                        )}
-                      </button>
-                    )
+                          setQuestionTimes((prev) => ({ ...prev, [q._id]: 1 }))
+                          lastSavedTimesRef.current[q._id] = 1
+                        }
+                        
+                        const savedAnswer = savedAnswers[q._id]
+                        if (savedAnswer && selectedOptions[q._id] !== savedAnswer) {
+                          setSelectedOptions((prev) => ({ ...prev, [q._id]: savedAnswer }))
+                        }
+                        
+                        if (hasSections && !hasSectionWiseTiming && q.sectionId && selectedSectionId !== q.sectionId) {
+                          setSelectedSectionId(q.sectionId)
+                        }
+                        
+                        setCurrentQuestionIndex(globalIndex)
+                      }}
+                      className={boxClasses}
+                    >
+                      {globalIndex + 1}
+                      {isAnsweredAndMarked && (
+                        <FiCheck className="absolute top-0 right-0 w-3 h-3 text-green-300" strokeWidth={3} />
+                      )}
+                    </button>
+                  )
                   })}
                 </div>
-                {hasSectionWiseTiming && currentSectionId && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-900">
-                      <strong>Current Section:</strong> {testSet.sections?.find((s: any) => s.sectionId === currentSectionId)?.name || currentSectionId}
-                    </p>
-                    <p className="text-xs text-blue-700 mt-1">
-                      Showing {sectionQuestions.length} of {questions.length} questions
-                    </p>
-                  </div>
-                )}
-                {hasSections && !hasSectionWiseTiming && selectedSectionId && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm text-blue-900">
-                      <strong>Selected Section:</strong> {testSet.sections?.find((s: any) => s.sectionId === selectedSectionId)?.name || selectedSectionId}
-                    </p>
-                    <p className="text-xs text-blue-700 mt-1">
-                      Showing {sectionQuestions.length} of {questions.length} questions
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              </div>
+            )}
 
-            {/* Submit Section Button (only when section-wise timing is enabled and not last section) */}
-            {hasSectionWiseTiming && currentSectionId && !isLastSection && (
-              <Card className="mt-4">
-                <CardContent className="pt-6">
+            {/* Submit Button at Bottom */}
+            {isSidebarOpen && (
+              <div className="border-t px-4 py-3 flex-shrink-0">
+                {hasSectionWiseTiming && currentSectionId && !isLastSection ? (
                   <Button
                     variant="destructive"
                     onClick={handleSubmitSection}
@@ -2495,13 +2496,30 @@ export default function TestAttemptPage() {
                   >
                     {submitSectionMutation.isPending ? 'Submitting...' : 'Submit Section'}
                   </Button>
-                  <p className="text-xs text-gray-600 mt-2 text-center">
-                    Submit the current section to proceed to the next section
-                  </p>
-                </CardContent>
-              </Card>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={handleSubmitTest}
+                    className="w-full"
+                  >
+                    Submit Test
+                  </Button>
+                )}
+              </div>
             )}
           </div>
+
+          {/* Expand Button - Right Arrow (when closed) */}
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="absolute right-0 top-1/2 -translate-y-1/2 bg-white border border-r-0 border-gray-300 rounded-l-lg p-2 hover:bg-gray-50 transition-colors z-20 shadow-sm"
+              style={{ transform: 'translateY(-50%)' }}
+              aria-label="Expand sidebar"
+            >
+              <FiChevronsLeft className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
         </div>
       </div>
 
