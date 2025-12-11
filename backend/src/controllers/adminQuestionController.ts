@@ -702,5 +702,429 @@ export const adminQuestionController = {
       sendError(res, error.message, 400);
     }
   },
+
+  importPreview: async (req: Request, res: Response) => {
+    try {
+      const { setId } = req.params;
+      const file = req.file;
+      
+      if (!file) {
+        return sendError(res, 'Excel file is required', 400);
+      }
+
+      // Parse Excel file
+      const XLSX = require('xlsx');
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+      if (!data || data.length === 0) {
+        return sendError(res, 'Excel file is empty', 400);
+      }
+
+      // Get test set to validate sections
+      const testSet = await adminQuestionService.getTestSetForValidation(setId);
+      const availableSections = testSet?.sections || [];
+      const sectionMap = new Map(availableSections.map((s: any) => [s.name.toLowerCase(), s.sectionId]));
+
+      // Expected column names (case-insensitive matching)
+      const columnMap: { [key: string]: string } = {
+        'question order': 'questionOrder',
+        'section': 'section',
+        'direction text': 'direction',
+        'question text': 'questionText',
+        'conclusion text': 'conclusion',
+        '(a) option': 'optionA',
+        '(b) option': 'optionB',
+        '(c) option': 'optionC',
+        '(d) option': 'optionD',
+        '(e) option': 'optionE',
+        'right option': 'rightOption',
+        'marks': 'marks',
+        'average time': 'averageTime',
+        'explanation text': 'explanationText',
+        'explanation images': 'explanationImages',
+        'direction image': 'directionImage',
+        'question image': 'questionImage',
+        'conclusion image': 'conclusionImage',
+      };
+
+      // Normalize column names from first row
+      const firstRow = data[0] as any;
+      const normalizedColumns: { [key: string]: string } = {};
+      Object.keys(firstRow).forEach((key) => {
+        const normalized = key.toLowerCase().trim();
+        if (columnMap[normalized]) {
+          normalizedColumns[key] = columnMap[normalized];
+        }
+      });
+
+      const previewData: any[] = [];
+      const errors: string[] = [];
+
+      // Process each row
+      data.forEach((row: any, index: number) => {
+        const rowNum = index + 2; // +2 because index is 0-based and Excel rows start at 2 (after header)
+        const questionData: any = {
+          rowNumber: rowNum,
+          data: {},
+          errors: [],
+          warnings: [],
+        };
+
+        // Extract data using normalized columns
+        Object.keys(normalizedColumns).forEach((excelCol) => {
+          const fieldName = normalizedColumns[excelCol];
+          questionData.data[fieldName] = row[excelCol] || '';
+        });
+
+        const q = questionData.data;
+
+        // Validate required fields
+        if (!q.questionOrder || q.questionOrder.toString().trim() === '') {
+          questionData.errors.push('Question Order is required');
+        } else {
+          const order = parseInt(q.questionOrder);
+          if (isNaN(order) || order < 1) {
+            questionData.errors.push('Question Order must be a positive number');
+          } else {
+            q.questionOrder = order;
+          }
+        }
+
+        if (!q.questionText || q.questionText.toString().trim() === '') {
+          questionData.errors.push('Question Text is required');
+        }
+
+        // Validate options
+        const options = [
+          { key: 'optionA', label: 'A' },
+          { key: 'optionB', label: 'B' },
+          { key: 'optionC', label: 'C' },
+          { key: 'optionD', label: 'D' },
+        ];
+
+        const optionTexts: string[] = [];
+        options.forEach((opt) => {
+          if (!q[opt.key] || q[opt.key].toString().trim() === '') {
+            questionData.errors.push(`Option ${opt.label} is required`);
+          } else {
+            optionTexts.push(q[opt.key].toString().trim());
+          }
+        });
+
+        // Handle option E (optional) - check before validating right option
+        const hasOptionE = q.optionE && q.optionE.toString().trim() !== '';
+        if (hasOptionE) {
+          optionTexts.push(q.optionE.toString().trim());
+        }
+
+        // Validate right option
+        if (!q.rightOption || q.rightOption.toString().trim() === '') {
+          questionData.errors.push('Right Option is required');
+        } else {
+          const rightOpt = q.rightOption.toString().toUpperCase().trim();
+          if (!['A', 'B', 'C', 'D', 'E'].includes(rightOpt)) {
+            questionData.errors.push('Right Option must be A, B, C, D, or E');
+          } else if (rightOpt === 'E' && !hasOptionE) {
+            questionData.errors.push('Right Option is E but Option E is not provided');
+          } else {
+            q.rightOption = rightOpt;
+          }
+        }
+
+        // Validate section
+        if (availableSections.length > 0) {
+          if (!q.section || q.section.toString().trim() === '') {
+            questionData.errors.push('Section is required');
+          } else {
+            const sectionName = q.section.toString().trim();
+            const sectionId = sectionMap.get(sectionName.toLowerCase());
+            if (!sectionId) {
+              questionData.errors.push(`Section "${sectionName}" not found. Available sections: ${availableSections.map((s: any) => s.name).join(', ')}`);
+            } else {
+              q.sectionId = sectionId;
+              q.sectionName = sectionName;
+            }
+          }
+        } else if (q.section && q.section.toString().trim() !== '') {
+          questionData.warnings.push('Section provided but test set has no sections');
+        }
+
+        // Parse optional fields
+        if (q.marks) {
+          const marks = parseFloat(q.marks);
+          if (!isNaN(marks) && marks > 0) {
+            q.marks = marks;
+          } else {
+            q.marks = 1;
+            questionData.warnings.push('Invalid marks, defaulting to 1');
+          }
+        } else {
+          q.marks = 1;
+        }
+
+        if (q.averageTime) {
+          const avgTime = parseFloat(q.averageTime);
+          if (!isNaN(avgTime) && avgTime >= 0) {
+            q.averageTimeSeconds = avgTime;
+          } else {
+            q.averageTimeSeconds = 0;
+          }
+        } else {
+          q.averageTimeSeconds = 0;
+        }
+
+        // Build options array
+        const optionIds = ['A', 'B', 'C', 'D', 'E'];
+        q.options = optionTexts.map((text, idx) => ({
+          optionId: optionIds[idx],
+          text: text.trim(),
+        }));
+
+        // Set correct option ID
+        q.correctOptionId = q.rightOption;
+
+        // Handle images (can be base64, URL, or empty)
+        // Images will be processed during actual import
+        q.directionImage = q.directionImage || '';
+        q.questionImage = q.questionImage || '';
+        q.conclusionImage = q.conclusionImage || '';
+        q.explanationImages = q.explanationImages || '';
+
+        previewData.push(questionData);
+      });
+
+      sendSuccess(res, {
+        preview: previewData,
+        totalRows: data.length,
+        validRows: previewData.filter((q) => q.errors.length === 0).length,
+        invalidRows: previewData.filter((q) => q.errors.length > 0).length,
+      });
+    } catch (error: any) {
+      sendError(res, error.message || 'Error parsing Excel file', 400);
+    }
+  },
+
+  importCreate: async (req: Request, res: Response) => {
+    try {
+      const { setId } = req.params;
+      let questions = req.body.questions;
+
+      // Parse questions if it's a JSON string (from FormData)
+      if (typeof questions === 'string') {
+        try {
+          questions = JSON.parse(questions);
+        } catch (parseError) {
+          return sendError(res, 'Invalid questions JSON format', 400);
+        }
+      }
+
+      if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        return sendError(res, 'Questions array is required', 400);
+      }
+
+      // Get test set for validation
+      const testSet = await adminQuestionService.getTestSetForValidation(setId);
+      const availableSections = testSet?.sections || [];
+      const sectionMap = new Map(availableSections.map((s: any) => [s.name.toLowerCase(), s.sectionId]));
+
+      const files = (req.files as Express.Multer.File[]) || [];
+      const getFileByFieldname = (fieldname: string): Express.Multer.File | undefined => {
+        return files.find((f) => f.fieldname === fieldname);
+      };
+
+      const createdQuestions = [];
+      const errors: any[] = [];
+
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        try {
+          // Validate section
+          let sectionId: string | undefined;
+          if (availableSections.length > 0) {
+            if (!q.sectionId) {
+              throw new Error('Section ID is required');
+            }
+            sectionId = q.sectionId;
+          }
+
+          // Handle images - they come as files or base64/URL strings
+          let directionImageUrl: string | undefined;
+          let questionImageUrl: string | undefined;
+          let conclusionImageUrl: string | undefined;
+          let explanationImageUrls: string[] = [];
+
+          // Process direction image
+          const directionImageFile = getFileByFieldname(`directionImage_${i}`);
+          if (directionImageFile) {
+            const uploadResult = await uploadToCloudinary(
+              directionImageFile.buffer,
+              'questions',
+              `direction-${Date.now()}-${i}`
+            );
+            directionImageUrl = uploadResult.secure_url;
+          } else if (q.directionImage && q.directionImage.trim()) {
+            // Check if it's a URL or base64
+            if (q.directionImage.startsWith('http://') || q.directionImage.startsWith('https://')) {
+              if (q.directionImage.includes('cloudinary.com')) {
+                directionImageUrl = q.directionImage;
+              } else {
+                const uploadResult = await fetchAndUploadToCloudinary(
+                  q.directionImage,
+                  'questions',
+                  `direction-${Date.now()}-${i}`
+                );
+                directionImageUrl = uploadResult.secure_url;
+              }
+            } else if (q.directionImage.startsWith('data:image')) {
+              // Base64 image
+              const base64Data = q.directionImage.split(',')[1];
+              const imageBuffer = Buffer.from(base64Data, 'base64');
+              const uploadResult = await uploadToCloudinary(
+                imageBuffer,
+                'questions',
+                `direction-${Date.now()}-${i}`
+              );
+              directionImageUrl = uploadResult.secure_url;
+            }
+          }
+
+          // Process question image
+          const questionImageFile = getFileByFieldname(`questionImage_${i}`);
+          if (questionImageFile) {
+            const uploadResult = await uploadToCloudinary(
+              questionImageFile.buffer,
+              'questions',
+              `question-${Date.now()}-${i}`
+            );
+            questionImageUrl = uploadResult.secure_url;
+          } else if (q.questionImage && q.questionImage.trim()) {
+            if (q.questionImage.startsWith('http://') || q.questionImage.startsWith('https://')) {
+              if (q.questionImage.includes('cloudinary.com')) {
+                questionImageUrl = q.questionImage;
+              } else {
+                const uploadResult = await fetchAndUploadToCloudinary(
+                  q.questionImage,
+                  'questions',
+                  `question-${Date.now()}-${i}`
+                );
+                questionImageUrl = uploadResult.secure_url;
+              }
+            } else if (q.questionImage.startsWith('data:image')) {
+              const base64Data = q.questionImage.split(',')[1];
+              const imageBuffer = Buffer.from(base64Data, 'base64');
+              const uploadResult = await uploadToCloudinary(
+                imageBuffer,
+                'questions',
+                `question-${Date.now()}-${i}`
+              );
+              questionImageUrl = uploadResult.secure_url;
+            }
+          }
+
+          // Process conclusion image
+          const conclusionImageFile = getFileByFieldname(`conclusionImage_${i}`);
+          if (conclusionImageFile) {
+            const uploadResult = await uploadToCloudinary(
+              conclusionImageFile.buffer,
+              'questions',
+              `conclusion-${Date.now()}-${i}`
+            );
+            conclusionImageUrl = uploadResult.secure_url;
+          } else if (q.conclusionImage && q.conclusionImage.trim()) {
+            if (q.conclusionImage.startsWith('http://') || q.conclusionImage.startsWith('https://')) {
+              if (q.conclusionImage.includes('cloudinary.com')) {
+                conclusionImageUrl = q.conclusionImage;
+              } else {
+                const uploadResult = await fetchAndUploadToCloudinary(
+                  q.conclusionImage,
+                  'questions',
+                  `conclusion-${Date.now()}-${i}`
+                );
+                conclusionImageUrl = uploadResult.secure_url;
+              }
+            } else if (q.conclusionImage.startsWith('data:image')) {
+              const base64Data = q.conclusionImage.split(',')[1];
+              const imageBuffer = Buffer.from(base64Data, 'base64');
+              const uploadResult = await uploadToCloudinary(
+                imageBuffer,
+                'questions',
+                `conclusion-${Date.now()}-${i}`
+              );
+              conclusionImageUrl = uploadResult.secure_url;
+            }
+          }
+
+          // Process explanation images (can be multiple, comma-separated)
+          if (q.explanationImages && q.explanationImages.trim()) {
+            const imageSources = q.explanationImages.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+            for (const imgSource of imageSources) {
+              if (imgSource.startsWith('http://') || imgSource.startsWith('https://')) {
+                if (imgSource.includes('cloudinary.com')) {
+                  explanationImageUrls.push(imgSource);
+                } else {
+                  const uploadResult = await fetchAndUploadToCloudinary(
+                    imgSource,
+                    'questions',
+                    `explanation-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`
+                  );
+                  explanationImageUrls.push(uploadResult.secure_url);
+                }
+              } else if (imgSource.startsWith('data:image')) {
+                const base64Data = imgSource.split(',')[1];
+                const imageBuffer = Buffer.from(base64Data, 'base64');
+                const uploadResult = await uploadToCloudinary(
+                  imageBuffer,
+                  'questions',
+                  `explanation-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`
+                );
+                explanationImageUrls.push(uploadResult.secure_url);
+              }
+            }
+          }
+
+          // Create question data
+          const questionData: any = {
+            sectionId,
+            direction: q.direction || '',
+            directionImageUrl,
+            questionText: q.questionText,
+            questionFormattedText: q.questionText, // Use same as questionText for now
+            questionImageUrl,
+            conclusion: q.conclusion || '',
+            conclusionImageUrl,
+            options: q.options,
+            correctOptionId: q.correctOptionId,
+            marks: q.marks || 1,
+            averageTimeSeconds: q.averageTimeSeconds || 0,
+            explanationText: q.explanationText || '',
+            explanationFormattedText: q.explanationText || '',
+            explanationImageUrls: explanationImageUrls.length > 0 ? explanationImageUrls : undefined,
+            questionOrder: q.questionOrder,
+            isActive: true,
+          };
+
+          const created = await adminQuestionService.create(setId, questionData);
+          createdQuestions.push(created);
+        } catch (error: any) {
+          errors.push({
+            rowNumber: q.rowNumber || i + 1,
+            error: error.message,
+          });
+        }
+      }
+
+      sendSuccess(res, {
+        created: createdQuestions,
+        createdCount: createdQuestions.length,
+        errors,
+        errorCount: errors.length,
+      }, `${createdQuestions.length} questions created successfully${errors.length > 0 ? `, ${errors.length} failed` : ''}.`);
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
 };
 

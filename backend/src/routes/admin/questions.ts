@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { adminQuestionController } from '../../controllers/adminQuestionController';
 import { adminAuthMiddleware } from '../../middleware/auth';
-import { upload } from '../../middleware/upload';
+import { upload, uploadExcel } from '../../middleware/upload';
 
 const router = Router();
 
@@ -12,6 +12,8 @@ router.get('/:id', adminQuestionController.getById);
 // Use upload.any() to handle dynamic fields (questionImage, explanationImage, optionImage_0, optionImage_1, etc.)
 router.post('/sets/:setId/questions', upload.any(), adminQuestionController.create);
 router.post('/sets/:setId/questions/bulk', adminQuestionController.bulkCreate);
+router.post('/sets/:setId/questions/import/preview', uploadExcel.single('file'), adminQuestionController.importPreview);
+router.post('/sets/:setId/questions/import', upload.any(), adminQuestionController.importCreate);
 router.put('/:id', upload.any(), adminQuestionController.update);
 router.delete('/:id', adminQuestionController.delete);
 

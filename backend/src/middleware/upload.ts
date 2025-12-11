@@ -24,3 +24,11 @@ export const upload = multer({
   fileFilter,
 });
 
+// Excel file upload (no file type restriction for Excel files)
+const excelStorage = multer.memoryStorage();
+
+export const uploadExcel = multer({
+  storage: excelStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB for Excel files
+});
+

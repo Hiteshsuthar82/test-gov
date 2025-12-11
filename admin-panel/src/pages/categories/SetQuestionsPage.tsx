@@ -6,7 +6,8 @@ import { Button } from '../../components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { Loader } from '../../components/ui/loader'
 import { DeleteConfirmationDialog } from '../../components/ui/delete-confirmation-dialog'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Upload } from 'lucide-react'
+import { QuestionImportDialog } from '../../components/ui/question-import-dialog'
 
 export default function SetQuestionsPage() {
   const { id: setId } = useParams()
@@ -14,6 +15,7 @@ export default function SetQuestionsPage() {
   const queryClient = useQueryClient()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['questions', setId],
@@ -49,10 +51,16 @@ export default function SetQuestionsPage() {
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Questions</h1>
-        <Button onClick={() => navigate(`/sets/${setId}/questions/new`)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Question
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <Button onClick={() => navigate(`/sets/${setId}/questions/new`)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -110,6 +118,16 @@ export default function SetQuestionsPage() {
         title="Delete Question"
         itemName={itemToDelete?.name}
         isLoading={deleteMutation.isPending}
+      />
+
+      <QuestionImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        setId={setId || ''}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['questions', setId] })
+          setImportDialogOpen(false)
+        }}
       />
     </div>
   )
