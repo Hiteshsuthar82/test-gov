@@ -6,25 +6,36 @@ export interface IOption {
   imageUrl?: string;
 }
 
-export interface IQuestion extends Document {
-  testSetId: Types.ObjectId;
-  sectionId?: string;
+export interface ILanguageContent {
   direction?: string;
+  directionFormattedText?: string;
   directionImageUrl?: string;
   questionText: string;
   questionFormattedText?: string;
   questionImageUrl?: string;
   conclusion?: string;
+  conclusionFormattedText?: string;
   conclusionImageUrl?: string;
   options: IOption[];
+  explanationText?: string;
+  explanationFormattedText?: string;
+  explanationImageUrls?: string[];
+}
+
+export interface IQuestion extends Document {
+  testSetId: Types.ObjectId;
+  sectionId?: string;
+  // Multi-language support: en (required), hi (optional), gu (optional)
+  languages: {
+    en: ILanguageContent;
+    hi?: ILanguageContent;
+    gu?: ILanguageContent;
+  };
   correctOptionId: string;
   marks: number;
   averageTimeSeconds?: number; // Average time in seconds expected to solve this question
-  explanationText?: string;
-  explanationFormattedText?: string;
-  explanationImageUrl?: string; // Legacy field for backward compatibility
-  explanationImageUrls?: string[]; // New field for multiple images
   questionOrder: number;
+  tags?: string[]; // Tags array for questions
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -39,26 +50,43 @@ const OptionSchema = new Schema<IOption>(
   { _id: false }
 );
 
-const QuestionSchema = new Schema<IQuestion>(
+const LanguageContentSchema = new Schema<ILanguageContent>(
   {
-    testSetId: { type: Schema.Types.ObjectId, ref: 'TestSet', required: true },
-    sectionId: { type: String, required: false },
     direction: { type: String },
+    directionFormattedText: { type: String },
     directionImageUrl: { type: String },
     questionText: { type: String, required: true },
     questionFormattedText: { type: String },
     questionImageUrl: { type: String },
     conclusion: { type: String },
+    conclusionFormattedText: { type: String },
     conclusionImageUrl: { type: String },
     options: { type: [OptionSchema], required: true, minlength: 2 },
-    correctOptionId: { type: String, required: true },
-    marks: { type: Number, default: 1 },
-    averageTimeSeconds: { type: Number }, // Average time in seconds expected to solve this question
     explanationText: { type: String },
     explanationFormattedText: { type: String },
-    explanationImageUrl: { type: String }, // Legacy field for backward compatibility
-    explanationImageUrls: { type: [String], default: [] }, // New field for multiple images
+    explanationImageUrls: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
+const QuestionSchema = new Schema<IQuestion>(
+  {
+    testSetId: { type: Schema.Types.ObjectId, ref: 'TestSet', required: true },
+    sectionId: { type: String, required: false },
+    // Multi-language support
+    languages: {
+      type: {
+        en: { type: LanguageContentSchema, required: true },
+        hi: { type: LanguageContentSchema, required: false },
+        gu: { type: LanguageContentSchema, required: false },
+      },
+      required: true,
+    },
+    correctOptionId: { type: String, required: true },
+    marks: { type: Number, default: 1 },
+    averageTimeSeconds: { type: Number },
     questionOrder: { type: Number, required: true },
+    tags: { type: [String], default: [] },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

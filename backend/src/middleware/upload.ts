@@ -20,7 +20,11 @@ const maxSize = parseInt(process.env.MAX_FILE_SIZE || '5242880', 10); // 5MB def
 
 export const upload = multer({
   storage,
-  limits: { fileSize: maxSize },
+  limits: { 
+    fileSize: maxSize,
+    fieldSize: 50 * 1024 * 1024, // 50MB for field values (for large JSON payloads)
+    fields: 100, // Maximum number of non-file fields
+  },
   fileFilter,
 });
 

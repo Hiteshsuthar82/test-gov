@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
@@ -26,28 +26,33 @@ interface OptionWithFile extends Option {
   [key: string]: any // Allow additional fields for form handling
 }
 
-interface ExplanationImage {
-  file: File | null
-  url: string
-  id: string
-}
-
-interface QuestionFormData {
-  sectionId?: string
+interface LanguageContent {
   direction: string
+  directionFormattedText: string
   directionImageUrl: string
   questionText: string
   questionFormattedText: string
   questionImageUrl: string
   conclusion: string
+  conclusionFormattedText: string
   conclusionImageUrl: string
   options: OptionWithFile[]
-  correctOptionId: string
-  marks: number
-  averageTimeSeconds: number
   explanationText: string
   explanationFormattedText: string
   explanationImageUrls: string[]
+}
+
+interface QuestionFormData {
+  sectionId?: string
+  languages: {
+    en: LanguageContent
+    hi?: LanguageContent
+    gu?: LanguageContent
+  }
+  correctOptionId: string
+  marks: number
+  averageTimeSeconds: number
+  tags: string[]
   questionOrder: number
   isActive: boolean
 }
@@ -64,36 +69,52 @@ export default function QuestionFormPage() {
   const [questionImageUrl, setQuestionImageUrl] = useState<string>('')
   const [conclusionImageFile, setConclusionImageFile] = useState<File | null>(null)
   const [conclusionImageUrl, setConclusionImageUrl] = useState<string>('')
-  const [explanationImages, setExplanationImages] = useState<ExplanationImage[]>([])
   const [showWarningDialog, setShowWarningDialog] = useState(false)
   
   // Initialize form with default values
   const { register, control, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<QuestionFormData>({
     defaultValues: {
       sectionId: '',
-      direction: '',
-      directionImageUrl: '',
-      questionText: '',
-      questionFormattedText: '',
-      questionImageUrl: '',
-      conclusion: '',
-      conclusionImageUrl: '',
-      options: [],
+      languages: {
+        en: {
+          direction: '',
+          directionFormattedText: '',
+          directionImageUrl: '',
+          questionText: '',
+          questionFormattedText: '',
+          questionImageUrl: '',
+          conclusion: '',
+          conclusionFormattedText: '',
+          conclusionImageUrl: '',
+          options: [],
+          explanationText: '',
+          explanationFormattedText: '',
+          explanationImageUrls: [],
+        },
+      },
       correctOptionId: '',
       marks: 1,
       averageTimeSeconds: 0,
-      explanationText: '',
-      explanationFormattedText: '',
-      explanationImageUrls: [],
+      tags: [],
       questionOrder: 1,
       isActive: true,
     },
   })
 
-  // Use field arrays for dynamic fields
-  const { fields: optionFields, append: appendOption, remove: removeOption } = useFieldArray({
+  // Use field arrays for dynamic fields for each language
+  const { fields: enOptionFields, append: appendEnOption, remove: removeEnOption } = useFieldArray({
     control,
-    name: 'options',
+    name: 'languages.en.options',
+  })
+  
+  const { fields: hiOptionFields, append: appendHiOption, remove: removeHiOption } = useFieldArray({
+    control,
+    name: 'languages.hi.options',
+  })
+  
+  const { fields: guOptionFields, append: appendGuOption, remove: removeGuOption } = useFieldArray({
+    control,
+    name: 'languages.gu.options',
   })
 
   // Fetch question data for edit mode
@@ -125,64 +146,122 @@ export default function QuestionFormPage() {
   })
 
   // Watch form values
-  const watchedOptions = watch('options')
-  const watchedCorrectOptionId = watch('correctOptionId')
+  const watchedLanguages = watch('languages')
+  
+  // Get language data
+  const enOptions = watchedLanguages?.en?.options || []
+  const hiOptions = watchedLanguages?.hi?.options || []
+  const guOptions = watchedLanguages?.gu?.options || []
 
   // Initialize form data when question data is loaded (edit mode)
   useEffect(() => {
     if (questionData) {
-      // Handle backward compatibility: if explanationImageUrl exists, convert to array
-      const explanationUrls = questionData.explanationImageUrls || 
-        (questionData.explanationImageUrl ? [questionData.explanationImageUrl] : [])
+      const explanationUrls = questionData.explanationImageUrls || []
+      
+      // Extract languages data - ensure all languages have proper structure
+      const languages: any = {
+        en: questionData.languages?.en || {
+          direction: '',
+          directionFormattedText: '',
+          directionImageUrl: '',
+          questionText: '',
+          questionFormattedText: '',
+          questionImageUrl: '',
+          conclusion: '',
+          conclusionFormattedText: '',
+          conclusionImageUrl: '',
+          options: [],
+          explanationText: '',
+          explanationFormattedText: '',
+          explanationImageUrls: [],
+        },
+      }
+      
+      // Migrate old explanation data to English if exists
+      if (questionData.explanationText || questionData.explanationFormattedText || questionData.explanationImageUrls) {
+        if (!languages.en.explanationText && questionData.explanationText) {
+          languages.en.explanationText = questionData.explanationText
+        }
+        if (!languages.en.explanationFormattedText && questionData.explanationFormattedText) {
+          languages.en.explanationFormattedText = questionData.explanationFormattedText
+        }
+        if (!languages.en.explanationImageUrls && questionData.explanationImageUrls) {
+          languages.en.explanationImageUrls = questionData.explanationImageUrls
+        }
+      }
+      
+      // Add Hindi if exists
+      if (questionData.languages?.hi) {
+        languages.hi = questionData.languages.hi
+      }
+      
+      // Add Gujarati if exists
+      if (questionData.languages?.gu) {
+        languages.gu = questionData.languages.gu
+      }
+      
+      // Ensure all languages have the same number of options as English
+      const enOptionsCount = languages.en?.options?.length || 0
+      const optionIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+      
+      // Sync Hindi options
+      if (languages.hi) {
+        const hiOptionsCount = languages.hi.options?.length || 0
+        if (hiOptionsCount < enOptionsCount) {
+          // Add missing options
+          for (let i = hiOptionsCount; i < enOptionsCount; i++) {
+            languages.hi.options.push({ optionId: optionIds[i] || String.fromCharCode(65 + i), text: '' })
+          }
+        } else if (hiOptionsCount > enOptionsCount) {
+          // Remove extra options
+          languages.hi.options = languages.hi.options.slice(0, enOptionsCount)
+        }
+        // Ensure optionIds match
+        languages.hi.options.forEach((opt: any, idx: number) => {
+          opt.optionId = optionIds[idx] || String.fromCharCode(65 + idx)
+        })
+      }
+      
+      // Sync Gujarati options
+      if (languages.gu) {
+        const guOptionsCount = languages.gu.options?.length || 0
+        if (guOptionsCount < enOptionsCount) {
+          // Add missing options
+          for (let i = guOptionsCount; i < enOptionsCount; i++) {
+            languages.gu.options.push({ optionId: optionIds[i] || String.fromCharCode(65 + i), text: '' })
+          }
+        } else if (guOptionsCount > enOptionsCount) {
+          // Remove extra options
+          languages.gu.options = languages.gu.options.slice(0, enOptionsCount)
+        }
+        // Ensure optionIds match
+        languages.gu.options.forEach((opt: any, idx: number) => {
+          opt.optionId = optionIds[idx] || String.fromCharCode(65 + idx)
+        })
+      }
       
       // Reset form with question data
       reset({
         sectionId: questionData.sectionId || '',
-        direction: questionData.direction || '',
-        directionImageUrl: questionData.directionImageUrl || '',
-        questionText: questionData.questionText || '',
-        // Use questionFormattedText if it exists (even if empty), otherwise fall back to questionText
-        questionFormattedText: questionData.questionFormattedText !== undefined && questionData.questionFormattedText !== null
-          ? questionData.questionFormattedText
-          : (questionData.questionText || ''),
-        questionImageUrl: questionData.questionImageUrl || '',
-        conclusion: questionData.conclusion || '',
-        conclusionImageUrl: questionData.conclusionImageUrl || '',
-        options: questionData.options || [],
+        languages,
         correctOptionId: questionData.correctOptionId || '',
         marks: questionData.marks || 1,
         averageTimeSeconds: questionData.averageTimeSeconds !== undefined ? questionData.averageTimeSeconds : 0,
-        explanationText: questionData.explanationText || '',
-        // Use explanationFormattedText if it exists (even if empty), otherwise fall back to explanationText
-        explanationFormattedText: questionData.explanationFormattedText !== undefined && questionData.explanationFormattedText !== null
-          ? questionData.explanationFormattedText
-          : (questionData.explanationText || ''),
-        explanationImageUrls: explanationUrls,
+        tags: questionData.tags || [],
         questionOrder: questionData.questionOrder || 1,
         isActive: questionData.isActive ?? true,
       })
       
-      // Set image URL states for display
-      setDirectionImageUrl(questionData.directionImageUrl || '')
-      setQuestionImageUrl(questionData.questionImageUrl || '')
-      setConclusionImageUrl(questionData.conclusionImageUrl || '')
-      
-      // Initialize explanation images state
-      setExplanationImages(explanationUrls.map((url: string, index: number) => ({
-        file: null,
-        url: url || '',
-        id: `existing-${index}`
-      })))
     }
   }, [questionData, reset])
 
   // Initialize default options for new questions
   useEffect(() => {
     if (!id) {
-      const currentOptions = watch('options')
+      const enOptions = watch('languages.en.options')
       
       // Only set defaults if form is still empty (new question)
-      if (currentOptions.length === 0) {
+      if (!enOptions || enOptions.length === 0) {
         // Set sectionId only if sections exist
         if (setData?.sections && setData.sections.length > 0) {
           const currentSectionId = watch('sectionId')
@@ -190,13 +269,69 @@ export default function QuestionFormPage() {
             setValue('sectionId', setData.sections[0].sectionId)
           }
         }
-        appendOption({ optionId: 'A', text: '' })
-        appendOption({ optionId: 'B', text: '' })
-        appendOption({ optionId: 'C', text: '' })
-        appendOption({ optionId: 'D', text: '' })
+        appendEnOption({ optionId: 'A', text: '' })
+        appendEnOption({ optionId: 'B', text: '' })
+        appendEnOption({ optionId: 'C', text: '' })
+        appendEnOption({ optionId: 'D', text: '' })
+        appendEnOption({ optionId: 'E', text: '' })
       }
     }
-  }, [setData, id, watch, setValue, appendOption])
+  }, [setData, id, watch, setValue, appendEnOption])
+
+  // Sync options across all languages when English options change
+  const syncOptionsToAllLanguages = useCallback((enOptionsCount: number) => {
+    const optionIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+    
+    // Sync Hindi options
+    const currentHiOptions = watch('languages.hi.options') || []
+    const hiOptionsCount = currentHiOptions.length
+    
+    if (hiOptionsCount < enOptionsCount) {
+      // Add missing options
+      for (let i = hiOptionsCount; i < enOptionsCount; i++) {
+        appendHiOption({ optionId: optionIds[i] || String.fromCharCode(65 + i), text: '' })
+      }
+    } else if (hiOptionsCount > enOptionsCount) {
+      // Remove extra options
+      for (let i = hiOptionsCount - 1; i >= enOptionsCount; i--) {
+        removeHiOption(i)
+      }
+    }
+    
+    // Sync Gujarati options
+    const currentGuOptions = watch('languages.gu.options') || []
+    const guOptionsCount = currentGuOptions.length
+    
+    if (guOptionsCount < enOptionsCount) {
+      // Add missing options
+      for (let i = guOptionsCount; i < enOptionsCount; i++) {
+        appendGuOption({ optionId: optionIds[i] || String.fromCharCode(65 + i), text: '' })
+      }
+    } else if (guOptionsCount > enOptionsCount) {
+      // Remove extra options
+      for (let i = guOptionsCount - 1; i >= enOptionsCount; i--) {
+        removeGuOption(i)
+      }
+    }
+    
+    // Ensure optionIds match English
+    for (let i = 0; i < enOptionsCount; i++) {
+      const optionId = optionIds[i] || String.fromCharCode(65 + i)
+      if (currentHiOptions[i]?.optionId !== optionId) {
+        setValue(`languages.hi.options.${i}.optionId`, optionId)
+      }
+      if (currentGuOptions[i]?.optionId !== optionId) {
+        setValue(`languages.gu.options.${i}.optionId`, optionId)
+      }
+    }
+  }, [watch, setValue, appendHiOption, removeHiOption, appendGuOption, removeGuOption])
+
+  // Sync options across all languages when English options change
+  useEffect(() => {
+    if (enOptions.length > 0) {
+      syncOptionsToAllLanguages(enOptions.length)
+    }
+  }, [enOptions.length, syncOptionsToAllLanguages])
 
   const mutation = useMutation({
     mutationFn: async (formDataToSend: FormData) => {
@@ -231,122 +366,159 @@ export default function QuestionFormPage() {
       return
     }
 
+    // Validate that English language content exists
+    if (!data.languages?.en || !data.languages.en.questionText || !data.languages.en.options || data.languages.en.options.length < 2) {
+      alert('English language content is required with question text and at least 2 options')
+      return
+    }
+
     const formDataToSend = new FormData()
+    
     // Only append sectionId if sections exist
     if (setData?.sections && setData.sections.length > 0 && data.sectionId) {
       formDataToSend.append('sectionId', data.sectionId)
     }
-    formDataToSend.append('direction', data.direction || '')
-    formDataToSend.append('questionText', data.questionText)
-    formDataToSend.append('questionFormattedText', data.questionFormattedText || '')
-    formDataToSend.append('conclusion', data.conclusion || '')
+    
+    // Process languages and build languages object
+    const languagesData: any = {
+      en: {
+        direction: data.languages.en.direction || '',
+        directionFormattedText: data.languages.en.directionFormattedText || '',
+        questionText: data.languages.en.questionText,
+        questionFormattedText: data.languages.en.questionFormattedText || '',
+        conclusion: data.languages.en.conclusion || '',
+        conclusionFormattedText: data.languages.en.conclusionFormattedText || '',
+        options: data.languages.en.options.map((opt) => ({
+          optionId: opt.optionId,
+          text: opt.text,
+          imageUrl: opt.imageUrl || opt.imageUrlInput || undefined,
+        })),
+        explanationText: data.languages.en.explanationText || '',
+        explanationFormattedText: data.languages.en.explanationFormattedText || '',
+        explanationImageUrls: (data.languages.en.explanationImageUrls || []).filter((url: string) => url && url.trim()),
+      },
+    }
+    
+    // Add Hindi if provided
+    if (data.languages.hi && data.languages.hi.questionText) {
+      languagesData.hi = {
+        direction: data.languages.hi.direction || '',
+        directionFormattedText: data.languages.hi.directionFormattedText || '',
+        questionText: data.languages.hi.questionText,
+        questionFormattedText: data.languages.hi.questionFormattedText || '',
+        conclusion: data.languages.hi.conclusion || '',
+        conclusionFormattedText: data.languages.hi.conclusionFormattedText || '',
+        options: data.languages.hi.options.map((opt) => ({
+          optionId: opt.optionId,
+          text: opt.text,
+          imageUrl: opt.imageUrl || opt.imageUrlInput || undefined,
+        })),
+        explanationText: data.languages.hi.explanationText || '',
+        explanationFormattedText: data.languages.hi.explanationFormattedText || '',
+        explanationImageUrls: (data.languages.hi.explanationImageUrls || []).filter((url: string) => url && url.trim()),
+      }
+    }
+    
+    // Add Gujarati if provided
+    if (data.languages.gu && data.languages.gu.questionText) {
+      languagesData.gu = {
+        direction: data.languages.gu.direction || '',
+        directionFormattedText: data.languages.gu.directionFormattedText || '',
+        questionText: data.languages.gu.questionText,
+        questionFormattedText: data.languages.gu.questionFormattedText || '',
+        conclusion: data.languages.gu.conclusion || '',
+        conclusionFormattedText: data.languages.gu.conclusionFormattedText || '',
+        options: data.languages.gu.options.map((opt) => ({
+          optionId: opt.optionId,
+          text: opt.text,
+          imageUrl: opt.imageUrl || opt.imageUrlInput || undefined,
+        })),
+        explanationText: data.languages.gu.explanationText || '',
+        explanationFormattedText: data.languages.gu.explanationFormattedText || '',
+        explanationImageUrls: (data.languages.gu.explanationImageUrls || []).filter((url: string) => url && url.trim()),
+      }
+    }
+    
+    // Send languages as JSON
+    formDataToSend.append('languages', JSON.stringify(languagesData))
+    
+    // Handle images for each language
+    const processLanguageImages = (lang: 'en' | 'hi' | 'gu', langData: LanguageContent) => {
+      const prefix = `languages.${lang}`
+      
+      // Direction image
+      if (langData.directionImageUrl) {
+        formDataToSend.append(`${prefix}.directionImageUrl`, langData.directionImageUrl)
+      }
+      
+      // Question image
+      if (langData.questionImageUrl) {
+        formDataToSend.append(`${prefix}.questionImageUrl`, langData.questionImageUrl)
+      }
+      
+      // Conclusion image
+      if (langData.conclusionImageUrl) {
+        formDataToSend.append(`${prefix}.conclusionImageUrl`, langData.conclusionImageUrl)
+      }
+      
+      // Option images
+      langData.options.forEach((opt, index) => {
+        if (opt.imageFile) {
+          formDataToSend.append(`${prefix}.optionImage_${index}`, opt.imageFile)
+        }
+      })
+      
+      // Explanation images
+      if (langData.explanationImageUrls && langData.explanationImageUrls.length > 0) {
+        formDataToSend.append(`${prefix}.explanationImageUrls`, JSON.stringify(langData.explanationImageUrls))
+      }
+    }
+    
+    processLanguageImages('en', data.languages.en)
+    if (data.languages.hi) processLanguageImages('hi', data.languages.hi)
+    if (data.languages.gu) processLanguageImages('gu', data.languages.gu)
+    
     formDataToSend.append('correctOptionId', data.correctOptionId)
     formDataToSend.append('marks', data.marks.toString())
     formDataToSend.append('averageTimeSeconds', data.averageTimeSeconds.toString())
-    formDataToSend.append('explanationText', data.explanationText || '')
-    formDataToSend.append('explanationFormattedText', data.explanationFormattedText || '')
+    formDataToSend.append('tags', JSON.stringify(data.tags || []))
     formDataToSend.append('questionOrder', data.questionOrder.toString())
     formDataToSend.append('isActive', data.isActive.toString())
-    
-    // Direction image - Priority: new file > new URL > existing URL
-    if (directionImageFile) {
-      formDataToSend.append('directionImage', directionImageFile)
-    } else if (directionImageUrl) {
-      formDataToSend.append('directionImageUrl', directionImageUrl)
-    } else if (id && data.directionImageUrl && !directionImageFile && !directionImageUrl) {
-      formDataToSend.append('directionImageUrl', data.directionImageUrl)
-    }
-    
-    // Question image - Priority: new file > new URL > existing URL
-    if (questionImageFile) {
-      formDataToSend.append('questionImage', questionImageFile)
-    } else if (questionImageUrl) {
-      formDataToSend.append('questionImageUrl', questionImageUrl)
-    } else if (id && data.questionImageUrl && !questionImageFile && !questionImageUrl) {
-      formDataToSend.append('questionImageUrl', data.questionImageUrl)
-    }
-    
-    // Conclusion image - Priority: new file > new URL > existing URL
-    if (conclusionImageFile) {
-      formDataToSend.append('conclusionImage', conclusionImageFile)
-    } else if (conclusionImageUrl) {
-      formDataToSend.append('conclusionImageUrl', conclusionImageUrl)
-    } else if (id && data.conclusionImageUrl && !conclusionImageFile && !conclusionImageUrl) {
-      formDataToSend.append('conclusionImageUrl', data.conclusionImageUrl)
-    }
-    
-    // Explanation images (multiple)
-    const explanationImageUrls: string[] = []
-    let fileIndex = 0
-    
-    explanationImages.forEach((img) => {
-      if (img.file) {
-        formDataToSend.append(`explanationImage_${fileIndex}`, img.file)
-        fileIndex++
-      } else if (img.url && img.url.trim()) {
-        explanationImageUrls.push(img.url)
-      }
-    })
-    
-    // Send explanation image URLs as JSON array
-    if (explanationImageUrls.length > 0) {
-      formDataToSend.append('explanationImageUrls', JSON.stringify(explanationImageUrls))
-    } else if (id && explanationImages.length === 0 && data.explanationImageUrls.length > 0) {
-      // Update mode: keep existing images if no changes
-      formDataToSend.append('explanationImageUrls', JSON.stringify(data.explanationImageUrls))
-    } else if (id && explanationImages.length === 0 && fileIndex === 0) {
-      // Update mode: explicitly clear if empty
-      formDataToSend.append('explanationImageUrls', JSON.stringify([]))
-    }
-    
-    // Options
-    const optionsData = data.options.map((opt) => {
-      const optionData: any = {
-        optionId: opt.optionId,
-        text: opt.text,
-      }
-      
-      // Handle option images - Priority: new file > new URL input > existing URL
-      if (opt.imageFile) {
-        // File will be sent separately
-      } else if (opt.imageUrlInput) {
-        optionData.imageUrl = opt.imageUrlInput
-      } else if (opt.imageUrl && !opt.imageFile && !opt.imageUrlInput) {
-        optionData.imageUrl = opt.imageUrl
-      }
-      
-      return optionData
-    })
-    
-    formDataToSend.append('options', JSON.stringify(optionsData))
-    
-    // Append option image files
-    data.options.forEach((opt, index) => {
-      if (opt.imageFile) {
-        formDataToSend.append(`optionImage_${index}`, opt.imageFile)
-      }
-    })
 
     mutation.mutate(formDataToSend)
   }
 
-  const addExplanationImage = () => {
-    setExplanationImages([...explanationImages, { file: null, url: '', id: `new-${Date.now()}` }])
+  const addEnOption = () => {
+    const newOptionId = String.fromCharCode(65 + enOptions.length)
+    appendEnOption({ optionId: newOptionId, text: '' })
+    // Sync to other languages
+    syncOptionsToAllLanguages(enOptions.length + 1)
   }
-
-  const removeExplanationImage = (imgId: string) => {
-    setExplanationImages(explanationImages.filter(img => img.id !== imgId))
+  
+  const handleRemoveEnOption = (index: number) => {
+    if (enOptions.length > 2) {
+      removeEnOption(index)
+      // Sync to other languages
+      syncOptionsToAllLanguages(enOptions.length - 1)
+    }
   }
-
-  const updateExplanationImage = (imgId: string, file: File | null, url: string) => {
-    setExplanationImages(explanationImages.map(img => 
-      img.id === imgId ? { ...img, file, url } : img
-    ))
-  }
-
-  const addOption = () => {
-    const newOptionId = String.fromCharCode(65 + optionFields.length)
-    appendOption({ optionId: newOptionId, text: '' })
+  
+  // Helper to ensure language exists
+  const ensureLanguage = (lang: 'hi' | 'gu') => {
+    if (!watchedLanguages?.[lang]) {
+      setValue(`languages.${lang}`, {
+        direction: '',
+        directionFormattedText: '',
+        directionImageUrl: '',
+        questionText: '',
+        questionFormattedText: '',
+        questionImageUrl: '',
+        conclusion: '',
+        conclusionFormattedText: '',
+        conclusionImageUrl: '',
+        options: [],
+      })
+    }
   }
 
   return (
@@ -418,227 +590,384 @@ export default function QuestionFormPage() {
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="direction">Direction</Label>
-              <Textarea
-                id="direction"
-                {...register('direction')}
-                rows={3}
-                placeholder="Enter direction text (appears before question text)"
-              />
-            </div>
-
-            <div>
-              <Controller
-                name="directionImageUrl"
-                control={control}
-                render={({ field }) => (
-                  <ImageUpload
-                    value={field.value}
-                    onChange={(file, url) => {
-                      if (file) {
-                        setDirectionImageFile(file)
-                        setDirectionImageUrl('')
-                        field.onChange('')
-                      } else if (url) {
-                        setDirectionImageUrl(url)
-                        setDirectionImageFile(null)
-                        field.onChange(url)
-                      } else {
-                        setDirectionImageFile(null)
-                        setDirectionImageUrl('')
-                        field.onChange('')
-                      }
-                    }}
-                    label="Direction Image"
-                    folder="questions"
-                  />
-                )}
-              />
-            </div>
-
-            <div>
-              <Controller
-                name="questionFormattedText"
-                control={control}
-                render={({ field }) => {
-                  // Use formatted text if it exists (even if empty string), otherwise fall back to plain text
-                  // This ensures formatted text is always shown when available
-                  const formattedValue = field.value
-                  const plainValue = watch('questionText')
-                  // If formattedValue is explicitly set (not undefined/null), use it
-                  // Otherwise, use plain text as fallback
-                  const editorValue = formattedValue !== undefined && formattedValue !== null
-                    ? formattedValue 
-                    : (plainValue || '')
+            {/* Helper function to render language fields */}
+            {(['en', 'hi', 'gu'] as const).map((lang) => {
+              const isEnglish = lang === 'en'
+              const langLabel = lang === 'en' ? 'English *' : lang === 'hi' ? 'Hindi (Optional)' : 'Gujarati (Optional)'
+              // All languages use English options count
+              const optionFields = enOptionFields
+              const langOptions = lang === 'en' ? enOptions : lang === 'hi' ? hiOptions : guOptions
+              const addOptionFn = isEnglish ? addEnOption : () => {}
+              const removeOptionFn = isEnglish ? handleRemoveEnOption : () => {}
+              
+              // Ensure language exists if it's optional
+              if (!isEnglish && !watchedLanguages?.[lang]) {
+                ensureLanguage(lang)
+              }
+              
+              return (
+                <div key={lang} className={`space-y-4 ${!isEnglish ? 'border-t-2 border-gray-200 pt-6 mt-6' : 'border-b-2 border-blue-200 pb-6 mb-6'}`}>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">{langLabel}</h2>
                   
-                  return (
-                    <RichTextEditor
-                      value={editorValue}
-                      onChange={(plainText, formattedText) => {
-                        setValue('questionText', plainText, { shouldValidate: true })
-                        field.onChange(formattedText)
+                  {/* Direction */}
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.directionFormattedText`}
+                      control={control}
+                      render={({ field }) => {
+                        const currentLangData = watch(`languages.${lang}`)
+                        const formattedValue = field.value || currentLangData?.directionFormattedText
+                        const plainValue = watch(`languages.${lang}.direction`) || currentLangData?.direction
+                        const editorValue = formattedValue !== undefined && formattedValue !== null && formattedValue !== ''
+                          ? formattedValue 
+                          : (plainValue || '')
+                        
+                        return (
+                          <RichTextEditor
+                            value={editorValue}
+                            onChange={(plainText, formattedText) => {
+                              setValue(`languages.${lang}.direction`, plainText)
+                              field.onChange(formattedText)
+                            }}
+                            label="Direction"
+                            placeholder="Enter direction text (appears before question text)..."
+                          />
+                        )
                       }}
-                      label="Question Text *"
-                      placeholder="Enter question text with formatting..."
-                      required
                     />
-                  )
-                }}
-              />
-              {errors.questionText && (
-                <p className="text-sm text-red-500 mt-1">{errors.questionText.message}</p>
-              )}
-            </div>
+                  </div>
 
-            <div>
-              <Controller
-                name="questionImageUrl"
-                control={control}
-                render={({ field }) => (
-                  <ImageUpload
-                    value={field.value}
-                    onChange={(file, url) => {
-                      if (file) {
-                        setQuestionImageFile(file)
-                        setQuestionImageUrl('')
-                        field.onChange('')
-                      } else if (url) {
-                        setQuestionImageUrl(url)
-                        setQuestionImageFile(null)
-                        field.onChange(url)
-                      } else {
-                        setQuestionImageFile(null)
-                        setQuestionImageUrl('')
-                        field.onChange('')
-                      }
-                    }}
-                    label="Question Image"
-                    folder="questions"
-                  />
-                )}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="conclusion">Conclusion</Label>
-              <Textarea
-                id="conclusion"
-                {...register('conclusion')}
-                rows={3}
-                placeholder="Enter conclusion text (appears after question text)"
-              />
-            </div>
-
-            <div>
-              <Controller
-                name="conclusionImageUrl"
-                control={control}
-                render={({ field }) => (
-                  <ImageUpload
-                    value={field.value}
-                    onChange={(file, url) => {
-                      if (file) {
-                        setConclusionImageFile(file)
-                        setConclusionImageUrl('')
-                        field.onChange('')
-                      } else if (url) {
-                        setConclusionImageUrl(url)
-                        setConclusionImageFile(null)
-                        field.onChange(url)
-                      } else {
-                        setConclusionImageFile(null)
-                        setConclusionImageUrl('')
-                        field.onChange('')
-                      }
-                    }}
-                    label="Conclusion Image"
-                    folder="questions"
-                  />
-                )}
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <Label>Options *</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addOption}>
-                  Add Option
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {optionFields.map((field, index) => {
-                  const option = watchedOptions[index]
-                  return (
-                    <div key={field.id} className="flex gap-2 items-center border p-2 rounded">
-                      <input
-                        type="radio"
-                        name="correctOption"
-                        checked={watchedCorrectOptionId === option?.optionId}
-                        onChange={() => setValue('correctOptionId', option?.optionId || '')}
-                        className="w-4 h-4"
-                      />
-                      <span className="font-medium w-8">{option?.optionId}</span>
-                      <input
-                        type="hidden"
-                        {...register(`options.${index}.optionId` as const)}
-                      />
-                      <Input
-                        placeholder="Option text"
-                        {...register(`options.${index}.text` as const, { 
-                          required: 'Option text is required' 
-                        })}
-                        className="flex-1"
-                      />
-                      <div className="flex-1">
-                        <Controller
-                          name={`options.${index}.imageUrl` as const}
-                          control={control}
-                          render={({ field: optionField }) => {
-                            const currentOption = watch(`options.${index}`)
-                            return (
-                              <ImageUpload
-                                value={option?.imageUrl || (currentOption as any)?.imageUrlInput || optionField.value || ''}
-                                onChange={(file, url) => {
-                                  if (file) {
-                                    setValue(`options.${index}.imageFile` as any, file, { shouldValidate: false })
-                                    setValue(`options.${index}.imageUrlInput` as any, '', { shouldValidate: false })
-                                    optionField.onChange('')
-                                  } else if (url) {
-                                    setValue(`options.${index}.imageUrlInput` as any, url, { shouldValidate: false })
-                                    setValue(`options.${index}.imageFile` as any, null, { shouldValidate: false })
-                                    optionField.onChange(url)
-                                  } else {
-                                    setValue(`options.${index}.imageFile` as any, null, { shouldValidate: false })
-                                    setValue(`options.${index}.imageUrlInput` as any, '', { shouldValidate: false })
-                                    optionField.onChange('')
-                                  }
-                                }}
-                                label=""
-                                folder="questions/options"
-                                className="mb-0"
-                              />
-                            )
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.directionImageUrl`}
+                      control={control}
+                      render={({ field }) => (
+                        <ImageUpload
+                          value={field.value || ''}
+                          onChange={(file, url) => {
+                            field.onChange(url || '')
                           }}
+                          label="Direction Image"
+                          folder="questions"
                         />
-                      </div>
-                      {optionFields.length > 2 && (
-                        <Button 
-                          type="button" 
-                          variant="destructive" 
-                          size="sm" 
-                          onClick={() => removeOption(index)}
-                        >
-                          Remove
+                      )}
+                    />
+                  </div>
+
+                  {/* Question Text */}
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.questionFormattedText`}
+                      control={control}
+                      render={({ field }) => {
+                        const currentLangData = watch(`languages.${lang}`)
+                        const formattedValue = field.value || currentLangData?.questionFormattedText
+                        const plainValue = watch(`languages.${lang}.questionText`) || currentLangData?.questionText
+                        const editorValue = formattedValue !== undefined && formattedValue !== null && formattedValue !== ''
+                          ? formattedValue 
+                          : (plainValue || '')
+                        
+                        return (
+                          <RichTextEditor
+                            value={editorValue}
+                            onChange={(plainText, formattedText) => {
+                              setValue(`languages.${lang}.questionText`, plainText, { shouldValidate: isEnglish })
+                              field.onChange(formattedText)
+                            }}
+                            label={isEnglish ? 'Question Text *' : 'Question Text'}
+                            placeholder="Enter question text with formatting..."
+                            required={isEnglish}
+                          />
+                        )
+                      }}
+                    />
+                    {isEnglish && errors.languages?.en?.questionText && (
+                      <p className="text-sm text-red-500 mt-1">{errors.languages.en.questionText.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.questionImageUrl`}
+                      control={control}
+                      render={({ field }) => (
+                        <ImageUpload
+                          value={field.value || ''}
+                          onChange={(file, url) => {
+                            field.onChange(url || '')
+                          }}
+                          label="Question Image"
+                          folder="questions"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  {/* Conclusion */}
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.conclusionFormattedText`}
+                      control={control}
+                      render={({ field }) => {
+                        const currentLangData = watch(`languages.${lang}`)
+                        const formattedValue = field.value || currentLangData?.conclusionFormattedText
+                        const plainValue = watch(`languages.${lang}.conclusion`) || currentLangData?.conclusion
+                        const editorValue = formattedValue !== undefined && formattedValue !== null && formattedValue !== ''
+                          ? formattedValue 
+                          : (plainValue || '')
+                        
+                        return (
+                          <RichTextEditor
+                            value={editorValue}
+                            onChange={(plainText, formattedText) => {
+                              setValue(`languages.${lang}.conclusion`, plainText)
+                              field.onChange(formattedText)
+                            }}
+                            label="Conclusion"
+                            placeholder="Enter conclusion text (appears after question text)..."
+                          />
+                        )
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.conclusionImageUrl`}
+                      control={control}
+                      render={({ field }) => (
+                        <ImageUpload
+                          value={field.value || ''}
+                          onChange={(file, url) => {
+                            field.onChange(url || '')
+                          }}
+                          label="Conclusion Image"
+                          folder="questions"
+                        />
+                      )}
+                    />
+                  </div>
+
+                  {/* Options */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <Label>{isEnglish ? 'Options *' : 'Options'}</Label>
+                      {isEnglish && (
+                        <Button type="button" variant="outline" size="sm" onClick={addOptionFn}>
+                          Add Option
                         </Button>
                       )}
                     </div>
+                    <div className="space-y-2">
+                      {optionFields.map((field, index) => {
+                        // All languages use English options count - get language-specific option data
+                        const langOptions = lang === 'en' ? enOptions : lang === 'hi' ? hiOptions : guOptions
+                        const watchedOption = watch(`languages.${lang}.options.${index}`)
+                        const option = watchedOption || langOptions[index] || { optionId: String.fromCharCode(65 + index), text: '' }
+                        // Use English optionId to ensure consistency
+                        const enOptionId = enOptions[index]?.optionId || String.fromCharCode(65 + index)
+                        const optionId = isEnglish ? (option?.optionId || enOptionId) : enOptionId
+                        
+                        // Ensure optionId matches English for all languages
+                        if (!watchedOption?.optionId || watchedOption.optionId !== enOptionId) {
+                          setValue(`languages.${lang}.options.${index}.optionId`, enOptionId, { shouldValidate: false })
+                        }
+                        
+                        return (
+                          <div key={field.id} className="flex gap-2 items-center border p-2 rounded">
+                            <span className="font-medium w-8">{optionId}</span>
+                            <input
+                              type="hidden"
+                              {...register(`languages.${lang}.options.${index}.optionId` as const)}
+                            />
+                            <Input
+                              placeholder="Option text"
+                              {...register(`languages.${lang}.options.${index}.text` as const, { 
+                                required: isEnglish ? 'Option text is required' : false
+                              })}
+                              className="flex-1"
+                            />
+                            <div className="flex-1">
+                              <Controller
+                                name={`languages.${lang}.options.${index}.imageUrl` as const}
+                                control={control}
+                                render={({ field: optionField }) => {
+                                  return (
+                                    <ImageUpload
+                                      value={option?.imageUrl || optionField.value || ''}
+                                      onChange={(file, url) => {
+                                        if (file) {
+                                          setValue(`languages.${lang}.options.${index}.imageFile` as any, file, { shouldValidate: false })
+                                          optionField.onChange('')
+                                        } else if (url) {
+                                          setValue(`languages.${lang}.options.${index}.imageUrlInput` as any, url, { shouldValidate: false })
+                                          optionField.onChange(url)
+                                        } else {
+                                          setValue(`languages.${lang}.options.${index}.imageFile` as any, null, { shouldValidate: false })
+                                          setValue(`languages.${lang}.options.${index}.imageUrlInput` as any, '', { shouldValidate: false })
+                                          optionField.onChange('')
+                                        }
+                                      }}
+                                      label=""
+                                      folder="questions/options"
+                                      className="mb-0"
+                                    />
+                                  )
+                                }}
+                              />
+                            </div>
+                            {isEnglish && optionFields.length > 2 && (
+                              <Button 
+                                type="button" 
+                                variant="destructive" 
+                                size="sm" 
+                                onClick={() => removeOptionFn(index)}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {isEnglish && errors.languages?.en?.options && (
+                      <p className="text-sm text-red-500 mt-1">Please fill all option texts</p>
+                    )}
+                  </div>
+
+                  {/* Explanation */}
+                  <div>
+                    <Controller
+                      name={`languages.${lang}.explanationFormattedText`}
+                      control={control}
+                      render={({ field }) => {
+                        const currentLangData = watch(`languages.${lang}`)
+                        const formattedValue = field.value || currentLangData?.explanationFormattedText
+                        const plainValue = watch(`languages.${lang}.explanationText`) || currentLangData?.explanationText
+                        const editorValue = formattedValue !== undefined && formattedValue !== null && formattedValue !== ''
+                          ? formattedValue 
+                          : (plainValue || '')
+                        
+                        return (
+                          <RichTextEditor
+                            value={editorValue}
+                            onChange={(plainText, formattedText) => {
+                              setValue(`languages.${lang}.explanationText`, plainText)
+                              field.onChange(formattedText)
+                            }}
+                            label="Explanation"
+                            placeholder="Enter explanation with formatting (bold, bullets, etc.)..."
+                          />
+                        )
+                      }}
+                    />
+                  </div>
+
+                  {/* Explanation Images */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <Label>Explanation Images</Label>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => {
+                          const currentImages = watch(`languages.${lang}.explanationImageUrls`) || []
+                          setValue(`languages.${lang}.explanationImageUrls`, [...currentImages, ''])
+                        }}
+                      >
+                        Add Image
+                      </Button>
+                    </div>
+                    <div className="space-y-4">
+                      {(watch(`languages.${lang}.explanationImageUrls`) || []).map((url: string, index: number) => (
+                        <div key={`${lang}-explanation-${index}`} className="border p-4 rounded-lg">
+                          <div className="flex justify-between items-center mb-2">
+                            <Label>Explanation Image {index + 1}</Label>
+                            <Button 
+                              type="button" 
+                              variant="destructive" 
+                              size="sm" 
+                              onClick={() => {
+                                const currentImages = watch(`languages.${lang}.explanationImageUrls`) || []
+                                const newImages = currentImages.filter((_: string, i: number) => i !== index)
+                                setValue(`languages.${lang}.explanationImageUrls`, newImages)
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                          <Controller
+                            name={`languages.${lang}.explanationImageUrls.${index}`}
+                            control={control}
+                            render={({ field }) => (
+                              <ImageUpload
+                                value={field.value || ''}
+                                onChange={(file, url) => {
+                                  field.onChange(url || '')
+                                }}
+                                label=""
+                                folder="questions"
+                              />
+                            )}
+                          />
+                        </div>
+                      ))}
+                      {(!watch(`languages.${lang}.explanationImageUrls`) || watch(`languages.${lang}.explanationImageUrls`).length === 0) && (
+                        <div className="text-sm text-gray-500">
+                          No explanation images added. Click "Add Image" to add one.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            <div>
+              <Label htmlFor="correctOptionId">Correct Option *</Label>
+              <Select
+                id="correctOptionId"
+                {...register('correctOptionId', { 
+                  required: 'Please select the correct option' 
+                })}
+              >
+                <option value="">Select correct option</option>
+                {watch('languages.en.options')?.map((opt: any, index: number) => {
+                  const optionId = opt?.optionId || String.fromCharCode(65 + index)
+                  return (
+                    <option key={index} value={optionId}>
+                      {optionId}
+                    </option>
                   )
                 })}
-              </div>
-              {errors.options && (
-                <p className="text-sm text-red-500 mt-1">Please fill all option texts</p>
+              </Select>
+              {errors.correctOptionId && (
+                <p className="text-sm text-red-500 mt-1">{errors.correctOptionId.message}</p>
               )}
+            </div>
+
+            <div>
+              <Label htmlFor="tags">Tags (comma-separated)</Label>
+              <Input
+                id="tags"
+                placeholder="e.g., math, algebra, geometry"
+                {...register('tags', {
+                  setValueAs: (value: any) => {
+                    // If already an array, return it
+                    if (Array.isArray(value)) return value
+                    // If string, parse it
+                    if (typeof value === 'string') {
+                      if (!value || value.trim() === '') return []
+                      return value.split(',').map((t: string) => t.trim()).filter((t: string) => t)
+                    }
+                    // Default to empty array
+                    return []
+                  }
+                })}
+                defaultValue={Array.isArray(watch('tags')) ? watch('tags')?.join(', ') || '' : ''}
+              />
+              <p className="text-sm text-gray-500 mt-1">Enter tags separated by commas</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -674,73 +1003,6 @@ export default function QuestionFormPage() {
               </div>
             </div>
 
-            <div>
-              <Controller
-                name="explanationFormattedText"
-                control={control}
-                render={({ field }) => {
-                  // Use formatted text if it exists (even if empty string), otherwise fall back to plain text
-                  const formattedValue = field.value
-                  const plainValue = watch('explanationText')
-                  // If formattedValue is explicitly set (not undefined/null), use it
-                  // Otherwise, use plain text as fallback
-                  const editorValue = formattedValue !== undefined && formattedValue !== null
-                    ? formattedValue 
-                    : (plainValue || '')
-                  
-                  return (
-                    <RichTextEditor
-                      value={editorValue}
-                      onChange={(plainText, formattedText) => {
-                        setValue('explanationText', plainText)
-                        field.onChange(formattedText)
-                      }}
-                      label="Explanation Text"
-                      placeholder="Enter explanation with formatting (bold, bullets, etc.)"
-                    />
-                  )
-                }}
-              />
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <Label>Explanation Images</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addExplanationImage}>
-                  Add Image
-                </Button>
-              </div>
-              <div className="space-y-4">
-                {explanationImages.map((img, index) => (
-                  <div key={img.id} className="border p-4 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <Label>Explanation Image {index + 1}</Label>
-                      <Button 
-                        type="button" 
-                        variant="destructive" 
-                        size="sm" 
-                        onClick={() => removeExplanationImage(img.id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                    <ImageUpload
-                      value={img.url}
-                      onChange={(file, url) => {
-                        updateExplanationImage(img.id, file, url || '')
-                      }}
-                      label=""
-                      folder="questions"
-                    />
-                  </div>
-                ))}
-                {explanationImages.length === 0 && (
-                  <div className="text-sm text-gray-500">
-                    No explanation images added. Click "Add Image" to add one.
-                  </div>
-                )}
-              </div>
-            </div>
 
             <div className="flex items-center gap-2">
               <input

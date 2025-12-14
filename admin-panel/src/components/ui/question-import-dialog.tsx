@@ -7,6 +7,7 @@ import { Input } from './input'
 import { Label } from './label'
 import { Loader } from './loader'
 import { CheckCircle2, XCircle, Upload, FileSpreadsheet } from 'lucide-react'
+import { FieldMappingDialog } from './field-mapping-dialog'
 
 interface QuestionImportDialogProps {
   open: boolean
@@ -48,16 +49,79 @@ interface PreviewData {
   invalidRows: number
 }
 
+interface FieldMapping {
+  section: string
+  questionOrder: string
+  correctOption: string
+  marks: string
+  averageTime: string
+  tags: string
+  'eng-direction': string
+  'eng-question': string
+  'eng-A': string
+  'eng-B': string
+  'eng-C': string
+  'eng-D': string
+  'eng-E': string
+  'eng-solutionText': string
+  'hn-direction': string
+  'hn-question': string
+  'hn-A': string
+  'hn-B': string
+  'hn-C': string
+  'hn-D': string
+  'hn-E': string
+  'hn-solutionText': string
+  'guj-direction': string
+  'guj-question': string
+  'guj-A': string
+  'guj-B': string
+  'guj-C': string
+  'guj-D': string
+  'guj-E': string
+  'guj-solutionText': string
+}
+
 export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: QuestionImportDialogProps) {
   const [file, setFile] = useState<File | null>(null)
   const [previewData, setPreviewData] = useState<PreviewData | null>(null)
   const [selectedQuestions, setSelectedQuestions] = useState<Set<number>>(new Set())
+  const [excelColumns, setExcelColumns] = useState<string[]>([])
+  const [showMappingDialog, setShowMappingDialog] = useState(false)
+  const [fieldMapping, setFieldMapping] = useState<FieldMapping | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const previewMutation = useMutation({
+  const getColumnsMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData()
       formData.append('file', file)
+      const response = await api.post(`/admin/questions/sets/${setId}/questions/import/preview`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      return response.data.data
+    },
+    onSuccess: (data) => {
+      if (data.needsMapping && data.columns) {
+        setExcelColumns(data.columns)
+        setShowMappingDialog(true)
+      } else {
+        // Old format - direct preview
+        setPreviewData(data as PreviewData)
+        const validRows = (data as PreviewData).preview
+          .filter((q) => q.errors.length === 0)
+          .map((q) => q.rowNumber)
+        setSelectedQuestions(new Set(validRows))
+      }
+    },
+  })
+
+  const previewMutation = useMutation({
+    mutationFn: async ({ file, mapping }: { file: File; mapping: FieldMapping }) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('fieldMapping', JSON.stringify(mapping))
       const response = await api.post(`/admin/questions/sets/${setId}/questions/import/preview`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -77,24 +141,21 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
 
   const importMutation = useMutation({
     mutationFn: async (questions: PreviewQuestion[]) => {
-      // Prepare questions data (only selected ones)
+      // Prepare questions data (only selected ones) - using new structure
       const questionsToImport = questions.map((q) => ({
         rowNumber: q.rowNumber,
         sectionId: q.data.sectionId,
-        direction: q.data.direction || '',
-        questionText: q.data.questionText,
-        conclusion: q.data.conclusion || '',
-        options: q.data.options,
+        eng: q.data.eng,
+        hn: q.data.hn,
+        guj: q.data.guj,
+        engOptions: q.data.engOptions,
+        hnOptions: q.data.hnOptions,
+        gujOptions: q.data.gujOptions,
         correctOptionId: q.data.correctOptionId,
         marks: q.data.marks || 1,
         averageTimeSeconds: q.data.averageTimeSeconds || 0,
-        explanationText: q.data.explanationText || '',
+        tags: q.data.tags || [],
         questionOrder: q.data.questionOrder,
-        // Images will be handled separately if needed
-        directionImage: '',
-        questionImage: '',
-        conclusionImage: '',
-        explanationImages: '',
       }))
 
       const formData = new FormData()
@@ -124,7 +185,15 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
 
   const handlePreview = () => {
     if (file) {
-      previewMutation.mutate(file)
+      getColumnsMutation.mutate(file)
+    }
+  }
+
+  const handleMappingConfirm = (mapping: FieldMapping) => {
+    setFieldMapping(mapping)
+    setShowMappingDialog(false)
+    if (file) {
+      previewMutation.mutate({ file, mapping })
     }
   }
 
@@ -143,6 +212,9 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
     setFile(null)
     setPreviewData(null)
     setSelectedQuestions(new Set())
+    setExcelColumns([])
+    setShowMappingDialog(false)
+    setFieldMapping(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -205,9 +277,9 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
                   />
                   <Button
                     onClick={handlePreview}
-                    disabled={!file || previewMutation.isPending}
+                    disabled={!file || getColumnsMutation.isPending || previewMutation.isPending}
                   >
-                    {previewMutation.isPending ? (
+                    {(getColumnsMutation.isPending || previewMutation.isPending) ? (
                       <>
                         <Loader inline className="mr-2" />
                         Processing...
@@ -228,9 +300,9 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
                 )}
               </div>
 
-              {previewMutation.isError && (
+              {(getColumnsMutation.isError || previewMutation.isError) && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
-                  {(previewMutation.error as any)?.response?.data?.message || 'Error processing Excel file'}
+                  {((getColumnsMutation.error || previewMutation.error) as any)?.response?.data?.message || 'Error processing Excel file'}
                 </div>
               )}
             </div>
@@ -310,7 +382,7 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
                             <td className="px-4 py-2">{question.data.questionOrder}</td>
                             <td className="px-4 py-2">{question.data.section || '-'}</td>
                             <td className="px-4 py-2 max-w-md truncate">
-                              {question.data.questionText || '-'}
+                              {question.data.eng?.question || '-'}
                             </td>
                             <td className="px-4 py-2">
                               {isValid ? (
@@ -407,6 +479,14 @@ export function QuestionImportDialog({ open, onOpenChange, setId, onSuccess }: Q
           )}
         </DialogFooter>
       </DialogContent>
+
+      {/* Field Mapping Dialog */}
+      <FieldMappingDialog
+        open={showMappingDialog}
+        onOpenChange={setShowMappingDialog}
+        excelColumns={excelColumns}
+        onConfirm={handleMappingConfirm}
+      />
     </Dialog>
   )
 }

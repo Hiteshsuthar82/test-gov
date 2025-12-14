@@ -50,6 +50,13 @@ export default function TestAttemptInstructionsPage() {
       return;
     }
 
+    // Store selected language in localStorage to pass to test attempt page
+    if (language) {
+      localStorage.setItem('selectedLanguage', language);
+    } else {
+      localStorage.setItem('selectedLanguage', 'en'); // Default to English
+    }
+
     // Start the attempt
     startAttemptMutation.mutate({ testSetId, forceNew: false });
   };
@@ -289,6 +296,7 @@ export default function TestAttemptInstructionsPage() {
                 <option value="">-- Select --</option>
                 <option value="en">English</option>
                 <option value="hi">Hindi</option>
+                <option value="gu">Gujarati</option>
               </select>
               {language && (
                 <p className="mt-1 text-xs text-red-500">

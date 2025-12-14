@@ -88,24 +88,41 @@ export default function SetQuestionsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((question: any) => (
-                <TableRow key={question._id} className="hover:bg-gray-50">
-                  <TableCell className="text-gray-900">{question.questionOrder}</TableCell>
-                  <TableCell className="text-gray-700">{question.sectionId}</TableCell>
-                  <TableCell className="max-w-md truncate text-gray-700">{question.questionText}</TableCell>
-                  <TableCell className="text-gray-700">{question.marks}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/questions/${question._id}/edit`)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(question._id, question.questionText || `Question ${question.questionOrder}`)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+              data.map((question: any) => {
+                const questionText = question.languages?.en?.questionText || question.questionText || `Question ${question.questionOrder}`
+                const availableLanguages = []
+                if (question.languages?.en) availableLanguages.push('EN')
+                if (question.languages?.hi) availableLanguages.push('HI')
+                if (question.languages?.gu) availableLanguages.push('GU')
+                
+                return (
+                  <TableRow key={question._id} className="hover:bg-gray-50">
+                    <TableCell className="text-gray-900">{question.questionOrder}</TableCell>
+                    <TableCell className="text-gray-700">{question.sectionId || '-'}</TableCell>
+                    <TableCell className="max-w-md">
+                      <div className="truncate text-gray-700" title={questionText}>
+                        {questionText}
+                      </div>
+                      {availableLanguages.length > 1 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Languages: {availableLanguages.join(', ')}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-gray-700">{question.marks}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/questions/${question._id}/edit`)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(question._id, questionText)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

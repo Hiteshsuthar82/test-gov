@@ -65,7 +65,7 @@ export const attemptService = {
       isActive: true,
     })
       .sort({ questionOrder: 1 })
-      .select('-correctOptionId -explanationText -explanationImageUrl');
+      .select('-correctOptionId -explanationText -explanationImageUrls');
 
     // Initialize section timings if section-wise timing is enabled
     const sectionTimings = testSet.hasSectionWiseTiming && testSet.sections.length > 0
@@ -530,18 +530,21 @@ export const attemptService = {
       const question = questionMap.get(qa.questionId.toString());
       if (!question) return null;
 
+      const enContent = question.languages.en;
+      
       return {
         _id: question._id.toString(),
-        id: question._id.toString(), // Alias for compatibility
+        id: question._id.toString(),
         sectionId: question.sectionId,
-        direction: question.direction,
-        directionImageUrl: question.directionImageUrl,
-        questionText: question.questionText,
-        questionFormattedText: question.questionFormattedText,
-        questionImageUrl: question.questionImageUrl,
-        conclusion: question.conclusion,
-        conclusionImageUrl: question.conclusionImageUrl,
-        options: question.options || [], // Ensure options is always an array
+        languages: question.languages,
+        direction: enContent.direction,
+        directionImageUrl: enContent.directionImageUrl,
+        questionText: enContent.questionText,
+        questionFormattedText: enContent.questionFormattedText,
+        questionImageUrl: enContent.questionImageUrl,
+        conclusion: enContent.conclusion,
+        conclusionImageUrl: enContent.conclusionImageUrl,
+        options: enContent.options,
         marks: question.marks,
         averageTimeSeconds: question.averageTimeSeconds,
         questionOrder: question.questionOrder,
@@ -603,24 +606,29 @@ export const attemptService = {
       const question = questionMap.get(qa.questionId.toString());
       if (!question) return null;
 
+      const enContent = question.languages.en;
+
       return {
         questionId: question._id,
         sectionId: question.sectionId,
-        direction: question.direction,
-        directionImageUrl: question.directionImageUrl,
-        questionText: question.questionText,
-        questionFormattedText: question.questionFormattedText,
-        questionImageUrl: question.questionImageUrl,
-        conclusion: question.conclusion,
-        conclusionImageUrl: question.conclusionImageUrl,
-        options: question.options,
+        languages: question.languages,
+        direction: enContent.direction,
+        directionFormattedText: enContent.directionFormattedText,
+        directionImageUrl: enContent.directionImageUrl,
+        questionText: enContent.questionText,
+        questionFormattedText: enContent.questionFormattedText,
+        questionImageUrl: enContent.questionImageUrl,
+        conclusion: enContent.conclusion,
+        conclusionFormattedText: enContent.conclusionFormattedText,
+        conclusionImageUrl: enContent.conclusionImageUrl,
+        options: enContent.options,
         correctOptionId: question.correctOptionId,
         selectedOptionId: qa.selectedOptionId,
         isCorrect: qa.isCorrect,
         marks: question.marks,
-        explanationText: question.explanationText,
-        explanationFormattedText: question.explanationFormattedText,
-        explanationImageUrls: question.explanationImageUrls || (question.explanationImageUrl ? [question.explanationImageUrl] : []), // Support both old and new format
+        explanationText: enContent.explanationText,
+        explanationFormattedText: enContent.explanationFormattedText,
+        explanationImageUrls: enContent.explanationImageUrls || [],
         timeSpentSeconds: qa.timeSpentSeconds,
         markedForReview: qa.markedForReview,
       };

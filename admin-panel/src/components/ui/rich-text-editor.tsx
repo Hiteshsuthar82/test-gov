@@ -78,7 +78,7 @@ export function RichTextEditor({
           className="rich-text-editor"
         />
       </div>
-      <style jsx global>{`
+      <style>{`
         .rich-text-editor .ql-container {
           min-height: 200px;
           font-size: 14px;

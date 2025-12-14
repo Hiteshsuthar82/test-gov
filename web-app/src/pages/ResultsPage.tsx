@@ -10,6 +10,38 @@ import { FiCheckCircle, FiXCircle, FiCircle, FiTrendingUp } from 'react-icons/fi
 export default function ResultsPage() {
   const { attemptId } = useParams()
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null)
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    return localStorage.getItem('selectedLanguage') || 'en'
+  })
+  
+  // Helper to get explanation content for a question based on selected language
+  const getExplanationContent = (question: any) => {
+    // Try selected language first
+    if (question.languages && question.languages[selectedLanguage]) {
+      const langContent = question.languages[selectedLanguage]
+      if (langContent.explanationText || langContent.explanationFormattedText || (langContent.explanationImageUrls && langContent.explanationImageUrls.length > 0)) {
+        return {
+          explanationText: langContent.explanationText,
+          explanationFormattedText: langContent.explanationFormattedText,
+          explanationImageUrls: langContent.explanationImageUrls || [],
+        }
+      }
+    }
+    // Fallback to English
+    if (question.languages?.en) {
+      return {
+        explanationText: question.languages.en.explanationText,
+        explanationFormattedText: question.languages.en.explanationFormattedText,
+        explanationImageUrls: question.languages.en.explanationImageUrls || [],
+      }
+    }
+    // Legacy fallback (should not happen with new structure)
+    return {
+      explanationText: question.explanationText,
+      explanationFormattedText: question.explanationFormattedText,
+      explanationImageUrls: question.explanationImageUrls || [],
+    }
+  }
 
   const { data: results, isLoading } = useQuery({
     queryKey: ['results', attemptId],
@@ -110,8 +142,41 @@ export default function ResultsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Questions Review */}
           <div className="lg:col-span-3 space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Question Review</h2>
-            {results.questions?.map((q: any, index: number) => (
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Question Review</h2>
+              {(() => {
+                // Get all available languages from all questions
+                const availableLanguages = new Set<string>()
+                results.questions?.forEach((q: any) => {
+                  if (q.languages) {
+                    if (q.languages.en) availableLanguages.add('en')
+                    if (q.languages.hi) availableLanguages.add('hi')
+                    if (q.languages.gu) availableLanguages.add('gu')
+                  }
+                })
+                
+                if (availableLanguages.size > 1) {
+                  return (
+                    <select
+                      value={selectedLanguage}
+                      onChange={(e) => {
+                        setSelectedLanguage(e.target.value)
+                        localStorage.setItem('selectedLanguage', e.target.value)
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded text-sm"
+                    >
+                      {availableLanguages.has('en') && <option value="en">English</option>}
+                      {availableLanguages.has('hi') && <option value="hi">Hindi</option>}
+                      {availableLanguages.has('gu') && <option value="gu">Gujarati</option>}
+                    </select>
+                  )
+                }
+                return null
+              })()}
+            </div>
+            {results.questions?.map((q: any, index: number) => {
+              const explanationContent = getExplanationContent(q)
+              return (
               <Card 
                 key={q.questionId} 
                 id={`question-${index}`}
@@ -203,17 +268,17 @@ export default function ResultsPage() {
                 {/* Explanation */}
                 {(() => {
                   // Check if explanation text exists
-                  const hasExplanationText = q.explanationFormattedText || q.explanationText
+                  const hasExplanationText = explanationContent.explanationFormattedText || explanationContent.explanationText
                   
                   // Check if explanation images exist
                   let validImages: string[] = []
-                  if (q.explanationImageUrls) {
-                    if (Array.isArray(q.explanationImageUrls)) {
-                      validImages = q.explanationImageUrls.filter(
+                  if (explanationContent.explanationImageUrls) {
+                    if (Array.isArray(explanationContent.explanationImageUrls)) {
+                      validImages = explanationContent.explanationImageUrls.filter(
                         (img: string) => img && typeof img === 'string' && img.trim() && img !== 'null' && img !== 'undefined'
                       )
-                    } else if (typeof q.explanationImageUrls === 'string' && q.explanationImageUrls.trim() && q.explanationImageUrls !== 'null' && q.explanationImageUrls !== 'undefined') {
-                      validImages = [q.explanationImageUrls]
+                    } else if (typeof explanationContent.explanationImageUrls === 'string' && explanationContent.explanationImageUrls.trim() && explanationContent.explanationImageUrls !== 'null' && explanationContent.explanationImageUrls !== 'undefined') {
+                      validImages = [explanationContent.explanationImageUrls]
                     }
                   }
                   const hasExplanationImages = validImages.length > 0
@@ -226,13 +291,13 @@ export default function ResultsPage() {
                         {/* Show text first if it exists */}
                         {hasExplanationText && (
                           <>
-                            {q.explanationFormattedText ? (
+                            {explanationContent.explanationFormattedText ? (
                               <div
                                 className="text-sm text-gray-700"
-                                dangerouslySetInnerHTML={{ __html: q.explanationFormattedText }}
+                                dangerouslySetInnerHTML={{ __html: explanationContent.explanationFormattedText }}
                               />
                             ) : (
-                              <p className="text-sm text-gray-700">{q.explanationText}</p>
+                              <p className="text-sm text-gray-700">{explanationContent.explanationText}</p>
                             )}
                           </>
                         )}
@@ -260,7 +325,8 @@ export default function ResultsPage() {
                 })()}
               </CardContent>
             </Card>
-          ))}
+              )
+            })}
           </div>
 
           {/* Question Status Sheet */}

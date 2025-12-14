@@ -1,4 +1,4 @@
-import { Question } from '../models/Question';
+import { Question, ILanguageContent } from '../models/Question';
 import { TestSet } from '../models/TestSet';
 import { Types } from 'mongoose';
 
@@ -18,21 +18,17 @@ export const adminQuestionService = {
 
   async create(testSetId: string, data: {
     sectionId?: string;
-    direction?: string;
-    directionImageUrl?: string;
-    questionText: string;
-    questionFormattedText?: string;
-    questionImageUrl?: string;
-    conclusion?: string;
-    conclusionImageUrl?: string;
-    options: Array<{ optionId: string; text: string; imageUrl?: string }>;
+    languages: {
+      en: ILanguageContent;
+      hi?: ILanguageContent;
+      gu?: ILanguageContent;
+    };
     correctOptionId: string;
     marks?: number;
-    explanationText?: string;
-    explanationFormattedText?: string;
-    explanationImageUrls?: string[]; // Changed to array
     questionOrder: number;
+    tags?: string[];
     isActive?: boolean;
+    averageTimeSeconds?: number;
   }) {
     const testSet = await TestSet.findById(testSetId);
     if (!testSet) {
@@ -56,13 +52,45 @@ export const adminQuestionService = {
       }
     }
 
-    return Question.create({
+    // Validate that English (en) is provided
+    if (!data.languages || !data.languages.en || !data.languages.en.questionText || !data.languages.en.options || data.languages.en.options.length < 2) {
+      throw new Error('English (en) language content is required with questionText and at least 2 options');
+    }
+
+    const questionData: any = {
       testSetId: new Types.ObjectId(testSetId),
-      ...data,
-    });
+      languages: data.languages,
+      correctOptionId: data.correctOptionId,
+      marks: data.marks || 1,
+      questionOrder: data.questionOrder,
+      tags: data.tags || [],
+      isActive: data.isActive ?? true,
+    };
+
+    if (data.sectionId) {
+      questionData.sectionId = data.sectionId;
+    }
+    if (data.averageTimeSeconds !== undefined) {
+      questionData.averageTimeSeconds = data.averageTimeSeconds;
+    }
+
+    return Question.create(questionData);
   },
 
-  async update(id: string, data: Partial<Omit<Parameters<typeof adminQuestionService.create>[1], 'testSetId'>>) {
+  async update(id: string, data: Partial<{
+    sectionId?: string;
+    languages: {
+      en: ILanguageContent;
+      hi?: ILanguageContent;
+      gu?: ILanguageContent;
+    };
+    correctOptionId: string;
+    marks?: number;
+    questionOrder: number;
+    tags?: string[];
+    isActive?: boolean;
+    averageTimeSeconds?: number;
+  }>) {
     const question = await Question.findById(id);
     if (!question) {
       throw new Error('Question not found');
@@ -93,7 +121,32 @@ export const adminQuestionService = {
       }
     }
 
-    const updatedQuestion = await Question.findByIdAndUpdate(id, data, { new: true });
+    // Get existing languages to merge
+    const existingLanguages = question.languages ? question.languages : { en: {} as ILanguageContent };
+
+    // Build update data
+    const updateData: any = {};
+
+    if (data.languages) {
+      // Merge with existing languages
+      const langData = data.languages as { en?: ILanguageContent; hi?: ILanguageContent; gu?: ILanguageContent };
+      updateData.languages = {
+        en: langData.en || existingLanguages.en,
+        hi: langData.hi !== undefined ? langData.hi : existingLanguages.hi,
+        gu: langData.gu !== undefined ? langData.gu : existingLanguages.gu,
+      };
+    }
+
+    // Add other fields
+    if (data.correctOptionId !== undefined) updateData.correctOptionId = data.correctOptionId;
+    if (data.marks !== undefined) updateData.marks = data.marks;
+    if (data.questionOrder !== undefined) updateData.questionOrder = data.questionOrder;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.averageTimeSeconds !== undefined) updateData.averageTimeSeconds = data.averageTimeSeconds;
+    if (data.sectionId !== undefined) updateData.sectionId = data.sectionId;
+    if (data.tags !== undefined) updateData.tags = data.tags;
+
+    const updatedQuestion = await Question.findByIdAndUpdate(id, updateData, { new: true });
     return updatedQuestion;
   },
 
@@ -105,7 +158,20 @@ export const adminQuestionService = {
     return { message: 'Question deleted' };
   },
 
-  async bulkCreate(testSetId: string, questions: Parameters<typeof adminQuestionService.create>[1][]) {
+  async bulkCreate(testSetId: string, questions: Array<{
+    sectionId?: string;
+    languages: {
+      en: ILanguageContent;
+      hi?: ILanguageContent;
+      gu?: ILanguageContent;
+    };
+    correctOptionId: string;
+    marks?: number;
+    questionOrder: number;
+    tags?: string[];
+    isActive?: boolean;
+    averageTimeSeconds?: number;
+  }>) {
     const testSet = await TestSet.findById(testSetId);
     if (!testSet) {
       throw new Error('Test set not found');

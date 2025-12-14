@@ -11,14 +11,45 @@ import { useAuthStore } from '@/store/authStore'
 
 interface Question {
   _id: string
-  questionText: string
-  questionFormattedText?: string
-  questionImageUrl?: string
-  direction?: string
-  directionImageUrl?: string
-  conclusion?: string
-  conclusionImageUrl?: string
-  options: Array<{ optionId: string; text: string; imageUrl?: string }>
+  questionOrder: number
+  languages: {
+    en: {
+      direction?: string
+      directionFormattedText?: string
+      directionImageUrl?: string
+      questionText: string
+      questionFormattedText?: string
+      questionImageUrl?: string
+      conclusion?: string
+      conclusionFormattedText?: string
+      conclusionImageUrl?: string
+      options: Array<{ optionId: string; text: string; imageUrl?: string }>
+    }
+    hi?: {
+      direction?: string
+      directionFormattedText?: string
+      directionImageUrl?: string
+      questionText: string
+      questionFormattedText?: string
+      questionImageUrl?: string
+      conclusion?: string
+      conclusionFormattedText?: string
+      conclusionImageUrl?: string
+      options: Array<{ optionId: string; text: string; imageUrl?: string }>
+    }
+    gu?: {
+      direction?: string
+      directionFormattedText?: string
+      directionImageUrl?: string
+      questionText: string
+      questionFormattedText?: string
+      questionImageUrl?: string
+      conclusion?: string
+      conclusionFormattedText?: string
+      conclusionImageUrl?: string
+      options: Array<{ optionId: string; text: string; imageUrl?: string }>
+    }
+  }
   marks: number
   averageTimeSeconds?: number
   sectionId: string
@@ -29,7 +60,10 @@ export default function TestAttemptPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('en')
+  // Initialize language from localStorage (set by instructions page) or default to 'en'
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    return localStorage.getItem('selectedLanguage') || 'en'
+  })
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
@@ -90,6 +124,118 @@ export default function TestAttemptPage() {
   // No need to query section timer from backend - we calculate it locally
 
   const questions = attemptData?.questions || []
+
+  // Helper function to get available languages for a question
+  const getAvailableLanguages = (question: Question): string[] => {
+    const available: string[] = ['en'] // English is always available
+    const enContent = question.languages?.en
+    
+    if (!enContent) return available
+    
+    // Check if Hindi has all required fields
+    const hiContent = question.languages?.hi
+    if (hiContent) {
+      let hiIsComplete = true
+      
+      // Must have question text
+      if (!hiContent.questionText || hiContent.questionText.trim() === '') {
+        hiIsComplete = false
+      }
+      
+      // If English has direction, Hindi must have it too
+      if (enContent.direction || enContent.directionFormattedText) {
+        if (!hiContent.direction && !hiContent.directionFormattedText) {
+          hiIsComplete = false
+        }
+      }
+      
+      // If English has conclusion, Hindi must have it too
+      if (enContent.conclusion || enContent.conclusionFormattedText) {
+        if (!hiContent.conclusion && !hiContent.conclusionFormattedText) {
+          hiIsComplete = false
+        }
+      }
+      
+      // Must have same number of options as English
+      if (!hiContent.options || hiContent.options.length !== enContent.options.length) {
+        hiIsComplete = false
+      }
+      
+      // All options must have text
+      if (hiContent.options) {
+        for (const opt of hiContent.options) {
+          if (!opt.text || opt.text.trim() === '') {
+            hiIsComplete = false
+            break
+          }
+        }
+      }
+      
+      if (hiIsComplete) {
+        available.push('hi')
+      }
+    }
+    
+    // Check if Gujarati has all required fields
+    const guContent = question.languages?.gu
+    if (guContent) {
+      let guIsComplete = true
+      
+      // Must have question text
+      if (!guContent.questionText || guContent.questionText.trim() === '') {
+        guIsComplete = false
+      }
+      
+      // If English has direction, Gujarati must have it too
+      if (enContent.direction || enContent.directionFormattedText) {
+        if (!guContent.direction && !guContent.directionFormattedText) {
+          guIsComplete = false
+        }
+      }
+      
+      // If English has conclusion, Gujarati must have it too
+      if (enContent.conclusion || enContent.conclusionFormattedText) {
+        if (!guContent.conclusion && !guContent.conclusionFormattedText) {
+          guIsComplete = false
+        }
+      }
+      
+      // Must have same number of options as English
+      if (!guContent.options || guContent.options.length !== enContent.options.length) {
+        guIsComplete = false
+      }
+      
+      // All options must have text
+      if (guContent.options) {
+        for (const opt of guContent.options) {
+          if (!opt.text || opt.text.trim() === '') {
+            guIsComplete = false
+            break
+          }
+        }
+      }
+      
+      if (guIsComplete) {
+        available.push('gu')
+      }
+    }
+    
+    return available
+  }
+
+  // Helper function to get question content for a specific language
+  const getQuestionContent = (question: Question, lang: string) => {
+    // Try to get from languages object
+    if (question.languages && question.languages[lang as keyof typeof question.languages]) {
+      const langContent = question.languages[lang as keyof typeof question.languages]
+      if (langContent && langContent.questionText) {
+        return langContent
+      }
+    }
+    
+    // Fall back to English
+    return question.languages.en
+  }
 
   // Initialize question times from database on page load/resume
   useEffect(() => {
@@ -1093,22 +1239,35 @@ export default function TestAttemptPage() {
         // Don't navigate, just save the preference (mutation will be called below)
         // Exit early from navigation logic
       } else if (currentQ) {
-        let nextIndex = currentQuestionIndex + 1
+        // Find next question by order within the same section
+        let nextIndex = -1
         if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
-          // Find next question in the same section
+          // Find next question in the same section by order
           const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
-          const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
-          if (currentSectionIndex < currentSectionQuestions.length - 1) {
-            // There's a next question in this section
-            const nextQuestionInSection = currentSectionQuestions[currentSectionIndex + 1]
+          const currentOrder = currentQ.questionOrder
+          const nextQuestionInSection = currentSectionQuestions
+            .filter((q: Question) => q.questionOrder > currentOrder)
+            .sort((a: Question, b: Question) => a.questionOrder - b.questionOrder)[0]
+          
+          if (nextQuestionInSection) {
             nextIndex = questions.findIndex((q: Question) => q._id === nextQuestionInSection._id)
           } else {
             // No more questions in this section, don't move
             // Don't return here - we still need to save the preference
           }
+        } else {
+          // No sections or section-wise timing, find next by order globally
+          const currentOrder = currentQ.questionOrder
+          const nextQuestion = questions
+            .filter((q: Question) => q.questionOrder > currentOrder)
+            .sort((a: Question, b: Question) => a.questionOrder - b.questionOrder)[0]
+          
+          if (nextQuestion) {
+            nextIndex = questions.findIndex((q: Question) => q._id === nextQuestion._id)
+          }
         }
         
-        if (nextIndex < questions.length && nextIndex > currentQuestionIndex) {
+        if (nextIndex >= 0 && nextIndex < questions.length && nextIndex > currentQuestionIndex) {
           setCurrentQuestionIndex(nextIndex)
         }
       }
@@ -1272,24 +1431,36 @@ export default function TestAttemptPage() {
         return
       }
       
-      // Find next question - if sections exist but section-wise timing is disabled, find next in same section
-      let nextIndex = currentQuestionIndex + 1
+      // Find next question by order - if sections exist but section-wise timing is disabled, find next in same section
+      let nextIndex = -1
       if (hasSections && !hasSectionWiseTiming && currentQ.sectionId) {
-        // Find next question in the same section
+        // Find next question in the same section by order
         const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
-        const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
-        if (currentSectionIndex < currentSectionQuestions.length - 1) {
-          // There's a next question in this section
-          const nextQuestionInSection = currentSectionQuestions[currentSectionIndex + 1]
+        const currentOrder = currentQ.questionOrder
+        const nextQuestionInSection = currentSectionQuestions
+          .filter((q: Question) => q.questionOrder > currentOrder)
+          .sort((a: Question, b: Question) => a.questionOrder - b.questionOrder)[0]
+        
+        if (nextQuestionInSection) {
           nextIndex = questions.findIndex((q: Question) => q._id === nextQuestionInSection._id)
         } else {
           // No more questions in this section, stay on current question
           return
         }
+      } else {
+        // No sections or section-wise timing, find next by order globally
+        const currentOrder = currentQ.questionOrder
+        const nextQuestion = questions
+          .filter((q: Question) => q.questionOrder > currentOrder)
+          .sort((a: Question, b: Question) => a.questionOrder - b.questionOrder)[0]
+        
+        if (nextQuestion) {
+          nextIndex = questions.findIndex((q: Question) => q._id === nextQuestion._id)
+        }
       }
       
       // Move to next question immediately
-      if (nextIndex < questions.length && nextIndex > currentQuestionIndex) {
+      if (nextIndex >= 0 && nextIndex < questions.length && nextIndex > currentQuestionIndex) {
         setCurrentQuestionIndex(nextIndex)
       }
     }
@@ -1621,6 +1792,18 @@ export default function TestAttemptPage() {
   }
 
   const currentQuestion = questions?.[currentQuestionIndex]
+  
+  // Get current question content based on selected language
+  const currentQuestionContent = currentQuestion ? getQuestionContent(currentQuestion, selectedLanguage) : null
+  const availableLanguages = currentQuestion ? getAvailableLanguages(currentQuestion) : ['en']
+
+  // Ensure selected language is available for current question, otherwise default to English
+  useEffect(() => {
+    if (currentQuestion && !availableLanguages.includes(selectedLanguage)) {
+      setSelectedLanguage('en')
+    }
+  }, [currentQuestion, availableLanguages, selectedLanguage])
+  
   // Use savedAnswers for count (only count answers that have been saved)
   const answeredCount = Object.keys(savedAnswers).filter(key => savedAnswers[key]).length
   const reviewCount = markedForReview.size
@@ -1766,7 +1949,7 @@ export default function TestAttemptPage() {
   }
 
   // Safety check for options
-  if (!currentQuestion.options || !Array.isArray(currentQuestion.options)) {
+  if (!currentQuestionContent || !currentQuestionContent.options || !Array.isArray(currentQuestionContent.options)) {
     return (
       <Layout>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">
@@ -1782,12 +1965,12 @@ export default function TestAttemptPage() {
   const hasSections = testSet?.sections && testSet.sections.length > 0
   const hasSectionWiseTiming = testSet?.hasSectionWiseTiming === true
 
-  // Determine which questions to show in palette
-  const sectionQuestions = hasSectionWiseTiming && currentSectionId
+  // Determine which questions to show in palette (sorted by questionOrder)
+  const sectionQuestions = (hasSectionWiseTiming && currentSectionId
     ? questions.filter((q: Question) => q.sectionId === currentSectionId)
     : hasSections && !hasSectionWiseTiming && selectedSectionId
     ? questions.filter((q: Question) => q.sectionId === selectedSectionId)
-    : questions
+    : questions).sort((a: Question, b: Question) => a.questionOrder - b.questionOrder)
 
   // Calculate section-specific stats when section-wise timing is enabled
   const getSectionStats = () => {
@@ -2098,7 +2281,7 @@ export default function TestAttemptPage() {
             {/* Second Row: Question Number and Info */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50 flex-shrink-0">
               <div className="text-lg font-semibold">
-                Question {currentQuestionIndex + 1} of {questions.length}
+                Question {currentQuestion.questionOrder} of {sectionQuestions.length}
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 text-sm">
@@ -2115,11 +2298,15 @@ export default function TestAttemptPage() {
                 </div>
                 <select
                   value={selectedLanguage}
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedLanguage(e.target.value)
+                    localStorage.setItem('selectedLanguage', e.target.value)
+                  }}
                   className="px-3 py-1 border border-gray-300 rounded text-sm"
                 >
-                  <option value="en">English</option>
-                  <option value="hi">Hindi</option>
+                  {availableLanguages.includes('en') && <option value="en">English</option>}
+                  {availableLanguages.includes('hi') && <option value="hi">Hindi</option>}
+                  {availableLanguages.includes('gu') && <option value="gu">Gujarati</option>}
                 </select>
               </div>
             </div>
@@ -2127,17 +2314,19 @@ export default function TestAttemptPage() {
             {/* Content Box - Scrollable */}
             <div className="flex-1 overflow-y-auto">
               <div className="p-4">
-                {currentQuestion.direction || currentQuestion.directionImageUrl ? (
+                {currentQuestionContent.direction || currentQuestionContent.directionImageUrl ? (
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Left Box: Direction */}
                     <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
                       <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
-                      {currentQuestion.direction && (
-                        <p className="text-gray-700 mb-2">{currentQuestion.direction}</p>
+                      {currentQuestionContent.directionFormattedText ? (
+                        <div className="text-gray-700 mb-2" dangerouslySetInnerHTML={{ __html: currentQuestionContent.directionFormattedText }} />
+                      ) : currentQuestionContent.direction && (
+                        <p className="text-gray-700 mb-2">{currentQuestionContent.direction}</p>
                       )}
-                      {currentQuestion.directionImageUrl && (
+                      {currentQuestionContent.directionImageUrl && (
                         <img
-                          src={currentQuestion.directionImageUrl}
+                          src={currentQuestionContent.directionImageUrl}
                           alt="Direction"
                           className="mt-2 max-w-full rounded"
                         />
@@ -2148,16 +2337,16 @@ export default function TestAttemptPage() {
                       {/* Question */}
                       <div className="mb-4">
                         <div className="text-lg font-medium mb-2">
-                          {currentQuestionIndex + 1}.{' '}
-                          {currentQuestion.questionFormattedText ? (
-                            <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
+                          {currentQuestion.questionOrder}.{' '}
+                          {currentQuestionContent.questionFormattedText ? (
+                            <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
                           ) : (
-                            <span>{currentQuestion.questionText}</span>
+                            <span>{currentQuestionContent.questionText}</span>
                           )}
                         </div>
-                        {currentQuestion.questionImageUrl && (
+                        {currentQuestionContent.questionImageUrl && (
                           <img
-                            src={currentQuestion.questionImageUrl}
+                            src={currentQuestionContent.questionImageUrl}
                             alt="Question"
                             className="mt-2 max-w-full rounded"
                           />
@@ -2165,13 +2354,17 @@ export default function TestAttemptPage() {
                       </div>
 
                       {/* Conclusion */}
-                      {currentQuestion.conclusion && (
+                      {currentQuestionContent.conclusion && (
                         <div className="bg-green-50 p-4 rounded-lg mb-4">
                           <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
-                          <p className="text-gray-700">{currentQuestion.conclusion}</p>
-                          {currentQuestion.conclusionImageUrl && (
+                          {currentQuestionContent.conclusionFormattedText ? (
+                            <div className="text-gray-700" dangerouslySetInnerHTML={{ __html: currentQuestionContent.conclusionFormattedText }} />
+                          ) : (
+                            <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
+                          )}
+                          {currentQuestionContent.conclusionImageUrl && (
                             <img
-                              src={currentQuestion.conclusionImageUrl}
+                              src={currentQuestionContent.conclusionImageUrl}
                               alt="Conclusion"
                               className="mt-2 max-w-full rounded"
                             />
@@ -2181,7 +2374,7 @@ export default function TestAttemptPage() {
 
                       {/* Options */}
                       <div className="space-y-3">
-                        {currentQuestion.options.map((option: { optionId: string; text: string; imageUrl?: string }) => (
+                        {currentQuestionContent.options.map((option: { optionId: string; text: string; imageUrl?: string }) => (
                           <button
                             key={option.optionId}
                             onClick={() => handleSelectOption(currentQuestion._id, option.optionId)}
@@ -2224,16 +2417,16 @@ export default function TestAttemptPage() {
                     {/* Question */}
                     <div className="mb-4">
                       <div className="text-lg font-medium mb-2">
-                        {currentQuestionIndex + 1}.{' '}
-                        {currentQuestion.questionFormattedText ? (
-                          <span dangerouslySetInnerHTML={{ __html: currentQuestion.questionFormattedText }} />
+                        {currentQuestion.questionOrder}.{' '}
+                        {currentQuestionContent.questionFormattedText ? (
+                          <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
                         ) : (
-                          <span>{currentQuestion.questionText}</span>
+                          <span>{currentQuestionContent.questionText}</span>
                         )}
                       </div>
-                      {currentQuestion.questionImageUrl && (
+                      {currentQuestionContent.questionImageUrl && (
                         <img
-                          src={currentQuestion.questionImageUrl}
+                          src={currentQuestionContent.questionImageUrl}
                           alt="Question"
                           className="mt-2 max-w-full rounded"
                         />
@@ -2473,7 +2666,7 @@ export default function TestAttemptPage() {
                       }}
                       className={boxClasses}
                     >
-                      {globalIndex + 1}
+                      {q.questionOrder}
                       {isAnsweredAndMarked && (
                         <FiCheck className="absolute top-0 right-0 w-3 h-3 text-green-300" strokeWidth={3} />
                       )}
