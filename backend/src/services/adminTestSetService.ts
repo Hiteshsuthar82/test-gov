@@ -30,11 +30,30 @@ export const adminTestSetService = {
     negativeMarking: number;
     sections: Array<{ sectionId: string; name: string; order: number; durationMinutes?: number }>;
     hasSectionWiseTiming?: boolean;
+    sectionId: string;
+    subsectionId: string;
     isActive?: boolean;
   }) {
     const category = await Category.findById(categoryId);
     if (!category) {
       throw new Error('Category not found');
+    }
+
+    // Validate sectionId and subsectionId
+    if (!data.sectionId || !data.subsectionId) {
+      throw new Error('Section and Subsection are required');
+    }
+
+    // Validate that section exists in category
+    const categorySection = category.sections?.find(s => s.sectionId === data.sectionId);
+    if (!categorySection) {
+      throw new Error('Selected section does not exist in this category');
+    }
+
+    // Validate that subsection exists in the selected section
+    const subsection = categorySection.subsections?.find(sub => sub.subsectionId === data.subsectionId);
+    if (!subsection) {
+      throw new Error('Selected subsection does not exist in the selected section');
     }
 
     // Validate: If section-wise timing is enabled, all sections must have durationMinutes
@@ -60,21 +79,48 @@ export const adminTestSetService = {
     return testSet;
   },
 
-  async update(id: string, data: Partial<Omit<Parameters<typeof adminTestSetService.create>[1], 'sections'>> & { sections?: Array<{ sectionId: string; name: string; order: number; durationMinutes?: number }> }) {
+  async update(id: string, data: Partial<Omit<Parameters<typeof adminTestSetService.create>[1], 'sections'>> & { sections?: Array<{ sectionId: string; name: string; order: number; durationMinutes?: number }>; sectionId?: string; subsectionId?: string }) {
+    const testSet = await TestSet.findById(id);
+    if (!testSet) {
+      throw new Error('Test set not found');
+    }
+
+    // If sectionId or subsectionId is being updated, validate them
+    if (data.sectionId || data.subsectionId) {
+      const category = await Category.findById(testSet.categoryId);
+      if (!category) {
+        throw new Error('Category not found');
+      }
+
+      const sectionIdToValidate = data.sectionId || testSet.sectionId;
+      const subsectionIdToValidate = data.subsectionId || testSet.subsectionId;
+
+      if (sectionIdToValidate && subsectionIdToValidate) {
+        // Validate that section exists in category
+        const categorySection = category.sections?.find(s => s.sectionId === sectionIdToValidate);
+        if (!categorySection) {
+          throw new Error('Selected section does not exist in this category');
+        }
+
+        // Validate that subsection exists in the selected section
+        const subsection = categorySection.subsections?.find(sub => sub.subsectionId === subsectionIdToValidate);
+        if (!subsection) {
+          throw new Error('Selected subsection does not exist in the selected section');
+        }
+      }
+    }
+
     // Validate: If section-wise timing is enabled, all sections must have durationMinutes
     if (data.hasSectionWiseTiming !== undefined && data.hasSectionWiseTiming) {
-      const sections = data.sections || [];
+      const sections = data.sections || testSet.sections || [];
       const sectionsWithoutDuration = sections.filter(s => !s.durationMinutes || s.durationMinutes <= 0);
       if (sectionsWithoutDuration.length > 0) {
         throw new Error('All sections must have a duration when section-wise timing is enabled');
       }
     }
 
-    const testSet = await TestSet.findByIdAndUpdate(id, data, { new: true });
-    if (!testSet) {
-      throw new Error('Test set not found');
-    }
-    return testSet;
+    const updatedTestSet = await TestSet.findByIdAndUpdate(id, data, { new: true });
+    return updatedTestSet;
   },
 
   async delete(id: string) {

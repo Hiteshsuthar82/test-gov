@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { FiTarget, FiArrowRight } from "react-icons/fi";
+import { FiTarget, FiArrowRight, FiZap, FiGlobe, FiPlus } from "react-icons/fi";
+
 interface Category {
   _id: string;
   name: string;
@@ -11,12 +12,36 @@ interface Category {
   hasDiscount?: boolean;
   bannerImageUrl?: string;
   isActive: boolean;
+  totalSetsCount?: number;
 }
 
 interface CategoriesSectionProps {
   categories?: Category[];
   isLoading?: boolean;
 }
+
+// Helper function to format user count
+const formatUserCount = (count: number): string => {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1)}M`;
+  } else if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return count.toString();
+};
+
+// Helper function to get mock data (replace with actual API data when available)
+const getMockData = (category: Category) => {
+  // Generate consistent mock data based on category ID
+  const hash = category._id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  return {
+    userCount: Math.floor(100000 + (hash % 2000000)), // 100k to 2M
+    totalTests: Math.floor(500 + (hash % 2000)), // 500 to 2500
+    freeTests: Math.floor(10 + (hash % 100)), // 10 to 110
+    languages: hash % 3 === 0 ? ['English', 'Hindi'] : ['English', 'Hindi', '+ 7 More'],
+  };
+};
 
 export default function CategoriesSection({
   categories,
@@ -61,72 +86,106 @@ export default function CategoriesSection({
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[1, 2].map((i) => (
             <Card key={i} className="animate-pulse">
-              <div className="h-48 bg-gray-200 rounded-t-lg" />
-              <CardContent className="p-6">
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
-              </CardContent>
+              <div className="h-64 bg-gray-200 rounded-lg" />
             </Card>
           ))}
         </div>
       ) : categories && categories.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
-          {categories.map((category: Category) => (
-            <Card
-              key={category._id}
-              className="overflow-hidden hover:shadow-lg transition-all duration-300 border-2 border-purple-100 bg-white"
-            >
-              {category.bannerImageUrl ? (
-                <div className="relative h-48 overflow-hidden border-b-1 border-gray-600">
-                  <img
-                    src={category.bannerImageUrl}
-                    alt={category.name}
-                    className="w-full h-full object-cover"
-                  />
-                  {/* <div className="absolute inset-0 bg-gradient-to-t from-purple-900/80 to-transparent"></div> */}
-                </div>
-              ) : (
-                <div className="h-48 bg-gradient-to-br from-purple-500 to-rose-500 flex items-center justify-center">
-                  <FiTarget className="w-16 h-16 text-white opacity-50" />
-                </div>
-              )}
-              <CardContent className="p-6">
-                <h3 className="text-xl text-gray-900 mb-1">
-                  {category.name}
-                </h3>
-                <p className="text-gray-600 mb-3 line-clamp-2">
-                  {category.description}
-                </p>
-                <div className="flex justify-between items-end">
-                  <Link to={`/categories/${category._id}`}>
-                    <div className="flex items-center uppercase bg-transparent text-purple-600 underline text-lg font-semibold hover:scale-105 transition-all duration-300 ">
-                      View Tests
-                      <FiArrowRight className="ml-2" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+          {categories.map((category: Category) => {
+            const mockData = getMockData(category);
+            const userCountFormatted = formatUserCount(mockData.userCount);
+            
+            return (
+              <Card
+                key={category._id}
+                className="overflow-hidden hover:shadow-xl transition-all duration-300 bg-white rounded-xl shadow-md"
+              >
+                {/* Header Section with gradient background */}
+                <div className="relative bg-gradient-to-br from-purple-50 via-pink-50 to-white pt-6 px-6 pb-4">
+                  <div className="flex items-start justify-between">
+                    {/* Left: Circular Logo/Icon */}
+                    <div className="flex items-center">
+                      {category.bannerImageUrl ? (
+                        <div className="w-16 h-16 rounded-full overflow-hidden bg-white shadow-md border-2 border-white">
+                          <img
+                            src={category.bannerImageUrl}
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-rose-500 flex items-center justify-center shadow-md">
+                          <FiTarget className="w-8 h-8 text-white" />
+                        </div>
+                      )}
                     </div>
-                  </Link>
-                  <div>
-                    {category.hasDiscount ? (
-                      <div>
-                        <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
-                          ₹{category.discountedPrice}
-                        </div>
-                        <div className="text-sm text-gray-500 line-through">
-                          ₹{category.originalPrice}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-rose-600 bg-clip-text text-transparent">
-                        ₹{category.price}
-                      </div>
-                    )}
+                    
+                    {/* Right: User Count Badge */}
+                    <div className="bg-purple-100 rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                      <FiZap className="w-4 h-4 text-yellow-500" />
+                      <span className="text-xs font-medium text-gray-700">
+                        {userCountFormatted} Users
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                <CardContent className="px-6 pt-4 pb-6">
+                  {/* Title Section */}
+                  <h3 className="text-xl font-bold text-gray-900 mb-4 leading-tight">
+                    {category.name}
+                  </h3>
+
+                  {/* Test Statistics */}
+                  <div className="mb-4">
+                    <span className="text-sm text-gray-600">
+                      {mockData.totalTests} Total Tests |{' '}
+                      <span className="text-green-600 font-semibold">
+                        {mockData.freeTests} Free Tests
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Language Information */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <FiGlobe className="w-4 h-4 text-blue-400" />
+                    <span className="text-sm text-blue-400">
+                      {Array.isArray(mockData.languages) 
+                        ? mockData.languages.join(', ')
+                        : mockData.languages}
+                    </span>
+                  </div>
+
+                  {/* 2-Line Description */}
+                  <div className="mb-6 min-h-[3rem]">
+                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
+                      {category.description || 'Comprehensive test series designed to help you excel in your banking exam preparation with detailed explanations and performance analytics.'}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-3">
+                    <Link 
+                      to={`/categories/${category._id}`}
+                      className="flex-1"
+                    >
+                      <button className="w-full bg-blue-400 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2">
+                        View Test Series
+                        <FiArrowRight className="w-4 h-4" />
+                      </button>
+                    </Link>
+                    <button className="w-12 h-12 border-2 border-blue-400 rounded-lg flex items-center justify-center hover:bg-blue-50 transition-colors duration-200">
+                      <FiPlus className="w-6 h-6 text-blue-400 font-bold" />
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card className="relative z-10">

@@ -1,5 +1,6 @@
 import { Category } from '../models/Category';
 import { TestSet } from '../models/TestSet';
+import { ISection, ISubsection } from '../models/Category';
 
 export const adminCategoryService = {
   async getAll(query: { page?: number; limit?: number; search?: string }) {
@@ -42,16 +43,34 @@ export const adminCategoryService = {
   async create(data: {
     name: string;
     description?: string;
+    descriptionFormatted?: string;
     bannerImageUrl?: string;
     price: number;
     details?: string;
     detailsFormatted?: string;
     isActive?: boolean;
+    sections?: ISection[];
   }) {
+    // Validate sections: if there's one section, at least one subsection is required
+    if (data.sections && data.sections.length > 0) {
+      for (const section of data.sections) {
+        if (!section.subsections || section.subsections.length === 0) {
+          throw new Error(`Section "${section.name}" must have at least one subsection`);
+        }
+      }
+    }
     return Category.create(data);
   },
 
   async update(id: string, data: Partial<Parameters<typeof adminCategoryService.create>[0]>) {
+    // Validate sections: if there's one section, at least one subsection is required
+    if (data.sections && data.sections.length > 0) {
+      for (const section of data.sections) {
+        if (!section.subsections || section.subsections.length === 0) {
+          throw new Error(`Section "${section.name}" must have at least one subsection`);
+        }
+      }
+    }
     const category = await Category.findByIdAndUpdate(id, data, { new: true });
     if (!category) {
       throw new Error('Category not found');

@@ -7,12 +7,24 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { Button } from '../../components/ui/button'
+import { Select } from '../../components/ui/select'
 
 interface Section {
   sectionId: string
   name: string
   order: number
   durationMinutes?: number
+}
+
+interface CategorySection {
+  sectionId: string
+  name: string
+  order: number
+  subsections: Array<{
+    subsectionId: string
+    name: string
+    order: number
+  }>
 }
 
 export default function SetFormPage() {
@@ -28,6 +40,8 @@ export default function SetFormPage() {
     hasSectionWiseTiming: false,
     isActive: true,
     sections: [] as Section[],
+    sectionId: '',
+    subsectionId: '',
   })
   const [resolvedCategoryId, setResolvedCategoryId] = useState<string | null>(categoryId || null)
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -56,6 +70,20 @@ export default function SetFormPage() {
     enabled: !!id,
   })
 
+  // Fetch category to get sections and subsections
+  const finalCategoryId = categoryId || resolvedCategoryId
+  const { data: categoryData } = useQuery({
+    queryKey: ['category', finalCategoryId],
+    queryFn: async () => {
+      if (!finalCategoryId) return null
+      const response = await api.get(`/admin/categories/${finalCategoryId}`)
+      return response.data.data
+    },
+    enabled: !!finalCategoryId,
+  })
+
+  const categorySections: CategorySection[] = categoryData?.sections || []
+
   useEffect(() => {
     if (data) {
       setFormData({
@@ -67,9 +95,26 @@ export default function SetFormPage() {
         hasSectionWiseTiming: data.hasSectionWiseTiming ?? false,
         isActive: data.isActive ?? true,
         sections: data.sections || [],
+        sectionId: data.sectionId || '',
+        subsectionId: data.subsectionId || '',
       })
     }
   }, [data])
+
+  // Set default section and subsection when category data is loaded (for new test sets)
+  useEffect(() => {
+    if (!id && categorySections.length > 0 && !formData.sectionId) {
+      const firstSection = categorySections[0]
+      const firstSubsection = firstSection.subsections?.[0]
+      if (firstSection && firstSubsection) {
+        setFormData(prev => ({
+          ...prev,
+          sectionId: firstSection.sectionId,
+          subsectionId: firstSubsection.subsectionId,
+        }))
+      }
+    }
+  }, [categorySections, id])
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
@@ -96,6 +141,36 @@ export default function SetFormPage() {
 
   const validateForm = (): boolean => {
     setValidationError(null)
+
+    // Validate that category has sections
+    if (categorySections.length === 0) {
+      setValidationError('Category must have sections and subsections defined before creating test sets')
+      return false
+    }
+
+    // Validate section and subsection selection (required)
+    if (!formData.sectionId) {
+      setValidationError('Section is required')
+      return false
+    }
+
+    if (!formData.subsectionId) {
+      setValidationError('Subsection is required')
+      return false
+    }
+
+    // Validate that selected subsection exists in selected section
+    const selectedSection = categorySections.find(s => s.sectionId === formData.sectionId)
+    if (!selectedSection) {
+      setValidationError('Selected section does not exist in this category')
+      return false
+    }
+
+    const subsectionExists = selectedSection.subsections.some(sub => sub.subsectionId === formData.subsectionId)
+    if (!subsectionExists) {
+      setValidationError('Selected subsection does not exist in the selected section')
+      return false
+    }
 
     // Validate section-wise timing
     if (formData.hasSectionWiseTiming) {
@@ -189,6 +264,74 @@ export default function SetFormPage() {
                 rows={3}
               />
             </div>
+
+            {/* Section and Subsection Selection - Required */}
+            {categorySections.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="sectionId">Section *</Label>
+                  <Select
+                    id="sectionId"
+                    value={formData.sectionId}
+                    onChange={(e) => {
+                      const selectedSectionId = e.target.value
+                      const selectedSection = categorySections.find(s => s.sectionId === selectedSectionId)
+                      // Reset subsection when section changes and set to first subsection of new section
+                      const firstSubsection = selectedSection?.subsections?.[0]
+                      setFormData({
+                        ...formData,
+                        sectionId: selectedSectionId,
+                        subsectionId: firstSubsection?.subsectionId || '',
+                      })
+                      setValidationError(null) // Clear validation error when changing
+                    }}
+                    required
+                  >
+                    <option value="">Select Section</option>
+                    {categorySections.map((section) => (
+                      <option key={section.sectionId} value={section.sectionId}>
+                        {section.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {validationError && validationError.includes('Section') && !formData.sectionId && (
+                    <p className="text-sm text-red-500 mt-1">Section is required</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="subsectionId">Subsection *</Label>
+                  <Select
+                    id="subsectionId"
+                    value={formData.subsectionId}
+                    onChange={(e) => {
+                      setFormData({ ...formData, subsectionId: e.target.value })
+                      setValidationError(null) // Clear validation error when changing
+                    }}
+                    required
+                    disabled={!formData.sectionId}
+                  >
+                    <option value="">Select Subsection</option>
+                    {categorySections
+                      .find(s => s.sectionId === formData.sectionId)
+                      ?.subsections.map((subsection) => (
+                        <option key={subsection.subsectionId} value={subsection.subsectionId}>
+                          {subsection.name}
+                        </option>
+                      ))}
+                  </Select>
+                  {validationError && validationError.includes('Subsection') && !formData.subsectionId && (
+                    <p className="text-sm text-red-500 mt-1">Subsection is required</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-sm text-yellow-800">
+                  <strong>Warning:</strong> This category has no sections defined. Please add sections and subsections to the category first before creating test sets.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="durationMinutes">Duration (minutes) *</Label>

@@ -16,6 +16,8 @@ export interface ITestSet extends Document {
   negativeMarking: number;
   sections: ISection[];
   hasSectionWiseTiming: boolean; // If true, each section has its own timer
+  sectionId: string; // Required: section from category
+  subsectionId: string; // Required: subsection from category section
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +43,8 @@ const TestSetSchema = new Schema<ITestSet>(
     negativeMarking: { type: Number, required: true },
     sections: [SectionSchema],
     hasSectionWiseTiming: { type: Boolean, default: false },
+    sectionId: { type: String, required: true },
+    subsectionId: { type: String, required: true },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

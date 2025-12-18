@@ -52,14 +52,28 @@ export const adminCategoryController = {
         }
       }
 
+        // Parse sections if provided
+        let sections = [];
+        if (req.body.sections) {
+          try {
+            sections = typeof req.body.sections === 'string' 
+              ? JSON.parse(req.body.sections) 
+              : req.body.sections;
+          } catch (error) {
+            return sendError(res, 'Invalid sections format', 400);
+          }
+        }
+
         const category = await adminCategoryService.create({
           name: req.body.name,
           description: req.body.description,
+          descriptionFormatted: req.body.descriptionFormatted,
           bannerImageUrl: bannerImageUrl || undefined,
           price: parseFloat(req.body.price) || 0,
           details: req.body.details,
           detailsFormatted: req.body.detailsFormatted,
           isActive: req.body.isActive === 'true' || req.body.isActive === true,
+          sections: sections,
         });
         sendSuccess(res, category, 'Category created successfully.');
       } catch (error: any) {
@@ -141,9 +155,22 @@ export const adminCategoryController = {
           bannerImageUrl = existingCategory?.bannerImageUrl;
         }
 
+        // Parse sections if provided
+        let sections = undefined;
+        if (req.body.sections !== undefined) {
+          try {
+            sections = typeof req.body.sections === 'string' 
+              ? JSON.parse(req.body.sections) 
+              : req.body.sections;
+          } catch (error) {
+            return sendError(res, 'Invalid sections format', 400);
+          }
+        }
+
         const updateData: any = {
           name: req.body.name,
           description: req.body.description,
+          descriptionFormatted: req.body.descriptionFormatted,
           price: parseFloat(req.body.price) || 0,
           details: req.body.details,
           detailsFormatted: req.body.detailsFormatted,
@@ -152,6 +179,10 @@ export const adminCategoryController = {
         
         if (bannerImageUrl !== undefined) {
           updateData.bannerImageUrl = bannerImageUrl || undefined;
+        }
+
+        if (sections !== undefined) {
+          updateData.sections = sections;
         }
 
         const category = await adminCategoryService.update(id, updateData);
