@@ -44,6 +44,8 @@ export const testSetService = {
           ...set.toObject(),
           totalQuestions: questionCount,
           attemptCount: attemptCount,
+          sectionId: set.sectionId,
+          subsectionId: set.subsectionId,
         };
       })
     );
@@ -120,7 +122,7 @@ export const testSetService = {
       isActive: true,
     })
       .sort({ createdAt: 1 })
-      .select('name description durationMinutes totalMarks isActive _id categoryId');
+      .select('name description durationMinutes totalMarks isActive _id categoryId sectionId subsectionId');
 
     // Get question counts and attempt counts for each set
     const setsWithCounts = await Promise.all(
@@ -151,6 +153,8 @@ export const testSetService = {
           attemptCount: attemptCount,
           categoryId: set.categoryId,
           isActive: set.isActive,
+          sectionId: set.sectionId,
+          subsectionId: set.subsectionId,
         };
       })
     );

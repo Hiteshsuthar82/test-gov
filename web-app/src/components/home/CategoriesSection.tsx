@@ -13,6 +13,10 @@ interface Category {
   bannerImageUrl?: string;
   isActive: boolean;
   totalSetsCount?: number;
+  userCount?: number;
+  totalTests?: number;
+  freeTests?: number;
+  languages?: string | string[];
 }
 
 interface CategoriesSectionProps {
@@ -28,19 +32,6 @@ const formatUserCount = (count: number): string => {
     return `${(count / 1000).toFixed(1)}k`;
   }
   return count.toString();
-};
-
-// Helper function to get mock data (replace with actual API data when available)
-const getMockData = (category: Category) => {
-  // Generate consistent mock data based on category ID
-  const hash = category._id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  
-  return {
-    userCount: Math.floor(100000 + (hash % 2000000)), // 100k to 2M
-    totalTests: Math.floor(500 + (hash % 2000)), // 500 to 2500
-    freeTests: Math.floor(10 + (hash % 100)), // 10 to 110
-    languages: hash % 3 === 0 ? ['English', 'Hindi'] : ['English', 'Hindi', '+ 7 More'],
-  };
 };
 
 export default function CategoriesSection({
@@ -86,18 +77,22 @@ export default function CategoriesSection({
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[1, 2].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="animate-pulse">
               <div className="h-64 bg-gray-200 rounded-lg" />
             </Card>
           ))}
         </div>
       ) : categories && categories.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-          {categories.map((category: Category) => {
-            const mockData = getMockData(category);
-            const userCountFormatted = formatUserCount(mockData.userCount);
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+            {categories.slice(0, 4).map((category: Category) => {
+            const userCount = category.userCount || 0;
+            const totalTests = category.totalTests || category.totalSetsCount || 0;
+            const freeTests = category.freeTests || 0;
+            const languages = category.languages || ['English', 'Hindi'];
+            const userCountFormatted = formatUserCount(userCount);
             
             return (
               <Card
@@ -125,12 +120,14 @@ export default function CategoriesSection({
                     </div>
                     
                     {/* Right: User Count Badge */}
-                    <div className="bg-purple-100 rounded-full px-3 py-1.5 flex items-center gap-1.5">
-                      <FiZap className="w-4 h-4 text-yellow-500" />
-                      <span className="text-xs font-medium text-gray-700">
-                        {userCountFormatted} Users
-                      </span>
-                    </div>
+                    {userCount > 0 && (
+                      <div className="bg-purple-100 rounded-full px-3 py-1.5 flex items-center gap-1.5">
+                        <FiZap className="w-4 h-4 text-yellow-500" />
+                        <span className="text-xs font-medium text-gray-700">
+                          {userCountFormatted} Users
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -143,22 +140,29 @@ export default function CategoriesSection({
                   {/* Test Statistics */}
                   <div className="mb-4">
                     <span className="text-sm text-gray-600">
-                      {mockData.totalTests} Total Tests |{' '}
-                      <span className="text-green-600 font-semibold">
-                        {mockData.freeTests} Free Tests
-                      </span>
+                      {totalTests} Total Tests
+                      {freeTests > 0 && (
+                        <>
+                          {' | '}
+                          <span className="text-green-600 font-semibold">
+                            {freeTests} Free Tests
+                          </span>
+                        </>
+                      )}
                     </span>
                   </div>
 
                   {/* Language Information */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <FiGlobe className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm text-blue-400">
-                      {Array.isArray(mockData.languages) 
-                        ? mockData.languages.join(', ')
-                        : mockData.languages}
-                    </span>
-                  </div>
+                  {languages && (Array.isArray(languages) ? languages.length > 0 : languages) && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <FiGlobe className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                      <span className="text-sm text-blue-400">
+                        {Array.isArray(languages) 
+                          ? languages.join(', ')
+                          : languages}
+                      </span>
+                    </div>
+                  )}
 
                   {/* 2-Line Description */}
                   <div className="mb-6 min-h-[3rem]">
@@ -185,8 +189,19 @@ export default function CategoriesSection({
                 </CardContent>
               </Card>
             );
-          })}
-        </div>
+            })}
+          </div>
+          
+          {/* View All Button */}
+          <div className="flex justify-center mt-8 relative z-10">
+            <Link to="/categories">
+              <button className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white font-semibold py-3 px-8 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:scale-105">
+                View All Categories
+                <FiArrowRight className="w-5 h-5" />
+              </button>
+            </Link>
+          </div>
+        </>
       ) : (
         <Card className="relative z-10">
           <CardContent className="pt-6 text-center text-gray-600 py-12">

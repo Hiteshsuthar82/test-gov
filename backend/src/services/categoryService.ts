@@ -2,6 +2,7 @@ import { Category } from '../models/Category';
 import { Subscription } from '../models/Subscription';
 import { TestSet } from '../models/TestSet';
 import { TestAttempt } from '../models/TestAttempt';
+import { Question } from '../models/Question';
 import { User } from '../models/User';
 import { Partner } from '../models/Partner';
 import { Types } from 'mongoose';
@@ -75,19 +76,100 @@ export const categoryService = {
     // Get user's discount percentage if userId is provided
     const discountPercentage = await getUserDiscountPercentage(userId);
 
-    // Calculate discounted prices for each category
-    const categoriesWithPricing = categories.map((category) => {
-      const pricing = calculateDiscountedPrice(category.price, discountPercentage);
-      return {
-        ...category.toObject(),
-        originalPrice: pricing.originalPrice,
-        discountedPrice: pricing.discountedPrice,
-        hasDiscount: pricing.hasDiscount,
-      };
-    });
+    // Get additional statistics for each category
+    const categoriesWithStats = await Promise.all(
+      categories.map(async (category) => {
+        const pricing = calculateDiscountedPrice(category.price, discountPercentage);
+        
+        // Get user count (approved subscriptions for this category)
+        const userCount = await Subscription.countDocuments({
+          categoryId: category._id,
+          status: 'APPROVED',
+        });
+
+        // Get total tests (already available as totalSetsCount)
+        const totalTests = category.totalSetsCount || 0;
+
+        // Get free tests count (if category price is 0, all tests are free; otherwise 0)
+        // Or we can count test sets that are marked as free if we add that field later
+        const freeTests = category.price === 0 ? totalTests : 0;
+
+        // Get available languages from questions in test sets of this category
+        const testSetIds = await TestSet.find({
+          categoryId: category._id,
+          isActive: true,
+        }).select('_id').lean();
+
+        const testSetObjectIds = testSetIds.map(ts => ts._id);
+        
+        const availableLanguages = new Set<string>();
+        if (testSetObjectIds.length > 0) {
+          const questions = await Question.find({
+            testSetId: { $in: testSetObjectIds },
+            isActive: true,
+          }).select('languages').lean();
+
+          questions.forEach((question: any) => {
+            if (question.languages) {
+              if (question.languages.en) availableLanguages.add('en');
+              if (question.languages.hi) availableLanguages.add('hi');
+              if (question.languages.gu) availableLanguages.add('gu');
+            }
+          });
+        }
+
+        // Format languages array
+        const languagesArray: string[] = [];
+        if (availableLanguages.has('en')) languagesArray.push('English');
+        if (availableLanguages.has('hi')) languagesArray.push('Hindi');
+        if (availableLanguages.has('gu')) languagesArray.push('Gujarati');
+        
+        // If more than 2 languages, show first 2 + "X More"
+        let languagesDisplay: string | string[];
+        if (languagesArray.length > 2) {
+          languagesDisplay = [languagesArray[0], languagesArray[1], `+ ${languagesArray.length - 2} More`];
+        } else {
+          languagesDisplay = languagesArray;
+        }
+
+        // Get completed sets count for the user (if userId provided)
+        let completedSetsCount = 0;
+        if (userId && totalTests > 0) {
+          // Get all test sets for this category
+          const categoryTestSets = await TestSet.find({
+            categoryId: category._id,
+            isActive: true,
+          }).select('_id').lean();
+
+          const testSetIds = categoryTestSets.map(ts => ts._id);
+          
+          if (testSetIds.length > 0) {
+            // Count distinct test sets that user has completed (submitted attempts)
+            const completedSets = await TestAttempt.distinct('testSetId', {
+              userId: new Types.ObjectId(userId),
+              testSetId: { $in: testSetIds },
+              status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+            });
+            completedSetsCount = completedSets.length;
+          }
+        }
+
+        return {
+          ...category.toObject(),
+          originalPrice: pricing.originalPrice,
+          discountedPrice: pricing.discountedPrice,
+          hasDiscount: pricing.hasDiscount,
+          userCount,
+          totalTests,
+          freeTests,
+          languages: languagesDisplay,
+          completedSetsCount,
+        };
+      })
+    );
 
     return {
-      categories: categoriesWithPricing,
+      categories: categoriesWithStats,
       pagination: {
         page,
         limit,
@@ -107,19 +189,69 @@ export const categoryService = {
     const discountPercentage = await getUserDiscountPercentage(userId);
     const pricing = calculateDiscountedPrice(category.price, discountPercentage);
 
+    // Get user count (approved subscriptions for this category)
+    const userCount = await Subscription.countDocuments({
+      categoryId: category._id,
+      status: 'APPROVED',
+    });
+
+    // Get total tests
+    const totalTests = category.totalSetsCount || 0;
+
+    // Get free tests count
+    const freeTests = category.price === 0 ? totalTests : 0;
+
+    // Get available languages from questions in test sets of this category
+    const testSetIds = await TestSet.find({
+      categoryId: category._id,
+      isActive: true,
+    }).select('_id').lean();
+
+    const testSetObjectIds = testSetIds.map(ts => ts._id);
+    
+    const availableLanguages = new Set<string>();
+    if (testSetObjectIds.length > 0) {
+      const questions = await Question.find({
+        testSetId: { $in: testSetObjectIds },
+        isActive: true,
+      }).select('languages').lean();
+
+      questions.forEach((question: any) => {
+        if (question.languages) {
+          if (question.languages.en) availableLanguages.add('en');
+          if (question.languages.hi) availableLanguages.add('hi');
+          if (question.languages.gu) availableLanguages.add('gu');
+        }
+      });
+    }
+
+    // Format languages array
+    const languagesArray: string[] = [];
+    if (availableLanguages.has('en')) languagesArray.push('English');
+    if (availableLanguages.has('hi')) languagesArray.push('Hindi');
+    if (availableLanguages.has('gu')) languagesArray.push('Gujarati');
+
     const result: any = {
       category: {
         id: category._id,
         name: category.name,
         description: category.description,
+        descriptionFormatted: category.descriptionFormatted,
         bannerImageUrl: category.bannerImageUrl,
         price: category.price,
         originalPrice: pricing.originalPrice,
         discountedPrice: pricing.discountedPrice,
         hasDiscount: pricing.hasDiscount,
         details: category.details,
+        detailsFormatted: category.detailsFormatted,
         isActive: category.isActive,
         totalSetsCount: category.totalSetsCount,
+        totalTests,
+        sections: category.sections || [],
+        updatedAt: category.updatedAt,
+        userCount,
+        freeTests,
+        languages: languagesArray,
       },
       subscriptionStatus: 'NONE',
     };

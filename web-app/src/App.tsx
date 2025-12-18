@@ -12,6 +12,7 @@ import PaymentPage from './pages/PaymentPage'
 import MySubscriptionsPage from './pages/MySubscriptionsPage'
 import TestAttemptsHistoryPage from './pages/TestAttemptsHistoryPage'
 import AllResultsPage from './pages/AllResultsPage'
+import AllCategoriesPage from './pages/AllCategoriesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import NoticesPage from './pages/NoticesPage'
 import TestAttemptInstructionsPage from './pages/TestAttemptInstructionsPage'
@@ -31,6 +32,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<HomePage />} />
+          <Route path="/categories" element={<AllCategoriesPage />} />
           <Route
             path="/categories/:categoryId"
             element={

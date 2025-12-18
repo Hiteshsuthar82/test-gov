@@ -1,11 +1,31 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Layout from '@/components/layout/Layout'
-import { FiClock, FiFileText, FiCheckCircle, FiLock, FiX, FiPlay, FiEye } from 'react-icons/fi'
+import { 
+  FiClock, 
+  FiFileText, 
+  FiCheckCircle, 
+  FiLock, 
+  FiX, 
+  FiPlay, 
+  FiEye, 
+  FiChevronRight,
+  FiChevronDown,
+  FiUsers,
+  FiGlobe,
+  FiAward,
+  FiMonitor,
+  FiStar,
+  FiZap,
+  FiArrowRight,
+  FiMoreVertical,
+  FiBookOpen
+} from 'react-icons/fi'
+import { useAuthStore } from '@/store/authStore'
 
 interface TestSet {
   _id: string
@@ -17,11 +37,41 @@ interface TestSet {
   attemptCount?: number
   categoryId: string
   isActive: boolean
+  sectionId?: string
+  subsectionId?: string
+  price?: number
+}
+
+interface CategorySection {
+  sectionId: string
+  name: string
+  order: number
+  subsections: Array<{
+    subsectionId: string
+    name: string
+    order: number
+  }>
+}
+
+interface Category {
+  _id: string
+  name: string
+  description: string
+  bannerImageUrl?: string
+  totalSetsCount?: number
+  sections?: CategorySection[]
+  updatedAt?: string
+  userCount?: number
+  languages?: string[]
+  price?: number
+  freeTests?: number
 }
 
 export default function CategoryPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
+  const [selectedSection, setSelectedSection] = useState<string | null>(null)
+  const [selectedSubsection, setSelectedSubsection] = useState<string | null>(null)
 
   const { data: categoryData } = useQuery({
     queryKey: ['category', categoryId],
@@ -31,7 +81,7 @@ export default function CategoryPage() {
     },
     enabled: !!categoryId,
   })
-  const category = categoryData?.category
+  const category: Category | undefined = categoryData?.category
 
   const { data: subscriptionStatus } = useQuery({
     queryKey: ['subscriptionStatus', categoryId],
@@ -48,21 +98,19 @@ export default function CategoryPage() {
 
   const isSubscriptionApproved = subscriptionStatus?.status === 'APPROVED'
 
-  // Always fetch test sets (public endpoint) regardless of subscription status
+  // Fetch test sets
   const { data: testSets, isLoading } = useQuery({
     queryKey: ['testSets', categoryId, subscriptionStatus?.status],
     queryFn: async () => {
       const approved = subscriptionStatus?.status === 'APPROVED'
       try {
-        // Try to get sets with subscription (full access) if approved
         if (approved) {
           const response = await api.get(`/sets/categories/${categoryId}/sets`)
           return response.data.data.filter((set: TestSet) => set.isActive)
         }
       } catch (error: any) {
-        // If subscription endpoint fails, continue to public endpoint
+        // Continue to public endpoint
       }
-      // Get public sets (locked preview) - always use this as fallback or when not subscribed
       const response = await api.get(`/sets/categories/${categoryId}/sets/public`)
       return response.data.data.filter((set: TestSet) => set.isActive)
     },
@@ -70,10 +118,7 @@ export default function CategoryPage() {
     retry: false,
   })
 
-  const [showResumeDialog, setShowResumeDialog] = useState(false)
-  const [selectedTestSetId, setSelectedTestSetId] = useState<string | null>(null)
-
-  // Fetch all attempts for all test sets in this category
+  // Fetch all attempts
   const { data: allAttempts } = useQuery({
     queryKey: ['allAttempts', categoryId],
     queryFn: async () => {
@@ -87,34 +132,65 @@ export default function CategoryPage() {
     enabled: !!categoryId && isSubscriptionApproved,
   })
 
-  // Fetch in-progress attempts for dialog
-  const { data: inProgressAttempts } = useQuery({
-    queryKey: ['inProgressAttempts', selectedTestSetId],
+  const { user } = useAuthStore()
+
+  // Fetch leaderboard data for all test sets to get ranks
+  const { data: leaderboardData } = useQuery({
+    queryKey: ['leaderboard', categoryId, user?.id, testSets],
     queryFn: async () => {
-      const response = await api.get(`/attempts/in-progress/list${selectedTestSetId ? `?testSetId=${selectedTestSetId}` : ''}`)
-      return response.data.data
+      if (!categoryId || !user?.id || !testSets || testSets.length === 0) return {}
+      try {
+        // Fetch leaderboard for each test set
+        const rankMap: Record<string, { rank: number; totalParticipants: number }> = {}
+        
+        await Promise.all(
+          testSets.map(async (set: TestSet) => {
+            try {
+              const response = await api.get(`/leaderboard?categoryId=${categoryId}&testSetId=${set._id}`)
+              const leaderboard = response.data.data?.leaderboard || []
+              const totalParticipants = response.data.data?.pagination?.total || leaderboard.length
+              
+              const userEntry = leaderboard.find((entry: any) => {
+                const entryUserId = entry.userId?._id || entry.userId?.toString() || entry.userId
+                return entryUserId === user.id || entryUserId?.toString() === user.id
+              })
+              
+              if (userEntry) {
+                rankMap[set._id] = {
+                  rank: userEntry.rank || 0,
+                  totalParticipants,
+                }
+              }
+            } catch {
+              // Skip if leaderboard fetch fails for this test set
+            }
+          })
+        )
+        
+        return rankMap
+      } catch {
+        return {}
+      }
     },
-    enabled: showResumeDialog && !!selectedTestSetId,
+    enabled: !!categoryId && !!user?.id && isSubscriptionApproved && !!testSets && testSets.length > 0,
   })
 
-  // Helper function to get attempt status for a test set
+  // Get attempt status for a test set
   const getAttemptStatus = (testSetId: string) => {
     if (!allAttempts || !Array.isArray(allAttempts)) return null
     
     const attempts = allAttempts.filter((attempt: any) => {
-      const attemptTestSetId = attempt.testSetId?._id || attempt.testSetId?._id?.toString() || attempt.testSetId?.toString() || attempt.testSetId
+      const attemptTestSetId = attempt.testSetId?._id || attempt.testSetId?.toString() || attempt.testSetId
       return attemptTestSetId === testSetId || attemptTestSetId?.toString() === testSetId
     })
     
     if (attempts.length === 0) return null
     
-    // Check for in-progress attempts first
     const inProgress = attempts.find((a: any) => a.status === 'IN_PROGRESS')
     if (inProgress) {
       return { status: 'IN_PROGRESS', attemptId: inProgress._id }
     }
     
-    // Check for completed attempts
     const completed = attempts.find((a: any) => 
       a.status === 'SUBMITTED' || a.status === 'AUTO_SUBMITTED'
     )
@@ -125,309 +201,733 @@ export default function CategoryPage() {
     return null
   }
 
+  // Calculate completed tests count
+  const completedTestsCount = useMemo(() => {
+    if (!allAttempts || !Array.isArray(allAttempts) || !testSets) return 0
+    const completedSetIds = new Set(
+      allAttempts
+        .filter((a: any) => a.status === 'SUBMITTED' || a.status === 'AUTO_SUBMITTED')
+        .map((a: any) => a.testSetId?._id || a.testSetId?.toString() || a.testSetId)
+    )
+    return testSets.filter((set: TestSet) => 
+      completedSetIds.has(set._id)
+    ).length
+  }, [allAttempts, testSets])
+
+  const totalTests = category?.totalSetsCount || testSets?.length || 0
+  const progressPercentage = totalTests > 0 ? Math.round((completedTestsCount / totalTests) * 100) : 0
+
+
+  // Get section filter options (for tabs)
+  const sectionFilters = useMemo(() => {
+    if (!category?.sections) return []
+    return category.sections
+      .sort((a, b) => a.order - b.order)
+      .map((section) => ({
+        sectionId: section.sectionId,
+        name: section.name,
+        count: testSets?.filter((set: TestSet) => set.sectionId === section.sectionId).length || 0,
+      }))
+  }, [category, testSets])
+
+  // Set first section as selected by default
+  useEffect(() => {
+    if (sectionFilters.length > 0 && !selectedSection) {
+      setSelectedSection(sectionFilters[0].sectionId)
+    }
+  }, [sectionFilters, selectedSection])
+
+  // Get subsection filter options (for filter bar - only for selected section)
+  const subsectionFilters = useMemo(() => {
+    if (!category?.sections || !selectedSection) return []
+    const section = category.sections.find((s) => s.sectionId === selectedSection)
+    if (!section) return []
+    
+    return section.subsections
+      .sort((a, b) => a.order - b.order)
+      .map((subsection) => {
+        const count = testSets?.filter((set: TestSet) => 
+          set.sectionId === selectedSection && set.subsectionId === subsection.subsectionId
+        ).length || 0
+        return {
+          subsectionId: subsection.subsectionId,
+          name: subsection.name,
+          count,
+        }
+      })
+  }, [category, testSets, selectedSection])
+
+  // Filter test sets by selected section and subsection
+  const filteredTestSets = useMemo(() => {
+    if (!testSets) return []
+    let filtered = testSets
+    
+    // Filter by section if selected
+    if (selectedSection) {
+      filtered = filtered.filter((set: TestSet) => set.sectionId === selectedSection)
+    }
+    
+    // Filter by subsection if selected
+    if (selectedSubsection) {
+      filtered = filtered.filter((set: TestSet) => set.subsectionId === selectedSubsection)
+    }
+    
+    return filtered
+  }, [testSets, selectedSection, selectedSubsection])
+
+  // Reset subsection when section changes
+  const handleSectionChange = (sectionId: string | null) => {
+    setSelectedSection(sectionId)
+    setSelectedSubsection(null) // Reset subsection when section changes
+  }
+
+
   const handleStartTest = async (testSetId: string) => {
     if (!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') {
       alert('Please subscribe to this category first')
       return
     }
 
-    // Check if test is already completed
     const attemptStatus = getAttemptStatus(testSetId)
     if (attemptStatus?.status === 'COMPLETED') {
-      // Navigate to results page instead
       window.location.href = `/test/${testSetId}/results/${attemptStatus.attemptId}`
       return
     }
 
-    // Check for in-progress attempts
     try {
       const response = await api.get(`/attempts/in-progress/list?testSetId=${testSetId}`)
       const inProgress = response.data.data || []
       
       if (inProgress.length > 0) {
-        setSelectedTestSetId(testSetId)
-        setShowResumeDialog(true)
+        // Navigate to resume
+        window.location.href = `/test/${testSetId}/attempt/${inProgress[0]._id}`
       } else {
-        // Navigate to instructions page instead of starting attempt directly
         navigate(`/test/${testSetId}/instructions`)
       }
     } catch (error) {
-      // If check fails, navigate to instructions page
       navigate(`/test/${testSetId}/instructions`)
     }
   }
 
-  const handleResumeAttempt = (attemptId: string) => {
-    const testSet = testSets?.find((ts: TestSet) => ts._id === selectedTestSetId)
-    if (testSet) {
-      window.location.href = `/test/${selectedTestSetId}/attempt/${attemptId}`
+  // Get last attempt date for a test set
+  const getLastAttemptDate = (testSetId: string) => {
+    if (!allAttempts || !Array.isArray(allAttempts)) return null
+    const attempts = allAttempts.filter((attempt: any) => {
+      const attemptTestSetId = attempt.testSetId?._id || attempt.testSetId?.toString() || attempt.testSetId
+      return (attemptTestSetId === testSetId || attemptTestSetId?.toString() === testSetId) &&
+        (attempt.status === 'SUBMITTED' || attempt.status === 'AUTO_SUBMITTED')
+    })
+    if (attempts.length === 0) return null
+    const lastAttempt = attempts.sort((a: any, b: any) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0]
+    return lastAttempt.createdAt
+  }
+
+  // Get attempt score and rank
+  const getAttemptData = (testSetId: string) => {
+    if (!allAttempts || !Array.isArray(allAttempts) || !testSets) return null
+    const attempts = allAttempts.filter((attempt: any) => {
+      const attemptTestSetId = attempt.testSetId?._id || attempt.testSetId?.toString() || attempt.testSetId
+      return (attemptTestSetId === testSetId || attemptTestSetId?.toString() === testSetId) &&
+        (attempt.status === 'SUBMITTED' || attempt.status === 'AUTO_SUBMITTED')
+    })
+    if (attempts.length === 0) return null
+    const bestAttempt = attempts.reduce((best: any, current: any) => 
+      current.totalScore > (best?.totalScore || 0) ? current : best
+    )
+    const testSet = testSets.find((set: TestSet) => set._id === testSetId)
+    return {
+      score: bestAttempt.totalScore,
+      totalMarks: testSet?.totalMarks || bestAttempt.testSetId?.totalMarks || 0,
+      attemptId: bestAttempt._id,
     }
   }
 
-  const handleStartNewTest = () => {
-    if (selectedTestSetId) {
-      // Navigate to instructions page for new test
-      setShowResumeDialog(false)
-      const testSetId = selectedTestSetId
-      setSelectedTestSetId(null)
-      navigate(`/test/${testSetId}/instructions`)
+  // Format date
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return ''
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  // Format user count
+  const formatUserCount = (count: number): string => {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`
     }
+    return count.toString()
   }
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {category && (
-          <Card className="mb-8 overflow-hidden shadow-lg">
-            <div className={`grid gap-0 ${category.bannerImageUrl ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
-              {/* Image Section - Left Side on Desktop */}
-              {category.bannerImageUrl && (
-                <div className="lg:order-1 relative">
-                  <img
-                    src={category.bannerImageUrl}
-                    alt={category.name}
-                    className="w-full h-64 lg:h-full lg:min-h-[450px] object-cover"
-                  />
-                </div>
-              )}
-              
-              {/* Details Section - Right Side on Desktop */}
-              <div className={`lg:order-2 p-6 lg:p-10 ${category.bannerImageUrl ? 'bg-white' : 'bg-white'}`}>
-                <div className="h-full flex flex-col justify-center space-y-4">
-                  <div>
-                    <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">
-                      {category.name}
-                    </h1>
-                    {category.description && (
-                      <p className="text-lg text-gray-600 leading-relaxed">
-                        {category.description}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {category.detailsFormatted || category.details ? (
-                    <div className="mt-2 prose prose-sm lg:prose-base max-w-none text-gray-700">
-                      {category.detailsFormatted ? (
-                        <div 
-                          className="prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900"
-                          dangerouslySetInnerHTML={{ __html: category.detailsFormatted }} 
-                        />
+      <div className="min-h-screen bg-gray-50 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Breadcrumbs */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Link to="/" className="text-gray-500 hover:text-gray-700">
+                Home
+              </Link>
+              <FiChevronRight className="w-4 h-4 text-gray-400" />
+              <Link to="/categories" className="text-gray-500 hover:text-gray-700">
+                Categories
+              </Link>
+              <FiChevronRight className="w-4 h-4 text-gray-400" />
+              <span className="text-blue-600">{category?.name || 'Category'}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content Area */}
+            <div className="lg:col-span-2">
+              {/* Header Section */}
+              {category && (
+                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-start gap-4 flex-1">
+                      {category.bannerImageUrl ? (
+                        <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                          <img
+                            src={category.bannerImageUrl}
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
                       ) : (
-                        <p className="whitespace-pre-wrap leading-relaxed">{category.details}</p>
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                          <span className="text-white font-bold text-xl">T</span>
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+                          {category.name}
+                        </h1>
+                        <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                          <FiClock className="w-4 h-4" />
+                          <span>Last updated on {formatDate(category.updatedAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <FiMoreVertical className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Statistics */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-4 mb-2">
+                      <span className="text-lg font-bold text-gray-900">
+                        {totalTests} Total Tests
+                      </span>
+                      {category.freeTests && category.freeTests > 0 && (
+                        <span className="bg-green-500 text-white px-3 py-1 rounded text-sm font-semibold">
+                          {category.freeTests} FREE TESTS
+                        </span>
                       )}
                     </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {!subscriptionStatus || subscriptionStatus.status !== 'APPROVED' ? (
-          <Card className="mb-8 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  Subscribe to Access All Tests
-                </h3>
-                <p className="text-gray-700 mb-4">
-                  Get unlimited access to all test series in this category
-                </p>
-                <div className="flex items-center justify-center gap-4 mb-4">
-                  <div className="text-center">
-                    {category?.hasDiscount ? (
-                      <div>
-                        <div className="text-3xl font-bold text-purple-600">₹{category.discountedPrice}</div>
-                        <div className="text-lg text-gray-500 line-through">₹{category.originalPrice}</div>
+                    {totalTests > 0 && (
+                      <div className="mb-2">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progressPercentage}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-sm text-gray-600">
+                            {completedTestsCount}/{totalTests} Tests
+                          </span>
+                          <span className="text-sm text-green-600 font-semibold">
+                            {progressPercentage}%
+                          </span>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="text-3xl font-bold text-purple-600">₹{category?.price || 0}</div>
-                    )}
-                    <div className="text-sm text-gray-600 mt-1">One-time payment</div>
-                  </div>
-                </div>
-                <Link to={`/categories/${categoryId}/payment`}>
-                  <Button size="lg" className="bg-purple-600 hover:bg-purple-700">
-                    Buy Now
-                  </Button>
-                </Link>
-                {subscriptionStatus && subscriptionStatus.status === 'PENDING_REVIEW' && (
-                  <p className="text-sm text-yellow-600 mt-4">
-                    Your payment is under review. You'll be notified once approved.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Available Test Series</h2>
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardHeader>
-                  <div className="h-4 bg-gray-200 rounded w-3/4" />
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        ) : testSets && testSets.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {testSets.map((testSet: TestSet) => {
-              const isLocked = !isSubscriptionApproved
-              return (
-                <Card 
-                  key={testSet._id} 
-                  className={`hover:shadow-lg transition-shadow relative ${isLocked ? 'opacity-75 border-gray-300' : ''}`}
-                >
-                  <div className="absolute top-4 right-4 z-10 flex gap-2">
-                    {isLocked && (
-                      <FiLock className="text-2xl text-gray-400" />
                     )}
                   </div>
-                  <CardHeader>
-                    <CardTitle className={isLocked ? 'text-gray-500' : ''}>
-                      {testSet.name}
-                    </CardTitle>
-                    <CardDescription className={isLocked ? 'text-gray-400' : ''}>
-                      {testSet.description || 'No description available'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 mb-4">
-                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
-                        <FiClock className="mr-2" />
-                        {testSet.durationMinutes} minutes
-                      </div>
-                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
-                        <FiFileText className="mr-2" />
-                        {testSet.totalQuestions || 0} questions
-                      </div>
-                      <div className={`flex items-center text-sm ${isLocked ? 'text-gray-400' : 'text-gray-600'}`}>
-                        <FiCheckCircle className="mr-2" />
-                        {testSet.totalMarks} marks
-                      </div>
-                    </div>
-                    {isLocked ? (
-                      <Link to={`/categories/${categoryId}/payment`} className="block">
-                        <Button className="w-full bg-purple-600 hover:bg-purple-700">
-                          <FiLock className="mr-2" />
-                          Unlock to Start
-                        </Button>
-                      </Link>
-                    ) : (() => {
-                      const attemptStatus = getAttemptStatus(testSet._id)
-                      
-                      if (attemptStatus?.status === 'IN_PROGRESS') {
-                        return (
-                          <Link to={`/test/${testSet._id}/attempt/${attemptStatus.attemptId}`} className="block">
-                            <Button className="w-full bg-green-600 hover:bg-green-700">
-                              <FiPlay className="mr-2" />
-                              Resume
-                            </Button>
-                          </Link>
-                        )
-                      }
-                      
-                      if (attemptStatus?.status === 'COMPLETED') {
-                        return (
-                          <Link to={`/test/${testSet._id}/results/${attemptStatus.attemptId}`} className="block">
-                            <Button className="w-full bg-purple-600 hover:bg-purple-700">
-                              <FiEye className="mr-2" />
-                              Show Result
-                            </Button>
-                          </Link>
-                        )
-                      }
-                      
-                      return (
-                        <Button
-                          className="w-full"
-                          onClick={() => handleStartTest(testSet._id)}
-                        >
-                          Attempt
-                        </Button>
-                      )
-                    })()}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        ) : (
-          <Card className="border-gray-300 bg-gray-50">
-            <CardContent className="pt-6">
-              <div className="text-center py-8">
-                <p className="text-gray-600">No test series available in this category yet.</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Resume Dialog */}
-        {showResumeDialog && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-2xl mx-4">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Resume Test or Start New?</CardTitle>
-                  <button
-                    onClick={() => {
-                      setShowResumeDialog(false)
-                      setSelectedTestSetId(null)
-                    }}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <FiX className="w-5 h-5" />
-                  </button>
+                  {/* Additional Info */}
+                  <div className="flex items-center gap-6 text-sm text-gray-600">
+                    <button className="flex items-center gap-2 text-blue-600 hover:text-blue-700">
+                      <span>Sections Info</span>
+                      <FiChevronDown className="w-4 h-4" />
+                    </button>
+                    {category.userCount && category.userCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <FiUsers className="w-4 h-4" />
+                        <span>{formatUserCount(category.userCount)} Users</span>
+                      </div>
+                    )}
+                    {category.languages && category.languages.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <FiGlobe className="w-4 h-4" />
+                        <span>{Array.isArray(category.languages) ? category.languages.join(', ') : category.languages}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 mb-4">
-                  You have {inProgressAttempts?.length || 0} in-progress test{inProgressAttempts?.length !== 1 ? 's' : ''}. Choose an option:
-                </p>
-                <div className="space-y-4">
-                  {inProgressAttempts && inProgressAttempts.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold mb-2">Resume Existing Test:</h3>
-                      <div className="space-y-2">
-                        {inProgressAttempts.map((attempt: any) => (
-                          <Card key={attempt._id} className="hover:bg-gray-50 cursor-pointer">
-                            <CardContent className="pt-4">
-                              <div className="flex justify-between items-center">
-                                <div>
-                                  <p className="font-medium">{attempt.testSetId?.name || 'Test'}</p>
-                                  <p className="text-sm text-gray-600">
-                                    Started: {new Date(attempt.startedAt).toLocaleString()}
-                                  </p>
+              )}
+
+              {/* Suggested Next Test */}
+              {testSets && testSets.length > 0 && isSubscriptionApproved && (() => {
+                // Find the first test set that hasn't been completed
+                const suggestedTest = testSets.find((set: TestSet) => {
+                  const status = getAttemptStatus(set._id)
+                  return !status || status.status !== 'COMPLETED'
+                }) || testSets[0]
+
+                if (!suggestedTest) return null
+
+                const attemptStatus = getAttemptStatus(suggestedTest._id)
+                const isFree = category?.price === 0 || (category?.freeTests && category.freeTests > 0)
+
+                return (
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Suggested Next Test</h2>
+                    <Card className="border-2 border-gray-200 hover:shadow-lg transition-shadow relative">
+                      {isFree && (
+                        <div className="absolute top-3 left-3 z-10">
+                          <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
+                            FREE
+                          </span>
+                        </div>
+                      )}
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-bold text-gray-900 text-lg">
+                                {suggestedTest.name}
+                              </h3>
+                              {category?.userCount && category.userCount > 0 && (
+                                <div className="flex items-center gap-1 text-sm text-gray-600">
+                                  <FiZap className="w-4 h-4 text-yellow-500" />
+                                  <span>{formatUserCount(category.userCount)} Users</span>
                                 </div>
-                                <Button
-                                  onClick={() => handleResumeAttempt(attempt._id)}
-                                  variant="outline"
-                                >
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
+                              <div className="flex items-center gap-1">
+                                <span>?</span>
+                                <span>{suggestedTest.totalQuestions || 0} Questions</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <FiFileText className="w-4 h-4" />
+                                <span>{suggestedTest.totalMarks} Marks</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <FiClock className="w-4 h-4" />
+                                <span>{suggestedTest.durationMinutes} Mins</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-blue-600">
+                              <FiGlobe className="w-4 h-4" />
+                              <span>{category?.languages ? (Array.isArray(category.languages) ? category.languages.join(', ') : category.languages) : 'English, Hindi'}</span>
+                            </div>
+                          </div>
+                          <div className="flex-shrink-0">
+                            {attemptStatus?.status === 'IN_PROGRESS' ? (
+                              <Link to={`/test/${suggestedTest._id}/attempt/${attemptStatus.attemptId}`}>
+                                <Button className="bg-green-600 hover:bg-green-700">
+                                  <FiPlay className="mr-2" />
                                   Resume
                                 </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="pt-4 border-t">
-                    <Button onClick={handleStartNewTest} className="w-full">
-                      Start New Test
-                    </Button>
+                              </Link>
+                            ) : attemptStatus?.status === 'COMPLETED' ? (
+                              <Link to={`/test/${suggestedTest._id}/results/${attemptStatus.attemptId}`}>
+                                <Button variant="outline">
+                                  <FiEye className="mr-2" />
+                                  View Result
+                                </Button>
+                              </Link>
+                            ) : (
+                              <Button
+                                onClick={() => handleStartTest(suggestedTest._id)}
+                                className="bg-blue-500 hover:bg-blue-600"
+                              >
+                                Start Now
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )
+              })()}
+
+              {/* Main Category Heading */}
+              {category && (
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  {category.name} All Tests ({totalTests})
+                </h2>
+              )}
+
+              {/* Section Tabs - Full width with white background */}
+              {sectionFilters.length > 0 && (
+                <div className="w-full bg-white mb-6 border-b border-gray-200">
+                  <div className="flex items-center gap-0 overflow-x-auto">
+                    {sectionFilters.map((filter) => (
+                      <button
+                        key={filter.sectionId}
+                        onClick={() => handleSectionChange(selectedSection === filter.sectionId ? null : filter.sectionId)}
+                        className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-all bg-white border-b-2 ${
+                          selectedSection === filter.sectionId
+                            ? 'text-purple-600 border-purple-600'
+                            : 'text-gray-700 border-transparent hover:text-gray-900'
+                        }`}
+                      >
+                        {filter.name}({filter.count})
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+
+              {/* Subsection Filter Bar - Only show when a section is selected and has more than one subsection */}
+              {selectedSection && subsectionFilters.length > 1 && (
+                <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 border-b border-gray-200">
+                  <button
+                    onClick={() => setSelectedSubsection(null)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                      !selectedSubsection
+                        ? 'bg-gray-800 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {subsectionFilters.map((filter) => (
+                    <button
+                      key={filter.subsectionId}
+                      onClick={() => setSelectedSubsection(selectedSubsection === filter.subsectionId ? null : filter.subsectionId)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                        selectedSubsection === filter.subsectionId
+                          ? 'bg-blue-600 text-white border-b-2 border-blue-600'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {filter.name}
+                    </button>
+                  ))}
+                  {subsectionFilters.length > 6 && (
+                    <button className="text-blue-600 hover:text-blue-700">
+                      <FiChevronRight className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Test Sets - Flat List Format */}
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="animate-pulse">
+                      <CardContent className="p-6">
+                        <div className="h-20 bg-gray-200 rounded" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : filteredTestSets && filteredTestSets.length > 0 ? (
+                // Show test sets in reference image format
+                <div className="space-y-3">
+                  {filteredTestSets.map((testSet: TestSet) => {
+                    const isLocked = !isSubscriptionApproved
+                    const attemptStatus = getAttemptStatus(testSet._id)
+                    const attemptData = getAttemptData(testSet._id)
+                    const lastAttemptDate = getLastAttemptDate(testSet._id)
+                    const hasAttempted = !!attemptData
+
+                    return (
+                      <Card
+                        key={testSet._id}
+                        className={`hover:shadow-md transition-shadow bg-white ${
+                          isLocked ? 'opacity-75 border-gray-300' : ''
+                        }`}
+                      >
+                        <CardContent className="p-5">
+                          {/* Title */}
+                          <h5 className="font-bold text-gray-900 mb-4 text-base">
+                            {testSet.name}
+                          </h5>
+
+                          {/* Performance Metrics and Action Buttons Row */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-6">
+                              {hasAttempted ? (
+                                <>
+                                  {/* Rank - shown when attempted */}
+                                  {leaderboardData && leaderboardData[testSet._id] && (
+                                    <div className="flex items-center gap-2">
+                                      <FiAward className="w-4 h-4 text-gray-600" />
+                                      <span className="text-sm text-gray-700">
+                                        {leaderboardData[testSet._id].rank}/{leaderboardData[testSet._id].totalParticipants} Rank
+                                      </span>
+                                    </div>
+                                  )}
+                                  {/* Marks - shown when attempted */}
+                                  {attemptData && (
+                                    <div className="flex items-center gap-2">
+                                      <FiFileText className="w-4 h-4 text-gray-600" />
+                                      <span className="text-sm text-gray-700">
+                                        {attemptData.score}/{attemptData.totalMarks} Marks
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {/* Questions Count - shown when not attempted */}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm text-gray-700">
+                                      {testSet.totalQuestions || 0} Questions
+                                    </span>
+                                  </div>
+                                  {/* Marks - shown when not attempted */}
+                                  <div className="flex items-center gap-2">
+                                    <FiFileText className="w-4 h-4 text-gray-600" />
+                                    <span className="text-sm text-gray-700">
+                                      {testSet.totalMarks} Marks
+                                    </span>
+                                  </div>
+                                  {/* Time - shown when not attempted */}
+                                  <div className="flex items-center gap-2">
+                                    <FiClock className="w-4 h-4 text-gray-600" />
+                                    <span className="text-sm text-gray-700">
+                                      {testSet.durationMinutes} Mins
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            
+                            {/* Solution and Analysis Buttons - only shown when attempted */}
+                            {hasAttempted && attemptData && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                  onClick={() => navigate(`/test/${testSet._id}/results/${attemptData.attemptId}`)}
+                                >
+                                  Solution
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                  onClick={() => navigate(`/test/${testSet._id}/results/${attemptData.attemptId}`)}
+                                >
+                                  Analysis
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Progress Bar */}
+                          {hasAttempted && attemptData && (
+                            <div className="mb-3">
+                              <div className="w-full bg-gray-200 rounded-full h-1">
+                                <div
+                                  className="bg-yellow-400 h-1 rounded-full transition-all duration-300"
+                                  style={{
+                                    width: `${attemptData.totalMarks > 0 ? (attemptData.score / attemptData.totalMarks) * 100 : 0}%`
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Bottom Row: Syllabus, Attempted Date, Reattempt */}
+                          <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
+                            <div className="flex items-center gap-4">
+                              <Link
+                                to="#"
+                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                              >
+                                Syllabus
+                              </Link>
+                              {lastAttemptDate && (
+                                <span className="text-sm text-gray-500">
+                                  Attempted on {formatDate(lastAttemptDate)}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {hasAttempted ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                onClick={() => handleStartTest(testSet._id)}
+                              >
+                                Reattempt
+                                <FiArrowRight className="ml-2 w-4 h-4" />
+                              </Button>
+                            ) : isLocked ? (
+                              <Link to={`/categories/${categoryId}/payment`}>
+                                <Button size="sm" className="bg-gray-300 text-gray-700 hover:bg-gray-400">
+                                  <FiLock className="mr-2" />
+                                  Unlock
+                                </Button>
+                              </Link>
+                            ) : (
+                              <Button
+                                size="sm"
+                                className="bg-blue-500 hover:bg-blue-600"
+                                onClick={() => handleStartTest(testSet._id)}
+                              >
+                                Start Now
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center py-8">
+                      <p className="text-gray-600">No test series available in this category yet.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Right Sidebar */}
+            <div className="lg:col-span-1 space-y-6">
+              {/* Subscription Card */}
+              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
+                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
+                  <div className="absolute top-2 right-2">
+                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
+                      NEW
+                    </span>
+                  </div>
+                  <CardContent className="p-6">
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl font-bold">testbook</span>
+                        <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
+                          PASS PRO
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300">
+                        The Ultimate Subscription for Pro Aspirants
+                      </p>
+                    </div>
+                    <ul className="space-y-3 mb-6">
+                      {[
+                        'All Test Series',
+                        'All Prev. Year Paper',
+                        'Unlimited Practice',
+                        'Pro Live Tests',
+                        'Unlimited Test Re-Attempts',
+                      ].map((feature, idx) => (
+                        <li key={idx} className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Link to={`/categories/${categoryId}/payment`}>
+                      <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                        Get Pass Pro
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* More Testseries for you */}
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    More Testseries for you
+                  </h3>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'SSC Reasoning PYP Mock Test Series (20k...)', tests: '1810 Total tests | 3 Free Tests' },
+                      { name: 'SSC GK PYP Mock Test Series (20k+ Questions)', tests: '1889 Total tests | 4 Free Tests' },
+                      { name: 'SSC Maths PYP Mock Test Series (20k+...)', tests: '1744 Total tests | 4 Free Tests' },
+                    ].map((series, idx) => (
+                      <Link
+                        key={idx}
+                        to="#"
+                        className="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 text-sm mb-1">{series.name}</p>
+                            <p className="text-xs text-gray-600">{series.tests}</p>
+                          </div>
+                          <FiChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                  <Button variant="outline" className="w-full mt-4 text-blue-600 border-blue-600">
+                    View More
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Why Take this Test Series */}
+              <Card>
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">
+                    Why Take this Test Series ?
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <FiAward className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-1">All India Rank</h4>
+                        <p className="text-sm text-gray-600">
+                          Compete with thousands of students across India
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <FiMonitor className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-1">Personal recommendation</h4>
+                        <p className="text-sm text-gray-600">
+                          Recommendations for you based on your strong & weak areas
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                        <FiStar className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-1">No.1 Quality</h4>
+                        <p className="text-sm text-gray-600">
+                          Designed by experts with years of experience. Based on latest pattern
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </Layout>
   )
 }
-

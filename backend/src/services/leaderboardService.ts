@@ -25,16 +25,19 @@ export const leaderboardService = {
     // If leaderboard collection exists, use it
     const leaderboardEntries = await Leaderboard.find(filter)
       .populate('userId', 'name email')
+      .populate('testSetId', '_id')
       .populate('bestAttemptId', 'totalTimeSeconds')
       .sort({ rank: 1 })
       .skip(skip)
       .limit(limit);
 
     if (leaderboardEntries.length > 0) {
+      const total = await Leaderboard.countDocuments(filter)
       return {
         leaderboard: leaderboardEntries.map((entry: any) => ({
           rank: entry.rank,
           userId: entry.userId._id,
+          testSetId: entry.testSetId?._id || entry.testSetId?.toString() || entry.testSetId,
           userName: entry.userId.name,
           userEmail: entry.userId.email?.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email
           score: entry.bestScore,
@@ -43,7 +46,7 @@ export const leaderboardService = {
         pagination: {
           page,
           limit,
-          total: await Leaderboard.countDocuments(filter),
+          total,
         },
       };
     }
@@ -98,6 +101,7 @@ export const leaderboardService = {
       leaderboard: attempts.map((entry, index) => ({
         rank: skip + index + 1,
         userId: entry._id,
+        testSetId: entry.bestAttempt.testSetId,
         userName: userMap.get(entry._id.toString())?.name || 'Unknown',
         userEmail: userMap.get(entry._id.toString())?.email?.replace(/(.{2})(.*)(@.*)/, '$1***$3') || '',
         score: entry.bestScore,
