@@ -366,10 +366,13 @@ export default function CategoryPage() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50 pt-20">
+      <div className="min-h-screen bg-gray-50 pt-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          {/* Breadcrumbs */}
-          <div className="mb-4">
+          {/* Header Section */}
+          {category && (
+            <div className='bg-white rounded-lg p-6 mb-6 bg-gradient-to-l from-purple-100 to-transparent'>
+              {/* Breadcrumbs */}
+          <div className="mb-8">
             <div className="flex items-center gap-2 text-sm">
               <Link to="/" className="text-gray-500 hover:text-gray-700">
                 Home
@@ -379,20 +382,15 @@ export default function CategoryPage() {
                 Categories
               </Link>
               <FiChevronRight className="w-4 h-4 text-gray-400" />
-              <span className="text-blue-600">{category?.name || 'Category'}</span>
+              <span className="text-purple-600">{category?.name || 'Category'}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Content Area */}
-            <div className="lg:col-span-2">
-              {/* Header Section */}
-              {category && (
-                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+                <div className="col-span-2 ">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4 flex-1">
                       {category.bannerImageUrl ? (
-                        <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                        <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
                           <img
                             src={category.bannerImageUrl}
                             alt={category.name}
@@ -400,7 +398,7 @@ export default function CategoryPage() {
                           />
                         </div>
                       ) : (
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
                           <span className="text-white font-bold text-xl">T</span>
                         </div>
                       )}
@@ -419,13 +417,15 @@ export default function CategoryPage() {
                     </button>
                   </div>
 
+                  <div className='grid grid-cols-2 gap-10'>
+                    
                   {/* Statistics */}
                   <div className="mb-4">
                     <div className="flex items-center gap-4 mb-2">
                       <span className="text-lg font-bold text-gray-900">
                         {totalTests} Total Tests
                       </span>
-                      {category.freeTests && category.freeTests > 0 && (
+                      {category.freeTests !== undefined && category.freeTests !== null && Number(category.freeTests) > 0 && (
                         <span className="bg-green-500 text-white px-3 py-1 rounded text-sm font-semibold">
                           {category.freeTests} FREE TESTS
                         </span>
@@ -452,8 +452,8 @@ export default function CategoryPage() {
                   </div>
 
                   {/* Additional Info */}
-                  <div className="flex items-center gap-6 text-sm text-gray-600">
-                    <button className="flex items-center gap-2 text-blue-600 hover:text-blue-700">
+                  <div className="flex flex-col gap-2 text-sm text-gray-600">
+                    <button className="flex items-center gap-2 text-purple-600 hover:text-purple-700">
                       <span>Sections Info</span>
                       <FiChevronDown className="w-4 h-4" />
                     </button>
@@ -470,8 +470,61 @@ export default function CategoryPage() {
                       </div>
                     )}
                   </div>
+                  </div>
                 </div>
+                <div className='pl-6'>
+                  {/* Subscription Card */}
+              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
+                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
+                  <div className="absolute top-2 right-2">
+                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
+                      NEW
+                    </span>
+                  </div>
+                  <CardContent className="p-6">
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl font-bold">testbook</span>
+                        <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
+                          PASS PRO
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300">
+                        The Ultimate Subscription for Pro Aspirants
+                      </p>
+                    </div>
+                    <ul className="space-y-3 mb-6">
+                      {[
+                        'All Test Series',
+                        'All Prev. Year Paper',
+                        'Unlimited Practice',
+                        'Pro Live Tests',
+                        'Unlimited Test Re-Attempts',
+                      ].map((feature, idx) => (
+                        <li key={idx} className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Link to={`/categories/${categoryId}/payment`}>
+                      <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                        Get Pass Pro
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
               )}
+                </div>
+                </div>
+            </div>
+            
+              )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content Area */}
+            <div className="lg:col-span-2 rounded-lg px-4 py-6">
+              
 
               {/* Suggested Next Test */}
               {testSets && testSets.length > 0 && isSubscriptionApproved && (() => {
@@ -484,7 +537,8 @@ export default function CategoryPage() {
                 if (!suggestedTest) return null
 
                 const attemptStatus = getAttemptStatus(suggestedTest._id)
-                const isFree = category?.price === 0 || (category?.freeTests && category.freeTests > 0)
+                const price = category?.price
+                const isFree = (!price || Number(price) === 0) || (category?.freeTests !== undefined && category.freeTests > 0)
 
                 return (
                   <div className="mb-6">
@@ -497,8 +551,8 @@ export default function CategoryPage() {
                           </span>
                         </div>
                       )}
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-start justify-between gap-4 p-5">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="font-bold text-gray-900 text-lg">
@@ -525,10 +579,6 @@ export default function CategoryPage() {
                                 <span>{suggestedTest.durationMinutes} Mins</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-blue-600">
-                              <FiGlobe className="w-4 h-4" />
-                              <span>{category?.languages ? (Array.isArray(category.languages) ? category.languages.join(', ') : category.languages) : 'English, Hindi'}</span>
-                            </div>
                           </div>
                           <div className="flex-shrink-0">
                             {attemptStatus?.status === 'IN_PROGRESS' ? (
@@ -548,14 +598,18 @@ export default function CategoryPage() {
                             ) : (
                               <Button
                                 onClick={() => handleStartTest(suggestedTest._id)}
-                                className="bg-blue-500 hover:bg-blue-600"
+                                className="bg-purple-500 hover:bg-purple-600"
                               >
                                 Start Now
                               </Button>
                             )}
                           </div>
                         </div>
-                      </CardContent>
+                        <div className="flex items-center gap-2 text-sm text-purple-600 px-4 py-1 bg-gray-100">
+                              <FiGlobe className="w-4 h-4" />
+                              <span>{category?.languages ? (Array.isArray(category.languages) ? category.languages.join(', ') : category.languages) : 'English, Hindi'}</span>
+                            </div>
+                      </div>
                     </Card>
                   </div>
                 )
@@ -605,18 +659,18 @@ export default function CategoryPage() {
                   {subsectionFilters.map((filter) => (
                     <button
                       key={filter.subsectionId}
-                      onClick={() => setSelectedSubsection(selectedSubsection === filter.subsectionId ? null : filter.subsectionId)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                        selectedSubsection === filter.subsectionId
-                          ? 'bg-blue-600 text-white border-b-2 border-blue-600'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                    onClick={() => setSelectedSubsection(selectedSubsection === filter.subsectionId ? null : filter.subsectionId)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                      selectedSubsection === filter.subsectionId
+                        ? 'bg-purple-600 text-white border-b-2 border-purple-600'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                     >
                       {filter.name}
                     </button>
                   ))}
                   {subsectionFilters.length > 6 && (
-                    <button className="text-blue-600 hover:text-blue-700">
+                    <button className="text-purple-600 hover:text-purple-700">
                       <FiChevronRight className="w-5 h-5" />
                     </button>
                   )}
@@ -651,14 +705,15 @@ export default function CategoryPage() {
                           isLocked ? 'opacity-75 border-gray-300' : ''
                         }`}
                       >
-                        <CardContent className="p-5">
+                        <div className="">
                           {/* Title */}
-                          <h5 className="font-bold text-gray-900 mb-4 text-base">
+                          <div className="p-5">
+                          <h5 className="font-bold text-gray-900 mb-1 text-base">
                             {testSet.name}
                           </h5>
 
                           {/* Performance Metrics and Action Buttons Row */}
-                          <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-6">
                               {hasAttempted ? (
                                 <>
@@ -707,13 +762,13 @@ export default function CategoryPage() {
                               )}
                             </div>
                             
-                            {/* Solution and Analysis Buttons - only shown when attempted */}
-                            {hasAttempted && attemptData && (
+                            {/* Action Buttons - Solution/Analysis when attempted, Start Now when not attempted */}
+                            {hasAttempted && attemptData ? (
                               <div className="flex items-center gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                  className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                   onClick={() => navigate(`/test/${testSet._id}/results/${attemptData.attemptId}`)}
                                 >
                                   Solution
@@ -721,19 +776,27 @@ export default function CategoryPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                                  className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                   onClick={() => navigate(`/test/${testSet._id}/results/${attemptData.attemptId}`)}
                                 >
                                   Analysis
                                 </Button>
                               </div>
-                            )}
+                            ) : !isLocked ? (
+                              <Button
+                                size="sm"
+                                className="bg-purple-500 hover:bg-purple-600"
+                                onClick={() => handleStartTest(testSet._id)}
+                              >
+                                Start Now
+                              </Button>
+                            ) : null}
                           </div>
 
                           {/* Progress Bar */}
                           {hasAttempted && attemptData && (
-                            <div className="mb-3">
-                              <div className="w-full bg-gray-200 rounded-full h-1">
+                            <div className="">
+                              <div className="w-full bg-gray-200 rounded-full h-1 mt-3">
                                 <div
                                   className="bg-yellow-400 h-1 rounded-full transition-all duration-300"
                                   style={{
@@ -744,15 +807,17 @@ export default function CategoryPage() {
                             </div>
                           )}
 
-                          {/* Bottom Row: Syllabus, Attempted Date, Reattempt */}
-                          <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
+                          </div>
+
+                          {/* Bottom Row: Languages, Attempted Date, Reattempt/Unlock */}
+                          <div className="flex items-center justify-between border-t border-gray-200 py-1 px-4 bg-gray-100">
                             <div className="flex items-center gap-4">
-                              <Link
-                                to="#"
-                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                              >
-                                Syllabus
-                              </Link>
+                              {!hasAttempted && category?.languages && category.languages.length > 0 && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <FiGlobe className="w-4 h-4 text-purple-600" />
+                                  <span>{Array.isArray(category.languages) ? category.languages.join(', ') : category.languages}</span>
+                                </div>
+                              )}
                               {lastAttemptDate && (
                                 <span className="text-sm text-gray-500">
                                   Attempted on {formatDate(lastAttemptDate)}
@@ -761,15 +826,18 @@ export default function CategoryPage() {
                             </div>
                             
                             {hasAttempted ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                              <div
+                                // variant="outline"
+                                // size="sm"
+                                className="border-purple-500 text-purple-600 hover:bg-purple-50 flex items-center gap-1 hover:cursor-pointer px-2"
                                 onClick={() => handleStartTest(testSet._id)}
                               >
                                 Reattempt
-                                <FiArrowRight className="ml-2 w-4 h-4" />
-                              </Button>
+                                <span className='bg-purple-400 rounded-full'>
+
+                                <FiArrowRight className="w-4 h-4 text-white" />
+                                </span>
+                              </div>
                             ) : isLocked ? (
                               <Link to={`/categories/${categoryId}/payment`}>
                                 <Button size="sm" className="bg-gray-300 text-gray-700 hover:bg-gray-400">
@@ -777,17 +845,9 @@ export default function CategoryPage() {
                                   Unlock
                                 </Button>
                               </Link>
-                            ) : (
-                              <Button
-                                size="sm"
-                                className="bg-blue-500 hover:bg-blue-600"
-                                onClick={() => handleStartTest(testSet._id)}
-                              >
-                                Start Now
-                              </Button>
-                            )}
+                            ) : null}
                           </div>
-                        </CardContent>
+                        </div>
                       </Card>
                     )
                   })}
@@ -805,48 +865,6 @@ export default function CategoryPage() {
 
             {/* Right Sidebar */}
             <div className="lg:col-span-1 space-y-6">
-              {/* Subscription Card */}
-              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
-                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
-                  <div className="absolute top-2 right-2">
-                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
-                      NEW
-                    </span>
-                  </div>
-                  <CardContent className="p-6">
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl font-bold">testbook</span>
-                        <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
-                          PASS PRO
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-300">
-                        The Ultimate Subscription for Pro Aspirants
-                      </p>
-                    </div>
-                    <ul className="space-y-3 mb-6">
-                      {[
-                        'All Test Series',
-                        'All Prev. Year Paper',
-                        'Unlimited Practice',
-                        'Pro Live Tests',
-                        'Unlimited Test Re-Attempts',
-                      ].map((feature, idx) => (
-                        <li key={idx} className="flex items-center gap-2">
-                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Link to={`/categories/${categoryId}/payment`}>
-                      <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                        Get Pass Pro
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* More Testseries for you */}
               <Card>
@@ -875,7 +893,7 @@ export default function CategoryPage() {
                       </Link>
                     ))}
                   </div>
-                  <Button variant="outline" className="w-full mt-4 text-blue-600 border-blue-600">
+                  <Button variant="outline" className="w-full mt-4 text-purple-600 border-purple-600">
                     View More
                   </Button>
                 </CardContent>
