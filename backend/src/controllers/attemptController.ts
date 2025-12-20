@@ -98,7 +98,11 @@ export const attemptController = {
   getUserAttempts: async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user._id.toString();
-      const attempts = await attemptService.getUserAttempts(userId);
+      const { categoryId } = req.query;
+      const attempts = await attemptService.getUserAttempts(
+        userId, 
+        categoryId as string | undefined
+      );
       sendSuccess(res, attempts);
     } catch (error: any) {
       sendError(res, error.message, 400);

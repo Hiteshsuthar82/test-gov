@@ -73,7 +73,7 @@ export default function CategoryPage() {
   const [selectedSection, setSelectedSection] = useState<string | null>(null)
   const [selectedSubsection, setSelectedSubsection] = useState<string | null>(null)
 
-  const { data: categoryData } = useQuery({
+  const { data: categoryData, isLoading: isLoadingCategory } = useQuery({
     queryKey: ['category', categoryId],
     queryFn: async () => {
       const response = await api.get(`/categories/${categoryId}/details`)
@@ -83,7 +83,7 @@ export default function CategoryPage() {
   })
   const category: Category | undefined = categoryData?.category
 
-  const { data: subscriptionStatus } = useQuery({
+  const { data: subscriptionStatus, isLoading: isLoadingSubscription } = useQuery({
     queryKey: ['subscriptionStatus', categoryId],
     queryFn: async () => {
       try {
@@ -98,32 +98,59 @@ export default function CategoryPage() {
 
   const isSubscriptionApproved = subscriptionStatus?.status === 'APPROVED'
 
-  // Fetch test sets
-  const { data: testSets, isLoading } = useQuery({
-    queryKey: ['testSets', categoryId, subscriptionStatus?.status],
+  // Fetch all test sets for counting (no pagination)
+  const { data: allTestSetsForCount, isLoading: isLoadingAllTestSets } = useQuery({
+    queryKey: ['allTestSetsForCount', categoryId, subscriptionStatus?.status],
     queryFn: async () => {
       const approved = subscriptionStatus?.status === 'APPROVED'
       try {
         if (approved) {
-          const response = await api.get(`/sets/categories/${categoryId}/sets`)
-          return response.data.data.filter((set: TestSet) => set.isActive)
+          const response = await api.get(`/sets/categories/${categoryId}/sets?limit=10000`)
+          return response.data.data?.sets || []
         }
       } catch (error: any) {
         // Continue to public endpoint
       }
-      const response = await api.get(`/sets/categories/${categoryId}/sets/public`)
-      return response.data.data.filter((set: TestSet) => set.isActive)
+      const response = await api.get(`/sets/categories/${categoryId}/sets/public?limit=10000`)
+      return response.data.data?.sets || []
     },
-    enabled: !!categoryId,
+    enabled: !!categoryId && subscriptionStatus !== undefined,
     retry: false,
   })
 
-  // Fetch all attempts
-  const { data: allAttempts } = useQuery({
+  // Fetch test sets with pagination and filtering
+  const { data: testSetsData, isLoading: isLoadingTestSets } = useQuery({
+    queryKey: ['testSets', categoryId, subscriptionStatus?.status, selectedSection, selectedSubsection],
+    queryFn: async () => {
+      const approved = subscriptionStatus?.status === 'APPROVED'
+      const params = new URLSearchParams()
+      if (selectedSection) params.append('sectionId', selectedSection)
+      if (selectedSubsection) params.append('subsectionId', selectedSubsection)
+      
+      try {
+        if (approved) {
+          const response = await api.get(`/sets/categories/${categoryId}/sets?${params.toString()}`)
+          return response.data.data
+        }
+      } catch (error: any) {
+        // Continue to public endpoint
+      }
+      const response = await api.get(`/sets/categories/${categoryId}/sets/public?${params.toString()}`)
+      return response.data.data
+    },
+    enabled: !!categoryId && subscriptionStatus !== undefined,
+    retry: false,
+  })
+
+  const testSets = testSetsData?.sets || []
+  const allTestSets = allTestSetsForCount || []
+
+  // Fetch all attempts for this category
+  const { data: allAttempts, isLoading: isLoadingAttempts } = useQuery({
     queryKey: ['allAttempts', categoryId],
     queryFn: async () => {
       try {
-        const response = await api.get(`/attempts`)
+        const response = await api.get(`/attempts?categoryId=${categoryId}`)
         return response.data.data || []
       } catch {
         return []
@@ -131,6 +158,13 @@ export default function CategoryPage() {
     },
     enabled: !!categoryId && isSubscriptionApproved,
   })
+
+  // Check if all critical APIs are loaded (for initial page load)
+  const isInitialLoad = isLoadingCategory || isLoadingSubscription || isLoadingAllTestSets
+  const isAllDataLoaded = !isLoadingCategory && 
+    !isLoadingSubscription && 
+    !isLoadingAllTestSets &&
+    (!isSubscriptionApproved || !isLoadingAttempts)
 
   const { user } = useAuthStore()
 
@@ -214,7 +248,7 @@ export default function CategoryPage() {
     ).length
   }, [allAttempts, testSets])
 
-  const totalTests = category?.totalSetsCount || testSets?.length || 0
+  const totalTests = category?.totalSetsCount || allTestSets?.length || 0
   const progressPercentage = totalTests > 0 ? Math.round((completedTestsCount / totalTests) * 100) : 0
 
 
@@ -226,9 +260,9 @@ export default function CategoryPage() {
       .map((section) => ({
         sectionId: section.sectionId,
         name: section.name,
-        count: testSets?.filter((set: TestSet) => set.sectionId === section.sectionId).length || 0,
+        count: allTestSets?.filter((set: TestSet) => set.sectionId === section.sectionId).length || 0,
       }))
-  }, [category, testSets])
+  }, [category, allTestSets])
 
   // Set first section as selected by default
   useEffect(() => {
@@ -246,7 +280,7 @@ export default function CategoryPage() {
     return section.subsections
       .sort((a, b) => a.order - b.order)
       .map((subsection) => {
-        const count = testSets?.filter((set: TestSet) => 
+        const count = allTestSets?.filter((set: TestSet) => 
           set.sectionId === selectedSection && set.subsectionId === subsection.subsectionId
         ).length || 0
         return {
@@ -255,7 +289,7 @@ export default function CategoryPage() {
           count,
         }
       })
-  }, [category, testSets, selectedSection])
+  }, [category, allTestSets, selectedSection])
 
   // Filter test sets by selected section and subsection
   const filteredTestSets = useMemo(() => {
@@ -364,14 +398,155 @@ export default function CategoryPage() {
     return count.toString()
   }
 
+  // Show full page shimmer only on initial load (not when section/subsection changes)
+  if (isInitialLoad) {
+    return (
+      <Layout>
+        <div className="min-h-screen bg-gray-50 pt-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* Header Section Shimmer */}
+            <div className="bg-white rounded-lg p-6 mb-6 bg-gradient-to-l from-purple-100 to-transparent relative overflow-visible animate-pulse">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="col-span-2">
+                  {/* Breadcrumbs Shimmer */}
+                  <div className="mb-8">
+                    <div className="h-4 bg-gray-200 rounded w-64"></div>
+                  </div>
+                  
+                  {/* Category Info Shimmer */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className="w-16 h-16 bg-gray-200 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="h-8 bg-gray-200 rounded w-64 mb-2"></div>
+                        <div className="h-4 bg-gray-200 rounded w-48"></div>
+                      </div>
+                    </div>
+                    <div className="w-5 h-5 bg-gray-200 rounded"></div>
+                  </div>
+
+                  {/* Statistics and Info Grid Shimmer */}
+                  <div className="grid grid-cols-2 gap-10">
+                    {/* Statistics Shimmer */}
+                    <div className="mb-4">
+                      <div className="flex items-center gap-4 mb-2">
+                        <div className="h-6 bg-gray-200 rounded w-32"></div>
+                        <div className="h-6 bg-gray-200 rounded w-24"></div>
+                      </div>
+                      <div className="h-2 bg-gray-200 rounded w-full mb-2"></div>
+                      <div className="flex justify-between">
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-4 bg-gray-200 rounded w-12"></div>
+                      </div>
+                    </div>
+                    
+                    {/* Additional Info Shimmer */}
+                    <div className="flex flex-col gap-2">
+                      <div className="h-4 bg-gray-200 rounded w-32"></div>
+                      <div className="h-4 bg-gray-200 rounded w-24"></div>
+                      <div className="h-4 bg-gray-200 rounded w-28"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Right side - Banking Combo Card Shimmer (for non-logged in) */}
+                <div className="pl-6 relative">
+                  <div className="absolute top-0 right-0 z-10 w-80 max-w-[280px]">
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-5 shadow-xl relative overflow-visible">
+                      {/* NEW Badge Shimmer */}
+                      <div className="absolute -top-2 -right-2 z-10 w-12 h-6 bg-orange-500 rounded transform rotate-12"></div>
+                      
+                      {/* Title and Price Section */}
+                      <div className="mb-3">
+                        <div className="h-6 bg-gray-700 rounded w-44 mb-2"></div>
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <div className="h-7 bg-gray-700 rounded w-16"></div>
+                          <div className="h-3 bg-gray-700 rounded w-14"></div>
+                          <div className="h-4 bg-gray-700 rounded w-12"></div>
+                        </div>
+                        <div className="h-3 bg-gray-700 rounded w-48"></div>
+                      </div>
+                      
+                      {/* Features List Shimmer */}
+                      <div className="space-y-2 mb-4">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-gray-700 rounded-full flex-shrink-0"></div>
+                            <div className="h-3 bg-gray-700 rounded w-36"></div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Button Shimmer */}
+                      <div className="h-9 bg-gray-700 rounded w-full"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Main Content Shimmer */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="h-8 bg-gray-200 rounded w-48 animate-pulse"></div>
+                
+                {/* Section Tabs Shimmer */}
+                <div className="bg-white border-b border-gray-200">
+                  <div className="flex gap-4 p-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Test Sets Shimmer */}
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="bg-white rounded-lg p-5 animate-pulse">
+                      <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+                      <div className="flex gap-6 mb-3">
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                      </div>
+                      <div className="h-1 bg-gray-200 rounded w-full"></div>
+                      <div className="flex justify-between mt-3">
+                        <div className="h-4 bg-gray-200 rounded w-32"></div>
+                        <div className="h-8 bg-gray-200 rounded w-24"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sidebar Shimmer */}
+              <div className="lg:col-span-1 space-y-6 mt-32">
+                <div className="bg-white rounded-lg p-6 animate-pulse">
+                  <div className="h-6 bg-gray-200 rounded w-48 mb-4"></div>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
   return (
     <Layout>
       <div className="min-h-screen bg-gray-50 pt-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Header Section */}
           {category && (
-            <div className='bg-white rounded-lg p-6 mb-6 bg-gradient-to-l from-purple-100 to-transparent'>
-              {/* Breadcrumbs */}
+            <div className='bg-white rounded-lg p-6 mb-6 bg-gradient-to-l from-purple-100 to-transparent relative overflow-visible'>
+          <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+                <div className="col-span-2 ">
+                  {/* Breadcrumbs */}
           <div className="mb-8">
             <div className="flex items-center gap-2 text-sm">
               <Link to="/" className="text-gray-500 hover:text-gray-700">
@@ -385,8 +560,6 @@ export default function CategoryPage() {
               <span className="text-purple-600">{category?.name || 'Category'}</span>
             </div>
           </div>
-          <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
-                <div className="col-span-2 ">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4 flex-1">
                       {category.bannerImageUrl ? (
@@ -472,7 +645,53 @@ export default function CategoryPage() {
                   </div>
                   </div>
                 </div>
-                <div className='pl-6'>
+                {/* Right side - Banking Combo Card (only for non-logged in users) */}
+                <div className='pl-6 relative'>
+                  {!user && (
+                    <div className="absolute top-0 right-0 z-10">
+                      <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-visible shadow-xl w-80 max-w-[280px]">
+                        <div className="absolute -top-2 -right-2 z-10">
+                          <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
+                            NEW
+                          </span>
+                        </div>
+                        <CardContent className="p-5">
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-xl font-bold">Complete Banking Combo</span>
+                            </div>
+                            <div className="flex items-baseline gap-2 mb-2">
+                              <span className="text-2xl font-bold text-yellow-400">₹549</span>
+                              <span className="text-xs text-gray-400 line-through">₹2,999</span>
+                              <span className="text-xs bg-red-500 px-2 py-1 rounded">82% OFF</span>
+                            </div>
+                            <p className="text-xs text-gray-300">
+                              Get access to all banking exam preparation materials
+                            </p>
+                          </div>
+                          <ul className="space-y-2 mb-4">
+                            {[
+                              'All Banking Test Series',
+                              'Previous Year Papers',
+                              'Unlimited Practice Tests',
+                              'Live Mock Tests',
+                              'Detailed Solutions',
+                            ].map((feature, idx) => (
+                              <li key={idx} className="flex items-center gap-2">
+                                <FiCheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                <span className="text-xs">{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <Link to="/register">
+                            <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 text-sm">
+                              Get Combo - ₹549
+                            </Button>
+                          </Link>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                 </div>
                 </div>
             </div>
@@ -485,7 +704,27 @@ export default function CategoryPage() {
               
 
               {/* Suggested Next Test */}
-              {testSets && testSets.length > 0 && isSubscriptionApproved && (() => {
+              {isLoadingTestSets ? (
+                <div className="mb-6">
+                  <div className="h-9 bg-gray-200 rounded w-48 mb-4 animate-pulse"></div>
+                  <Card className="border-2 border-gray-200 animate-pulse">
+                    <div className="px-5 py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="flex gap-4">
+                            <div className="h-4 bg-gray-200 rounded w-32"></div>
+                            <div className="h-4 bg-gray-200 rounded w-24"></div>
+                            <div className="h-4 bg-gray-200 rounded w-24"></div>
+                          </div>
+                        </div>
+                        <div className="h-10 bg-gray-200 rounded w-28"></div>
+                      </div>
+                      <div className="h-4 bg-gray-200 rounded w-40 mt-3"></div>
+                    </div>
+                  </Card>
+                </div>
+              ) : testSets && testSets.length > 0 && isSubscriptionApproved && (() => {
                 // Find the first test set that hasn't been completed
                 const suggestedTest = testSets.find((set: TestSet) => {
                   const status = getAttemptStatus(set._id)
@@ -510,7 +749,7 @@ export default function CategoryPage() {
                         </div>
                       )}
                       <div>
-                        <div className="flex items-start justify-between gap-4 p-5">
+                        <div className="flex items-start justify-between gap-4 px-5 py-4">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="font-bold text-gray-900 text-lg">
@@ -523,7 +762,7 @@ export default function CategoryPage() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
                               <div className="flex items-center gap-1">
                                 <span>?</span>
                                 <span>{suggestedTest.totalQuestions || 0} Questions</span>
@@ -636,14 +875,22 @@ export default function CategoryPage() {
               )}
 
               {/* Test Sets - Flat List Format */}
-              {isLoading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i} className="animate-pulse">
-                      <CardContent className="p-6">
-                        <div className="h-20 bg-gray-200 rounded" />
-                      </CardContent>
-                    </Card>
+              {isLoadingTestSets ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="bg-white rounded-lg p-5 animate-pulse">
+                      <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
+                      <div className="flex gap-6 mb-3">
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                      </div>
+                      <div className="h-1 bg-gray-200 rounded w-full"></div>
+                      <div className="flex justify-between mt-3 pt-3 border-t border-gray-200">
+                        <div className="h-4 bg-gray-200 rounded w-32"></div>
+                        <div className="h-8 bg-gray-200 rounded w-24"></div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               ) : filteredTestSets && filteredTestSets.length > 0 ? (
@@ -665,7 +912,7 @@ export default function CategoryPage() {
                       >
                         <div className="">
                           {/* Title */}
-                          <div className="p-5">
+                          <div className="px-5 py-4">
                           <h5 className="font-bold text-gray-900 mb-1 text-base">
                             {testSet.name}
                           </h5>
@@ -720,7 +967,7 @@ export default function CategoryPage() {
                               )}
                             </div>
                             
-                            {/* Action Buttons - Solution/Analysis when attempted, Start Now when not attempted */}
+                            {/* Action Buttons - Solution/Analysis when attempted, Start Now/Unlock when not attempted */}
                             {hasAttempted && attemptData ? (
                               <div className="flex items-center gap-2">
                                 <Button
@@ -740,7 +987,14 @@ export default function CategoryPage() {
                                   Analysis
                                 </Button>
                               </div>
-                            ) : !isLocked ? (
+                            ) : isLocked ? (
+                              <Link to={`/categories/${categoryId}/payment`}>
+                                <Button size="sm" className="bg-transparent text-purple-700 border border-purple-700 hover:bg-purple-100">
+                                  <FiLock className="mr-2" />
+                                  Unlock
+                                </Button>
+                              </Link>
+                            ) : (
                               <Button
                                 size="sm"
                                 className="bg-purple-500 hover:bg-purple-600"
@@ -748,7 +1002,7 @@ export default function CategoryPage() {
                               >
                                 Start Now
                               </Button>
-                            ) : null}
+                            )}
                           </div>
 
                           {/* Progress Bar */}
@@ -783,7 +1037,7 @@ export default function CategoryPage() {
                               )}
                             </div>
                             
-                            {hasAttempted ? (
+                            {hasAttempted && (
                               <div
                                 // variant="outline"
                                 // size="sm"
@@ -796,14 +1050,7 @@ export default function CategoryPage() {
                                 <FiArrowRight className="w-4 h-4 text-white" />
                                 </span>
                               </div>
-                            ) : isLocked ? (
-                              <Link to={`/categories/${categoryId}/payment`}>
-                                <Button size="sm" className="bg-gray-300 text-gray-700 hover:bg-gray-400">
-                                  <FiLock className="mr-2" />
-                                  Unlock
-                                </Button>
-                              </Link>
-                            ) : null}
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -822,10 +1069,10 @@ export default function CategoryPage() {
             </div>
 
             {/* Right Sidebar */}
-            <div className="lg:col-span-1 space-y-6">
+            <div className="lg:col-span-1 space-y-6 mt-32">
 
-              {/* Subscription Card */}
-              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
+              {/* Subscription Card - Only for logged in users */}
+              {user && (!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
                 <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
                   <div className="absolute top-2 right-2">
                     <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">

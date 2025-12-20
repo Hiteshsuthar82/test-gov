@@ -694,14 +694,21 @@ export const attemptService = {
     return { message: 'Review status updated' };
   },
 
-  async getUserAttempts(userId: string) {
-    const attempts = await TestAttempt.find({
+  async getUserAttempts(userId: string, categoryId?: string) {
+    const filter: any = {
       userId: new Types.ObjectId(userId),
-    })
+    };
+
+    if (categoryId) {
+      filter.categoryId = new Types.ObjectId(categoryId);
+    }
+
+    const attempts = await TestAttempt.find(filter)
       .populate('testSetId', 'name')
       .populate('categoryId', 'name')
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
     return attempts;
   },

@@ -5,52 +5,125 @@ import { TestAttempt } from '../models/TestAttempt';
 import { Types } from 'mongoose';
 
 export const testSetService = {
-  async getSetsByCategory(categoryId: string, userId: string) {
+  async getSetsByCategory(
+    categoryId: string, 
+    userId: string,
+    options?: {
+      page?: number;
+      limit?: number;
+      sectionId?: string;
+      subsectionId?: string;
+    }
+  ) {
     // Check subscription
     const subscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       categoryId: new Types.ObjectId(categoryId),
       status: 'APPROVED',
-    });
+    }).lean();
 
     if (!subscription) {
       throw new Error('Subscription not approved for this category');
     }
 
-    const sets = await TestSet.find({
+    // Build filter
+    const filter: any = {
       categoryId: new Types.ObjectId(categoryId),
       isActive: true,
-    })
-      .sort({ createdAt: 1 })
-      .select('-__v');
+    };
 
-    // Get question counts and attempt counts for each set
-    const setsWithCounts = await Promise.all(
-      sets.map(async (set) => {
-        // Use set._id directly - Mongoose handles ObjectId comparison automatically
-        const questionCount = await Question.countDocuments({
-          testSetId: set._id,
+    if (options?.sectionId) {
+      filter.sectionId = options.sectionId;
+    }
+
+    if (options?.subsectionId) {
+      filter.subsectionId = options.subsectionId;
+    }
+
+    // Pagination
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Get sets with pagination
+    const [sets, total] = await Promise.all([
+      TestSet.find(filter)
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-__v')
+        .lean(),
+      TestSet.countDocuments(filter),
+    ]);
+
+    if (sets.length === 0) {
+      return {
+        sets: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          pages: 0,
+        },
+      };
+    }
+
+    // Batch fetch question counts for all sets
+    const setIds = sets.map(s => s._id);
+    const questionCountsAggregation = await Question.aggregate([
+      {
+        $match: {
+          testSetId: { $in: setIds },
           isActive: true,
-        });
-
-        // Get attempt count for this user and test set
-        const attemptCount = await TestAttempt.countDocuments({
-          userId: new Types.ObjectId(userId),
-          testSetId: set._id,
-          status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-        });
-
-        return {
-          ...set.toObject(),
-          totalQuestions: questionCount,
-          attemptCount: attemptCount,
-          sectionId: set.sectionId,
-          subsectionId: set.subsectionId,
-        };
-      })
+        },
+      },
+      {
+        $group: {
+          _id: '$testSetId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const questionCountsMap = new Map(
+      questionCountsAggregation.map(item => [item._id.toString(), item.count])
     );
 
-    return setsWithCounts;
+    // Batch fetch attempt counts for all sets
+    const attemptCountsAggregation = await TestAttempt.aggregate([
+      {
+        $match: {
+          userId: new Types.ObjectId(userId),
+          testSetId: { $in: setIds },
+          status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+        },
+      },
+      {
+        $group: {
+          _id: '$testSetId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const attemptCountsMap = new Map(
+      attemptCountsAggregation.map(item => [item._id.toString(), item.count])
+    );
+
+    // Map counts to sets
+    const setsWithCounts = sets.map((set) => ({
+      ...set,
+      totalQuestions: questionCountsMap.get(set._id.toString()) || 0,
+      attemptCount: attemptCountsMap.get(set._id.toString()) || 0,
+    }));
+
+    return {
+      sets: setsWithCounts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async getSetDetails(setId: string, userId: string) {
@@ -115,51 +188,125 @@ export const testSetService = {
     return attempts;
   },
 
-  async getSetsByCategoryPublic(categoryId: string, userId?: string) {
-    // Get test sets without subscription check (public info only)
-    const sets = await TestSet.find({
+  async getSetsByCategoryPublic(
+    categoryId: string, 
+    userId?: string,
+    options?: {
+      page?: number;
+      limit?: number;
+      sectionId?: string;
+      subsectionId?: string;
+    }
+  ) {
+    // Build filter
+    const filter: any = {
       categoryId: new Types.ObjectId(categoryId),
       isActive: true,
-    })
-      .sort({ createdAt: 1 })
-      .select('name description durationMinutes totalMarks isActive _id categoryId sectionId subsectionId');
+    };
 
-    // Get question counts and attempt counts for each set
-    const setsWithCounts = await Promise.all(
-      sets.map(async (set) => {
-        // Use set._id directly - Mongoose handles ObjectId comparison automatically
-        const questionCount = await Question.countDocuments({
-          testSetId: set._id,
+    if (options?.sectionId) {
+      filter.sectionId = options.sectionId;
+    }
+
+    if (options?.subsectionId) {
+      filter.subsectionId = options.subsectionId;
+    }
+
+    // Pagination
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    // Get sets with pagination
+    const [sets, total] = await Promise.all([
+      TestSet.find(filter)
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(limit)
+        .select('name description durationMinutes totalMarks isActive _id categoryId sectionId subsectionId')
+        .lean(),
+      TestSet.countDocuments(filter),
+    ]);
+
+    if (sets.length === 0) {
+      return {
+        sets: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          pages: 0,
+        },
+      };
+    }
+
+    // Batch fetch question counts for all sets
+    const setIds = sets.map(s => s._id);
+    const questionCountsAggregation = await Question.aggregate([
+      {
+        $match: {
+          testSetId: { $in: setIds },
           isActive: true,
-        });
-
-        let attemptCount = 0;
-        // Get attempt count if userId is provided
-        if (userId) {
-          attemptCount = await TestAttempt.countDocuments({
-            userId: new Types.ObjectId(userId),
-            testSetId: set._id,
-            status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-          });
-        }
-
-        return {
-          _id: set._id,
-          name: set.name,
-          description: set.description,
-          durationMinutes: set.durationMinutes,
-          totalMarks: set.totalMarks,
-          totalQuestions: questionCount,
-          attemptCount: attemptCount,
-          categoryId: set.categoryId,
-          isActive: set.isActive,
-          sectionId: set.sectionId,
-          subsectionId: set.subsectionId,
-        };
-      })
+        },
+      },
+      {
+        $group: {
+          _id: '$testSetId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const questionCountsMap = new Map(
+      questionCountsAggregation.map(item => [item._id.toString(), item.count])
     );
 
-    return setsWithCounts;
+    // Batch fetch attempt counts if userId is provided
+    const attemptCountsMap = new Map<string, number>();
+    if (userId && setIds.length > 0) {
+      const attemptCountsAggregation = await TestAttempt.aggregate([
+        {
+          $match: {
+            userId: new Types.ObjectId(userId),
+            testSetId: { $in: setIds },
+            status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+          },
+        },
+        {
+          $group: {
+            _id: '$testSetId',
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+      attemptCountsAggregation.forEach(item => {
+        attemptCountsMap.set(item._id.toString(), item.count);
+      });
+    }
+
+    // Map counts to sets
+    const setsWithCounts = sets.map((set) => ({
+      _id: set._id,
+      name: set.name,
+      description: set.description,
+      durationMinutes: set.durationMinutes,
+      totalMarks: set.totalMarks,
+      totalQuestions: questionCountsMap.get(set._id.toString()) || 0,
+      attemptCount: attemptCountsMap.get(set._id.toString()) || 0,
+      categoryId: set.categoryId,
+      isActive: set.isActive,
+      sectionId: set.sectionId,
+      subsectionId: set.subsectionId,
+    }));
+
+    return {
+      sets: setsWithCounts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   },
 };
 

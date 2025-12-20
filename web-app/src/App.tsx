@@ -35,11 +35,7 @@ function App() {
           <Route path="/categories" element={<AllCategoriesPage />} />
           <Route
             path="/categories/:categoryId"
-            element={
-              <ProtectedRoute>
-                <CategoryPage />
-              </ProtectedRoute>
-            }
+            element={<CategoryPage />}
           />
           <Route
             path="/categories/:categoryId/payment"

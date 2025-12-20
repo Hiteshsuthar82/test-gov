@@ -69,104 +69,181 @@ export const categoryService = {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('-__v'),
+        .select('-__v')
+        .lean(),
       Category.countDocuments(filter),
     ]);
+
+    if (categories.length === 0) {
+      return {
+        categories: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          pages: 0,
+        },
+      };
+    }
 
     // Get user's discount percentage if userId is provided
     const discountPercentage = await getUserDiscountPercentage(userId);
 
-    // Get additional statistics for each category
-    const categoriesWithStats = await Promise.all(
-      categories.map(async (category) => {
-        const pricing = calculateDiscountedPrice(category.price, discountPercentage);
-        
-        // Get user count (approved subscriptions for this category)
-        const userCount = await Subscription.countDocuments({
-          categoryId: category._id,
+    // Batch fetch all statistics in parallel
+    const categoryIds = categories.map(cat => cat._id);
+
+    // Batch fetch user counts for all categories
+    const userCountsAggregation = await Subscription.aggregate([
+      {
+        $match: {
+          categoryId: { $in: categoryIds },
           status: 'APPROVED',
-        });
-
-        // Get total tests (already available as totalSetsCount)
-        const totalTests = category.totalSetsCount || 0;
-
-        // Get free tests count (if category price is 0, all tests are free; otherwise 0)
-        // Or we can count test sets that are marked as free if we add that field later
-        const freeTests = category.price === 0 ? totalTests : 0;
-
-        // Get available languages from questions in test sets of this category
-        const testSetIds = await TestSet.find({
-          categoryId: category._id,
-          isActive: true,
-        }).select('_id').lean();
-
-        const testSetObjectIds = testSetIds.map(ts => ts._id);
-        
-        const availableLanguages = new Set<string>();
-        if (testSetObjectIds.length > 0) {
-          const questions = await Question.find({
-            testSetId: { $in: testSetObjectIds },
-            isActive: true,
-          }).select('languages').lean();
-
-          questions.forEach((question: any) => {
-            if (question.languages) {
-              if (question.languages.en) availableLanguages.add('en');
-              if (question.languages.hi) availableLanguages.add('hi');
-              if (question.languages.gu) availableLanguages.add('gu');
-            }
-          });
-        }
-
-        // Format languages array
-        const languagesArray: string[] = [];
-        if (availableLanguages.has('en')) languagesArray.push('English');
-        if (availableLanguages.has('hi')) languagesArray.push('Hindi');
-        if (availableLanguages.has('gu')) languagesArray.push('Gujarati');
-        
-        // If more than 2 languages, show first 2 + "X More"
-        let languagesDisplay: string | string[];
-        if (languagesArray.length > 2) {
-          languagesDisplay = [languagesArray[0], languagesArray[1], `+ ${languagesArray.length - 2} More`];
-        } else {
-          languagesDisplay = languagesArray;
-        }
-
-        // Get completed sets count for the user (if userId provided)
-        let completedSetsCount = 0;
-        if (userId && totalTests > 0) {
-          // Get all test sets for this category
-          const categoryTestSets = await TestSet.find({
-            categoryId: category._id,
-            isActive: true,
-          }).select('_id').lean();
-
-          const testSetIds = categoryTestSets.map(ts => ts._id);
-          
-          if (testSetIds.length > 0) {
-            // Count distinct test sets that user has completed (submitted attempts)
-            const completedSets = await TestAttempt.distinct('testSetId', {
-              userId: new Types.ObjectId(userId),
-              testSetId: { $in: testSetIds },
-              status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-            });
-            completedSetsCount = completedSets.length;
-          }
-        }
-
-        return {
-          ...category.toObject(),
-          originalPrice: pricing.originalPrice,
-          discountedPrice: pricing.discountedPrice,
-          hasDiscount: pricing.hasDiscount,
-          userCount,
-          totalTests,
-          freeTests,
-          languages: languagesDisplay,
-          completedSetsCount,
-        };
-      })
+        },
+      },
+      {
+        $group: {
+          _id: '$categoryId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const userCountsMap = new Map(
+      userCountsAggregation.map(item => [item._id.toString(), item.count])
     );
+
+    // Batch fetch all test sets for all categories
+    const allTestSets = await TestSet.find({
+      categoryId: { $in: categoryIds },
+      isActive: true,
+    })
+      .select('_id categoryId')
+      .lean();
+
+    // Group test sets by category
+    const testSetsByCategory = new Map<string, Types.ObjectId[]>();
+    allTestSets.forEach(ts => {
+      const catId = ts.categoryId.toString();
+      if (!testSetsByCategory.has(catId)) {
+        testSetsByCategory.set(catId, []);
+      }
+      testSetsByCategory.get(catId)!.push(ts._id);
+    });
+
+    // Batch fetch completed sets count for user (if userId provided)
+    const completedSetsMap = new Map<string, number>();
+    if (userId) {
+      const allTestSetIds = allTestSets.map(ts => ts._id);
+      if (allTestSetIds.length > 0) {
+        const completedAttempts = await TestAttempt.aggregate([
+          {
+            $match: {
+              userId: new Types.ObjectId(userId),
+              testSetId: { $in: allTestSetIds },
+              status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
+            },
+          },
+          {
+            $group: {
+              _id: '$testSetId',
+            },
+          },
+        ]);
+
+        const completedTestSetIds = new Set(
+          completedAttempts.map(a => a._id.toString())
+        );
+
+        // Count completed sets per category
+        allTestSets.forEach(ts => {
+          const catId = ts.categoryId.toString();
+          if (completedTestSetIds.has(ts._id.toString())) {
+            completedSetsMap.set(
+              catId,
+              (completedSetsMap.get(catId) || 0) + 1
+            );
+          }
+        });
+      }
+    }
+
+    // Batch fetch languages for all categories using aggregation
+    const allTestSetIds = allTestSets.map(ts => ts._id);
+    const languagesByCategory = new Map<string, Set<string>>();
+    
+    if (allTestSetIds.length > 0) {
+      const languagesAggregation = await Question.aggregate([
+        {
+          $match: {
+            testSetId: { $in: allTestSetIds },
+            isActive: true,
+          },
+        },
+        {
+          $group: {
+            _id: '$testSetId',
+            languages: { $first: '$languages' },
+          },
+        },
+      ]);
+
+      // Map test set IDs to category IDs
+      const testSetToCategory = new Map<string, string>();
+      allTestSets.forEach(ts => {
+        testSetToCategory.set(ts._id.toString(), ts.categoryId.toString());
+      });
+
+      // Aggregate languages by category
+      languagesAggregation.forEach(item => {
+        const catId = testSetToCategory.get(item._id.toString());
+        if (catId && item.languages) {
+          if (!languagesByCategory.has(catId)) {
+            languagesByCategory.set(catId, new Set());
+          }
+          const langSet = languagesByCategory.get(catId)!;
+          if (item.languages.en) langSet.add('en');
+          if (item.languages.hi) langSet.add('hi');
+          if (item.languages.gu) langSet.add('gu');
+        }
+      });
+    }
+
+    // Build response with all pre-fetched data
+    const categoriesWithStats = categories.map((category) => {
+      const pricing = calculateDiscountedPrice(category.price, discountPercentage);
+      const categoryIdStr = category._id.toString();
+      
+      const userCount = userCountsMap.get(categoryIdStr) || 0;
+      const totalTests = category.totalSetsCount || 0;
+      const freeTests = category.price === 0 ? totalTests : 0;
+
+      // Get languages for this category
+      const availableLanguages = languagesByCategory.get(categoryIdStr) || new Set();
+      const languagesArray: string[] = [];
+      if (availableLanguages.has('en')) languagesArray.push('English');
+      if (availableLanguages.has('hi')) languagesArray.push('Hindi');
+      if (availableLanguages.has('gu')) languagesArray.push('Gujarati');
+      
+      let languagesDisplay: string | string[];
+      if (languagesArray.length > 2) {
+        languagesDisplay = [languagesArray[0], languagesArray[1], `+ ${languagesArray.length - 2} More`];
+      } else {
+        languagesDisplay = languagesArray;
+      }
+
+      const completedSetsCount = completedSetsMap.get(categoryIdStr) || 0;
+
+      return {
+        ...category,
+        originalPrice: pricing.originalPrice,
+        discountedPrice: pricing.discountedPrice,
+        hasDiscount: pricing.hasDiscount,
+        userCount,
+        totalTests,
+        freeTests,
+        languages: languagesDisplay,
+        completedSetsCount,
+      };
+    });
 
     return {
       categories: categoriesWithStats,
@@ -180,47 +257,61 @@ export const categoryService = {
   },
 
   async getDetails(categoryId: string, userId?: string) {
-    const category = await Category.findById(categoryId);
+    const category = await Category.findById(categoryId).lean();
     if (!category) {
       throw new Error('Category not found');
     }
 
-    // Get user's discount percentage if userId is provided
-    const discountPercentage = await getUserDiscountPercentage(userId);
+    // Parallel fetch all data
+    const [
+      discountPercentage,
+      userCount,
+      testSetIds,
+      subscription
+    ] = await Promise.all([
+      getUserDiscountPercentage(userId),
+      Subscription.countDocuments({
+        categoryId: category._id,
+        status: 'APPROVED',
+      }),
+      TestSet.find({
+        categoryId: category._id,
+        isActive: true,
+      }).select('_id').lean(),
+      userId ? Subscription.findOne({
+        userId: new Types.ObjectId(userId),
+        categoryId: new Types.ObjectId(categoryId),
+      }).lean() : Promise.resolve(null),
+    ]);
+
     const pricing = calculateDiscountedPrice(category.price, discountPercentage);
-
-    // Get user count (approved subscriptions for this category)
-    const userCount = await Subscription.countDocuments({
-      categoryId: category._id,
-      status: 'APPROVED',
-    });
-
-    // Get total tests
     const totalTests = category.totalSetsCount || 0;
-
-    // Get free tests count
     const freeTests = category.price === 0 ? totalTests : 0;
 
-    // Get available languages from questions in test sets of this category
-    const testSetIds = await TestSet.find({
-      categoryId: category._id,
-      isActive: true,
-    }).select('_id').lean();
-
-    const testSetObjectIds = testSetIds.map(ts => ts._id);
-    
+    // Optimize language query using aggregation
     const availableLanguages = new Set<string>();
-    if (testSetObjectIds.length > 0) {
-      const questions = await Question.find({
-        testSetId: { $in: testSetObjectIds },
-        isActive: true,
-      }).select('languages').lean();
+    if (testSetIds.length > 0) {
+      const testSetObjectIds = testSetIds.map(ts => ts._id);
+      const languagesAggregation = await Question.aggregate([
+        {
+          $match: {
+            testSetId: { $in: testSetObjectIds },
+            isActive: true,
+          },
+        },
+        {
+          $group: {
+            _id: '$testSetId',
+            languages: { $first: '$languages' },
+          },
+        },
+      ]);
 
-      questions.forEach((question: any) => {
-        if (question.languages) {
-          if (question.languages.en) availableLanguages.add('en');
-          if (question.languages.hi) availableLanguages.add('hi');
-          if (question.languages.gu) availableLanguages.add('gu');
+      languagesAggregation.forEach((item: any) => {
+        if (item.languages) {
+          if (item.languages.en) availableLanguages.add('en');
+          if (item.languages.hi) availableLanguages.add('hi');
+          if (item.languages.gu) availableLanguages.add('gu');
         }
       });
     }
@@ -256,51 +347,55 @@ export const categoryService = {
       subscriptionStatus: 'NONE',
     };
 
-    if (userId) {
-      const subscription = await Subscription.findOne({
-        userId: new Types.ObjectId(userId),
-        categoryId: new Types.ObjectId(categoryId),
-      });
+    if (subscription) {
+      result.subscriptionStatus = subscription.status;
+      result.subscription = {
+        id: subscription._id,
+        status: subscription.status,
+        startsAt: subscription.startsAt,
+        expiresAt: subscription.expiresAt,
+      };
 
-      if (subscription) {
-        result.subscriptionStatus = subscription.status;
-        result.subscription = {
-          id: subscription._id,
-          status: subscription.status,
-          startsAt: subscription.startsAt,
-          expiresAt: subscription.expiresAt,
-        };
+      // Only fetch sets if subscription is approved (lazy load)
+      if (subscription.status === 'APPROVED' && userId) {
+        const sets = await TestSet.find({
+          categoryId: new Types.ObjectId(categoryId),
+          isActive: true,
+        })
+          .select('name _id durationMinutes totalMarks')
+          .sort({ createdAt: 1 })
+          .lean();
 
-        if (subscription.status === 'APPROVED') {
-          const sets = await TestSet.find({
-            categoryId: new Types.ObjectId(categoryId),
-            isActive: true,
+        if (sets.length > 0) {
+          const setIds = sets.map(s => s._id);
+          // Batch fetch all attempts in one query
+          const allAttempts = await TestAttempt.find({
+            userId: new Types.ObjectId(userId),
+            testSetId: { $in: setIds },
+            status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
           })
-            .select('name _id durationMinutes totalMarks')
-            .sort({ createdAt: 1 });
+            .sort({ testSetId: 1, createdAt: -1 })
+            .select('testSetId totalScore totalCorrect totalWrong')
+            .lean();
 
-          const setsWithAttempts = await Promise.all(
-            sets.map(async (set) => {
-              const attempts = await TestAttempt.find({
-                userId: new Types.ObjectId(userId),
-                testSetId: set._id,
-                status: { $in: ['SUBMITTED', 'AUTO_SUBMITTED'] },
-              })
-                .sort({ createdAt: -1 })
-                .limit(1)
-                .select('totalScore totalCorrect totalWrong');
+          // Group attempts by testSetId and get the latest one
+          const attemptsBySet = new Map<string, any>();
+          allAttempts.forEach(attempt => {
+            const setId = attempt.testSetId.toString();
+            if (!attemptsBySet.has(setId)) {
+              attemptsBySet.set(setId, attempt);
+            }
+          });
 
-              return {
-                id: set._id,
-                name: set.name,
-                durationMinutes: set.durationMinutes,
-                totalMarks: set.totalMarks,
-                lastAttempt: attempts[0] || null,
-              };
-            })
-          );
-
-          result.sets = setsWithAttempts;
+          result.sets = sets.map(set => ({
+            id: set._id,
+            name: set.name,
+            durationMinutes: set.durationMinutes,
+            totalMarks: set.totalMarks,
+            lastAttempt: attemptsBySet.get(set._id.toString()) || null,
+          }));
+        } else {
+          result.sets = [];
         }
       }
     }

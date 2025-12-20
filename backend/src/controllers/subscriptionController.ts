@@ -16,6 +16,10 @@ export const subscriptionController = {
 
   checkSubscription: async (req: AuthRequest, res: Response) => {
     try {
+      // If user is not authenticated, return null
+      if (!req.user) {
+        return sendSuccess(res, null);
+      }
       const userId = req.user._id.toString();
       const { categoryId } = req.params;
       const subscription = await subscriptionService.checkSubscription(userId, categoryId);

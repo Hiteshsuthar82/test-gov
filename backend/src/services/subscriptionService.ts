@@ -19,10 +19,19 @@ export const subscriptionService = {
       userId: new Types.ObjectId(userId),
       categoryId: new Types.ObjectId(categoryId),
     })
-      .populate('categoryId', 'name price bannerImageUrl')
-      .populate('paymentReferenceId', 'amount status');
+      .select('status startsAt expiresAt categoryId')
+      .lean();
 
-    return subscription;
+    if (!subscription) {
+      return null;
+    }
+
+    // Only return essential data - no need to populate
+    return {
+      status: subscription.status,
+      startsAt: subscription.startsAt,
+      expiresAt: subscription.expiresAt,
+    };
   },
 };
 
