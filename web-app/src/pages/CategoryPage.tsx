@@ -473,48 +473,6 @@ export default function CategoryPage() {
                   </div>
                 </div>
                 <div className='pl-6'>
-                  {/* Subscription Card */}
-              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
-                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
-                  <div className="absolute top-2 right-2">
-                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
-                      NEW
-                    </span>
-                  </div>
-                  <CardContent className="p-6">
-                    <div className="mb-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl font-bold">testbook</span>
-                        <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
-                          PASS PRO
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-300">
-                        The Ultimate Subscription for Pro Aspirants
-                      </p>
-                    </div>
-                    <ul className="space-y-3 mb-6">
-                      {[
-                        'All Test Series',
-                        'All Prev. Year Paper',
-                        'Unlimited Practice',
-                        'Pro Live Tests',
-                        'Unlimited Test Re-Attempts',
-                      ].map((feature, idx) => (
-                        <li key={idx} className="flex items-center gap-2">
-                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Link to={`/categories/${categoryId}/payment`}>
-                      <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                        Get Pass Pro
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
                 </div>
                 </div>
             </div>
@@ -866,6 +824,49 @@ export default function CategoryPage() {
             {/* Right Sidebar */}
             <div className="lg:col-span-1 space-y-6">
 
+              {/* Subscription Card */}
+              {(!subscriptionStatus || subscriptionStatus.status !== 'APPROVED') && (
+                <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
+                  <div className="absolute top-2 right-2">
+                    <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
+                      NEW
+                    </span>
+                  </div>
+                  <CardContent className="p-6">
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl font-bold">testbook</span>
+                        <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
+                          PASS PRO
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300">
+                        The Ultimate Subscription for Pro Aspirants
+                      </p>
+                    </div>
+                    <ul className="space-y-3 mb-6">
+                      {[
+                        'All Test Series',
+                        'All Prev. Year Paper',
+                        'Unlimited Practice',
+                        'Pro Live Tests',
+                        'Unlimited Test Re-Attempts',
+                      ].map((feature, idx) => (
+                        <li key={idx} className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Link to={`/categories/${categoryId}/payment`}>
+                      <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                        Get Pass Pro
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
+              
               {/* More Testseries for you */}
               <Card>
                 <CardContent className="p-6">
