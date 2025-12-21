@@ -15,22 +15,26 @@ export const testSetService = {
       subsectionId?: string;
     }
   ) {
-    // Check subscription
+    // Check subscription - but allow free tests even without subscription
     const subscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       categoryId: new Types.ObjectId(categoryId),
       status: 'APPROVED',
     }).lean();
 
-    if (!subscription) {
-      throw new Error('Subscription not approved for this category');
-    }
+    // If no subscription, we'll filter to only show free tests
+    const hasSubscription = !!subscription;
 
     // Build filter
     const filter: any = {
       categoryId: new Types.ObjectId(categoryId),
       isActive: true,
     };
+
+    // If no subscription, only show free tests
+    if (!hasSubscription) {
+      filter.isFree = true;
+    }
 
     if (options?.sectionId) {
       filter.sectionId = options.sectionId;
@@ -113,6 +117,7 @@ export const testSetService = {
       ...set,
       totalQuestions: questionCountsMap.get(set._id.toString()) || 0,
       attemptCount: attemptCountsMap.get(set._id.toString()) || 0,
+      isFree: set.isFree || false,
     }));
 
     return {
@@ -132,15 +137,17 @@ export const testSetService = {
       throw new Error('Test set not found');
     }
 
-    // Check subscription
-    const subscription = await Subscription.findOne({
-      userId: new Types.ObjectId(userId),
-      categoryId: set.categoryId,
-      status: 'APPROVED',
-    });
+    // Check subscription - only required if test is not free
+    if (!set.isFree) {
+      const subscription = await Subscription.findOne({
+        userId: new Types.ObjectId(userId),
+        categoryId: set.categoryId,
+        status: 'APPROVED',
+      });
 
-    if (!subscription) {
-      throw new Error('Subscription not approved for this category');
+      if (!subscription) {
+        throw new Error('Subscription not approved for this category');
+      }
     }
 
     // Get attempt stats
@@ -168,6 +175,7 @@ export const testSetService = {
         negativeMarking: set.negativeMarking,
         sections: set.sections,
         categoryId: set.categoryId,
+        isFree: set.isFree || false,
       },
       stats: {
         totalAttempts,
@@ -223,7 +231,7 @@ export const testSetService = {
         .sort({ createdAt: 1 })
         .skip(skip)
         .limit(limit)
-        .select('name description durationMinutes totalMarks isActive _id categoryId sectionId subsectionId')
+        .select('name description durationMinutes totalMarks isActive isFree _id categoryId sectionId subsectionId')
         .lean(),
       TestSet.countDocuments(filter),
     ]);
@@ -294,6 +302,7 @@ export const testSetService = {
       attemptCount: attemptCountsMap.get(set._id.toString()) || 0,
       categoryId: set.categoryId,
       isActive: set.isActive,
+      isFree: set.isFree || false,
       sectionId: set.sectionId,
       subsectionId: set.subsectionId,
     }));

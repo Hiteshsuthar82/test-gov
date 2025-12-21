@@ -12,15 +12,17 @@ export const attemptService = {
       throw new Error('Test set not found');
     }
 
-    // Check subscription
-    const subscription = await Subscription.findOne({
-      userId: new Types.ObjectId(userId),
-      categoryId: testSet.categoryId,
-      status: 'APPROVED',
-    });
+    // Check subscription - only required if test is not free
+    if (!testSet.isFree) {
+      const subscription = await Subscription.findOne({
+        userId: new Types.ObjectId(userId),
+        categoryId: testSet.categoryId,
+        status: 'APPROVED',
+      });
 
-    if (!subscription) {
-      throw new Error('Subscription not approved for this category');
+      if (!subscription) {
+        throw new Error('Subscription not approved for this category');
+      }
     }
 
     // Check if there's an in-progress attempt (only if not forcing new)

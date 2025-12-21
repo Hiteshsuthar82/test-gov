@@ -39,6 +39,7 @@ export default function SetFormPage() {
     negativeMarking: 0.25,
     hasSectionWiseTiming: false,
     isActive: true,
+    isFree: false,
     sections: [] as Section[],
     sectionId: '',
     subsectionId: '',
@@ -94,6 +95,7 @@ export default function SetFormPage() {
         negativeMarking: data.negativeMarking || 0.25,
         hasSectionWiseTiming: data.hasSectionWiseTiming ?? false,
         isActive: data.isActive ?? true,
+        isFree: data.isFree ?? false,
         sections: data.sections || [],
         sectionId: data.sectionId || '',
         subsectionId: data.subsectionId || '',
@@ -459,15 +461,27 @@ export default function SetFormPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="isActive"
-                checked={formData.isActive}
-                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <Label htmlFor="isActive">Active</Label>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isActive"
+                  checked={formData.isActive}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="isActive">Active</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isFree"
+                  checked={formData.isFree}
+                  onChange={(e) => setFormData({ ...formData, isFree: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="isFree">Free Test</Label>
+              </div>
             </div>
 
             {validationError && (

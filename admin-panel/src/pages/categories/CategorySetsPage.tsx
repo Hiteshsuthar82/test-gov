@@ -63,19 +63,20 @@ export default function CategorySetsPage() {
               <TableHead className="font-semibold text-gray-900">Duration</TableHead>
               <TableHead className="font-semibold text-gray-900">Total Marks</TableHead>
               <TableHead className="font-semibold text-gray-900">Active</TableHead>
+              <TableHead className="font-semibold text-gray-900">Free</TableHead>
               <TableHead className="font-semibold text-gray-900">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12">
+                <TableCell colSpan={6} className="text-center py-12">
                   <Loader inline />
                 </TableCell>
               </TableRow>
             ) : !data || data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-gray-500">
+                <TableCell colSpan={6} className="text-center py-12 text-gray-500">
                   No test sets found
                 </TableCell>
               </TableRow>
@@ -90,6 +91,13 @@ export default function CategorySetsPage() {
                       set.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                     }`}>
                       {set.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      set.isFree ? 'bg-green-500 text-white font-bold' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {set.isFree ? 'FREE' : 'Paid'}
                     </span>
                   </TableCell>
                   <TableCell>

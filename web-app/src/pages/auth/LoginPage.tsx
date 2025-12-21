@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
+  const otpInputRef = useRef<HTMLInputElement>(null)
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,6 +47,16 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  // Auto-focus OTP input when OTP verification screen appears
+  useEffect(() => {
+    if (otpSent && otpInputRef.current) {
+      // Small delay to ensure the input is rendered
+      setTimeout(() => {
+        otpInputRef.current?.focus()
+      }, 100)
+    }
+  }, [otpSent])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-indigo-100 px-4">
@@ -91,6 +102,7 @@ export default function LoginPage() {
                   OTP
                 </label>
                 <Input
+                  ref={otpInputRef}
                   id="otp"
                   type="text"
                   placeholder="Enter 6-digit OTP"

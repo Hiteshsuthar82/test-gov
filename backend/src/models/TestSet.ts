@@ -19,6 +19,7 @@ export interface ITestSet extends Document {
   sectionId: string; // Required: section from category
   subsectionId: string; // Required: subsection from category section
   isActive: boolean;
+  isFree: boolean; // If true, this test set is free to access
   createdAt: Date;
   updatedAt: Date;
 }
@@ -46,6 +47,7 @@ const TestSetSchema = new Schema<ITestSet>(
     sectionId: { type: String, required: true },
     subsectionId: { type: String, required: true },
     isActive: { type: Boolean, default: true },
+    isFree: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

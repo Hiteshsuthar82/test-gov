@@ -37,6 +37,7 @@ interface TestSet {
   attemptCount?: number;
   categoryId: string;
   isActive: boolean;
+  isFree?: boolean;
   sectionId?: string;
   subsectionId?: string;
   price?: number;
@@ -297,6 +298,12 @@ export default function CategoryPage() {
   const totalTests = category?.totalSetsCount || allTestSets?.length || 0;
   const progressPercentage =
     totalTests > 0 ? Math.round((completedTestsCount / totalTests) * 100) : 0;
+  
+  // Calculate free test count from actual test sets
+  const freeTestsCount = useMemo(() => {
+    if (!allTestSets || allTestSets.length === 0) return 0;
+    return allTestSets.filter((set: TestSet) => set.isFree === true).length;
+  }, [allTestSets]);
 
   // Get section filter options (for tabs)
   const sectionFilters = useMemo(() => {
@@ -374,7 +381,12 @@ export default function CategoryPage() {
   };
 
   const handleStartTest = async (testSetId: string) => {
-    if (!subscriptionStatus || subscriptionStatus.status !== "APPROVED") {
+    // Check if this is a free test
+    const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
+    const isFreeTest = testSet?.isFree || false;
+    
+    // Only require subscription if test is not free
+    if (!isFreeTest && (!subscriptionStatus || subscriptionStatus.status !== "APPROVED")) {
       alert("Please subscribe to this category first");
       return;
     }
@@ -690,13 +702,11 @@ export default function CategoryPage() {
                         <span className="text-lg font-bold text-gray-900">
                           {totalTests} Total Tests
                         </span>
-                        {category.freeTests !== undefined &&
-                          category.freeTests !== null &&
-                          Number(category.freeTests) > 0 && (
-                            <span className="bg-green-500 text-white px-3 py-1 rounded text-sm font-semibold">
-                              {category.freeTests} FREE TESTS
-                            </span>
-                          )}
+                        {freeTestsCount > 0 && (
+                          <span className="bg-green-500 text-white px-3 py-1 rounded text-sm font-semibold">
+                            {freeTestsCount} FREE TESTS
+                          </span>
+                        )}
                       </div>
                       {totalTests > 0 && (
                         <div className="mb-2">
@@ -847,6 +857,7 @@ export default function CategoryPage() {
                   const attemptStatus = getAttemptStatus(suggestedTest._id);
                   const price = category?.price;
                   const isFree =
+                    suggestedTest.isFree ||
                     !price ||
                     Number(price) === 0 ||
                     (category?.freeTests !== undefined &&
@@ -1051,7 +1062,9 @@ export default function CategoryPage() {
                 // Show test sets in reference image format
                 <div className="space-y-3">
                   {filteredTestSets.map((testSet: TestSet) => {
-                    const isLocked = !isSubscriptionApproved;
+                    const isFreeTest = testSet.isFree || false;
+                    // Test is locked only if not subscribed AND not free
+                    const isLocked = !isSubscriptionApproved && !isFreeTest;
                     const attemptStatus = getAttemptStatus(testSet._id);
                     const attemptData = getAttemptData(testSet._id);
                     const lastAttemptDate = getLastAttemptDate(testSet._id);
@@ -1060,10 +1073,17 @@ export default function CategoryPage() {
                     return (
                       <Card
                         key={testSet._id}
-                        className={`hover:shadow-md transition-shadow bg-white ${
+                        className={`hover:shadow-md transition-shadow bg-white relative ${
                           isLocked ? "opacity-75 border-gray-300" : ""
                         }`}
                       >
+                        {isFreeTest && (
+                          <div className="absolute top-3 left-3 z-10">
+                            <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
+                              FREE
+                            </span>
+                          </div>
+                        )}
                         <div className="">
                           {/* Title */}
                           <div className="px-5 py-4">

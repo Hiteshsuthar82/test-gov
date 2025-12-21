@@ -33,6 +33,7 @@ export const adminTestSetService = {
     sectionId: string;
     subsectionId: string;
     isActive?: boolean;
+    isFree?: boolean;
   }) {
     const category = await Category.findById(categoryId);
     if (!category) {

@@ -145,24 +145,9 @@ export default function QuestionFormPage() {
     enabled: !!resolvedSetId,
   })
 
-  // Fetch category to get sections and subsections
-  const categoryId = setData?.categoryIdString || (setData?.categoryId 
-    ? (typeof setData.categoryId === 'object' && setData.categoryId._id 
-        ? setData.categoryId._id.toString() 
-        : setData.categoryId.toString())
-    : null)
-  
-  const { data: categoryData } = useQuery({
-    queryKey: ['category', categoryId],
-    queryFn: async () => {
-      if (!categoryId) return null
-      const response = await api.get(`/admin/categories/${categoryId}`)
-      return response.data.data
-    },
-    enabled: !!categoryId,
-  })
-
-  const categorySections = categoryData?.sections || []
+  // Get sections from the test set itself, not from category
+  // Test sets have their own sections array defined in the set
+  const availableSections = setData?.sections || []
 
   // Watch form values
   const watchedLanguages = watch('languages')
@@ -281,11 +266,11 @@ export default function QuestionFormPage() {
       
       // Only set defaults if form is still empty (new question)
       if (!enOptions || enOptions.length === 0) {
-        // Set sectionId only if category sections exist
-        if (categorySections.length > 0) {
+        // Set sectionId only if sections exist
+        if (availableSections.length > 0) {
           const currentSectionId = watch('sectionId')
           if (currentSectionId === '') {
-            const firstSection = categorySections[0]
+            const firstSection = availableSections[0]
             if (firstSection) {
               setValue('sectionId', firstSection.sectionId)
             }
@@ -298,7 +283,7 @@ export default function QuestionFormPage() {
         appendEnOption({ optionId: 'E', text: '' })
       }
     }
-  }, [categorySections, id, watch, setValue, appendEnOption])
+  }, [availableSections, id, watch, setValue, appendEnOption])
 
   // Sync options across all languages when English options change
   const syncOptionsToAllLanguages = useCallback((enOptionsCount: number) => {
@@ -574,8 +559,8 @@ export default function QuestionFormPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className={`grid gap-4 ${categorySections.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {categorySections.length > 0 && (
+            <div className={`grid gap-4 ${availableSections.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {availableSections.length > 0 && (
                 <div>
                   <Label htmlFor="sectionId">Section *</Label>
                   <Select
@@ -583,7 +568,7 @@ export default function QuestionFormPage() {
                     {...register('sectionId', { required: 'Section is required' })}
                   >
                     <option value="">Select Section</option>
-                    {categorySections.map((section: any) => (
+                    {availableSections.map((section: any) => (
                       <option key={section.sectionId} value={section.sectionId}>
                         {section.name}
                       </option>
