@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 import { FiArrowRight } from 'react-icons/fi'
 import heroImage from '@/assets/test-checklist-hero-img3.png'
 import endlessConstellation from '@/assets/background-svgs/liquid-cheese.svg'
@@ -76,15 +75,16 @@ export default function HeroSection({ categories }: HeroSectionProps) {
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <Link to={categories && categories.length > 0 ? `/categories/${categories[0]._id}` : '#'}>
-                  <Button size="lg" className="bg-purple-600 hover:bg-purple-700 text-white text-lg px-8 py-6 h-auto w-full sm:w-auto">
-                    Start Free Tests
-                    <FiArrowRight className="ml-2" />
-                  </Button>
+                  <button className="group bg-purple-600 hover:bg-purple-700 text-white font-semibold text-lg px-10 py-4 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <span>Start Free Tests</span>
+                    <FiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                  </button>
                 </Link>
                 <Link to="/categories">
-                  <Button size="lg" variant="outline" className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 text-lg px-8 py-6 h-auto w-full sm:w-auto">
-                    View All Categories
-                  </Button>
+                  <button className="group bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-600 font-semibold text-lg px-10 py-4 rounded-lg border-2 border-gray-300 hover:border-purple-600 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <span>View All Categories</span>
+                    <FiArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                  </button>
                 </Link>
               </div>
             </div>
