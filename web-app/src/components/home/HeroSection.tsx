@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { FiArrowRight } from 'react-icons/fi'
 import heroImage from '@/assets/test-checklist-hero-img3.png'
+import endlessConstellation from '@/assets/background-svgs/liquid-cheese.svg'
 
 interface Category {
   _id: string
@@ -14,7 +15,19 @@ interface HeroSectionProps {
 export default function HeroSection({ categories }: HeroSectionProps) {
   return (
     <div className="relative bg-white overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-16 lg:py-24">
+      {/* Background SVG - Constellation pattern */}
+      <img
+        src={endlessConstellation}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        style={{ 
+          zIndex: 1,
+          opacity: 1,
+          mixBlendMode: 'multiply'
+        }}
+      />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-16 lg:py-24 relative z-10">
         <div className="relative">
           {/* Mobile: Image on top */}
           <div className="lg:hidden mb-8 -mx-4 sm:-mx-6">

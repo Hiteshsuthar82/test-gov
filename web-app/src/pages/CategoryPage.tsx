@@ -500,7 +500,7 @@ export default function CategoryPage() {
                   {/* Statistics and Info Grid Shimmer */}
                   <div className="grid grid-cols-2 gap-10">
                     {/* Statistics Shimmer */}
-                    <div className="mb-4">
+                    <div className="mb-4 border-r border-gray-300 pr-10">
                       <div className="flex items-center gap-4 mb-2">
                         <div className="h-6 bg-gray-200 rounded w-32"></div>
                         <div className="h-6 bg-gray-200 rounded w-24"></div>
@@ -685,7 +685,7 @@ export default function CategoryPage() {
 
                   <div className="grid grid-cols-2 gap-10">
                     {/* Statistics */}
-                    <div className="mb-4">
+                    <div className="mb-4 border-r border-gray-300 pr-10">
                       <div className="flex items-center gap-4 mb-2">
                         <span className="text-lg font-bold text-gray-900">
                           {totalTests} Total Tests
@@ -1300,7 +1300,7 @@ export default function CategoryPage() {
                 )}
 
               {/* More Testseries for you */}
-              <Card>
+              {/* <Card>
                 <CardContent className="p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">
                     More Testseries for you
@@ -1346,7 +1346,7 @@ export default function CategoryPage() {
                     View More
                   </Button>
                 </CardContent>
-              </Card>
+              </Card> */}
 
               {/* Why Take this Test Series */}
               <Card>
