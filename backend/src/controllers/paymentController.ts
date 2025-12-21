@@ -44,7 +44,11 @@ export const paymentController = {
       }
 
       const result = await paymentService.create({
-        categoryId: req.body.categoryId,
+        categoryId: req.body.categoryId, // For backward compatibility
+        categoryIds: req.body.categoryIds, // For multiple categories
+        cartId: req.body.cartId, // For cart payment
+        comboOfferId: req.body.comboOfferId, // For combo offer payment
+        comboDurationMonths: req.body.comboDurationMonths ? parseInt(req.body.comboDurationMonths) : undefined,
         amount: parseFloat(req.body.amount),
         payerName: req.body.payerName,
         payerUpiId: req.body.payerUpiId,

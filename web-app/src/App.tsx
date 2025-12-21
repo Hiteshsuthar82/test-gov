@@ -16,6 +16,8 @@ import AllCategoriesPage from './pages/AllCategoriesPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import NoticesPage from './pages/NoticesPage'
 import TestAttemptInstructionsPage from './pages/TestAttemptInstructionsPage'
+import CartPage from './pages/CartPage'
+import CheckoutPage from './pages/CheckoutPage'
 
 const queryClient = new QueryClient()
 
@@ -36,6 +38,14 @@ function App() {
           <Route
             path="/categories/:categoryId"
             element={<CategoryPage />}
+          />
+          <Route
+            path="/payment"
+            element={
+              <ProtectedRoute>
+                <PaymentPage />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/categories/:categoryId/payment"
@@ -108,6 +118,22 @@ function App() {
           <Route
             path="/notices"
             element={<NoticesPage />}
+          />
+          <Route
+            path="/cart"
+            element={
+              <ProtectedRoute>
+                <CartPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute>
+                <CheckoutPage />
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </BrowserRouter>

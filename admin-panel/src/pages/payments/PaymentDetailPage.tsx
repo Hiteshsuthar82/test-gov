@@ -71,10 +71,68 @@ export default function PaymentDetailPage() {
               <div className="font-medium">{payment?.userId?.name}</div>
               <div className="text-sm text-gray-500">{payment?.userId?.email}</div>
             </div>
-            <div>
-              <div className="text-sm text-gray-500">Category</div>
-              <div className="font-medium">{payment?.categoryId?.name}</div>
-            </div>
+            {/* Payment Type and Items */}
+            {payment?.comboOfferId ? (
+              <div>
+                <div className="text-sm text-gray-500">Payment Type</div>
+                <div className="font-medium">Combo Offer</div>
+                <div className="text-sm text-gray-600 mt-1">{payment?.comboOfferId?.name || 'Combo Offer'}</div>
+                {payment?.comboDurationMonths && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500">Selected Duration:</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {payment.comboDurationMonths} {payment.comboDurationMonths === 1 ? 'Month' : 'Months'}
+                    </div>
+                  </div>
+                )}
+                {payment?.categoryIds && payment.categoryIds.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500">Includes Categories ({payment.categoryIds.length}):</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {payment.categoryIds.map((cat: any, idx: number) => (
+                        <span key={idx} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                          {cat.name || cat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : payment?.cartId ? (
+              <div>
+                <div className="text-sm text-gray-500">Payment Type</div>
+                <div className="font-medium">Cart Payment</div>
+                {payment?.categoryIds && payment.categoryIds.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500">Cart Items ({payment.categoryIds.length}):</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {payment.categoryIds.map((cat: any, idx: number) => (
+                        <span key={idx} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                          {cat.name || cat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="text-sm text-gray-500">Category</div>
+                <div className="font-medium">{payment?.categoryId?.name || 'N/A'}</div>
+                {payment?.categoryIds && payment.categoryIds.length > 1 && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500">Additional Categories:</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {payment.categoryIds.map((cat: any, idx: number) => (
+                        <span key={idx} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                          {cat.name || cat}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <div className="text-sm text-gray-500">Amount</div>
               <div className="font-medium text-lg">₹{payment?.amount}</div>

@@ -12,6 +12,8 @@ import notificationRoutes from './notifications';
 import uploadRoutes from './upload';
 import partnerRoutes from '../partners';
 import leaderboardRoutes from './leaderboard';
+import comboOfferRoutes from './comboOffers';
+import cartRoutes from './carts';
 
 const router = Router();
 
@@ -28,6 +30,8 @@ router.use('/notifications', notificationRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/partners', partnerRoutes);
 router.use('/leaderboard', leaderboardRoutes);
+router.use('/combo-offers', comboOfferRoutes);
+router.use('/carts', cartRoutes);
 
 export default router;
 

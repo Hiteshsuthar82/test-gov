@@ -16,11 +16,37 @@ export const testSetService = {
     }
   ) {
     // Check subscription - but allow free tests even without subscription
-    const subscription = await Subscription.findOne({
+    // First check for direct category subscription
+    let subscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       categoryId: new Types.ObjectId(categoryId),
+      isComboOffer: false,
       status: 'APPROVED',
     }).lean();
+
+    // If no direct subscription, check for combo offer subscription that includes this category
+    if (!subscription) {
+      const comboSubscription = await Subscription.findOne({
+        userId: new Types.ObjectId(userId),
+        isComboOffer: true,
+        status: 'APPROVED',
+        'comboOfferDetails.categoryIds': new Types.ObjectId(categoryId),
+      }).lean();
+
+      if (comboSubscription) {
+        // Check if combo subscription is still valid (not expired)
+        const now = new Date();
+        if (!comboSubscription.expiresAt || new Date(comboSubscription.expiresAt) >= now) {
+          subscription = comboSubscription;
+        }
+      }
+    } else {
+      // Check if category subscription is still valid (not expired)
+      const now = new Date();
+      if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
+        subscription = null; // Subscription expired
+      }
+    }
 
     // If no subscription, we'll filter to only show free tests
     const hasSubscription = !!subscription;
@@ -139,14 +165,38 @@ export const testSetService = {
 
     // Check subscription - only required if test is not free
     if (!set.isFree) {
-      const subscription = await Subscription.findOne({
+      // Check for direct category subscription
+      let subscription = await Subscription.findOne({
         userId: new Types.ObjectId(userId),
         categoryId: set.categoryId,
+        isComboOffer: false,
         status: 'APPROVED',
       });
 
+      // If no direct subscription, check for combo offer subscription that includes this category
       if (!subscription) {
-        throw new Error('Subscription not approved for this category');
+        const comboSubscription = await Subscription.findOne({
+          userId: new Types.ObjectId(userId),
+          isComboOffer: true,
+          status: 'APPROVED',
+          'comboOfferDetails.categoryIds': set.categoryId,
+        });
+
+        if (!comboSubscription) {
+          throw new Error('Subscription not approved for this category');
+        }
+
+        // Check if combo subscription is still valid (not expired)
+        const now = new Date();
+        if (comboSubscription.expiresAt && new Date(comboSubscription.expiresAt) < now) {
+          throw new Error('Your combo offer subscription has expired');
+        }
+      } else {
+        // Check if category subscription is still valid (not expired)
+        const now = new Date();
+        if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
+          throw new Error('Your subscription has expired');
+        }
       }
     }
 

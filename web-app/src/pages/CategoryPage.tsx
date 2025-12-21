@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   FiArrowRight,
   FiMoreVertical,
   FiBookOpen,
+  FiShoppingCart,
 } from "react-icons/fi";
 import { useAuthStore } from "@/store/authStore";
 
@@ -190,6 +191,7 @@ export default function CategoryPage() {
     (!isSubscriptionApproved || !isLoadingAttempts);
 
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // Fetch leaderboard data for all test sets to get ranks
   const { data: leaderboardData } = useQuery({
@@ -304,6 +306,109 @@ export default function CategoryPage() {
     if (!allTestSets || allTestSets.length === 0) return 0;
     return allTestSets.filter((set: TestSet) => set.isFree === true).length;
   }, [allTestSets]);
+
+  // Fetch user subscriptions to check if they have combo offer or category subscription
+  const { data: userSubscriptions } = useQuery({
+    queryKey: ['userSubscriptions'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/subscriptions/me');
+        return response.data.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!user,
+  });
+
+  // Check if user has combo offer subscription that includes this category
+  const hasComboOfferForCategory = useMemo(() => {
+    if (!user || !userSubscriptions || !categoryId) return false;
+    return userSubscriptions.some((sub: any) => {
+      if (sub.isComboOffer && sub.comboOfferDetails?.categoryIds) {
+        return sub.comboOfferDetails.categoryIds.some(
+          (cat: any) => (cat._id || cat).toString() === categoryId
+        );
+      }
+      return false;
+    });
+  }, [user, userSubscriptions, categoryId]);
+
+  // Check if user has direct category subscription
+  const hasCategorySubscription = useMemo(() => {
+    if (!user || !userSubscriptions || !categoryId) return false;
+    return userSubscriptions.some((sub: any) => {
+      if (!sub.isComboOffer && sub.categoryId) {
+        return (sub.categoryId._id || sub.categoryId).toString() === categoryId;
+      }
+      return false;
+    });
+  }, [user, userSubscriptions, categoryId]);
+
+  // Fetch active combo offers for this category
+  // For logged-in users: only fetch if they don't have subscription
+  // For non-logged-in users: always fetch
+  const { data: comboOffers } = useQuery({
+    queryKey: ['comboOffers', categoryId],
+    queryFn: async () => {
+      if (!categoryId) return [];
+      try {
+        const response = await api.get(`/combo-offers/category/${categoryId}`);
+        // The API returns { success: true, data: [...] } or just the array
+        const offers = Array.isArray(response.data.data) 
+          ? response.data.data 
+          : Array.isArray(response.data) 
+          ? response.data 
+          : [];
+        return offers;
+      } catch (error) {
+        console.error('Error fetching combo offers:', error);
+        return [];
+      }
+    },
+    enabled: !!categoryId && (
+      !user 
+        ? true // Always fetch for non-logged-in users
+        : (userSubscriptions !== undefined && !hasComboOfferForCategory && !hasCategorySubscription) // For logged-in users, wait for subscriptions and check
+    ),
+  });
+
+  // Get the latest active combo offer (first one from the array, as they're sorted by createdAt desc)
+  const latestComboOffer = useMemo(() => {
+    if (!comboOffers || comboOffers.length === 0) {
+      return null;
+    }
+    // Return the first combo offer (they're sorted by createdAt desc, so latest first)
+    return comboOffers[0];
+  }, [comboOffers]);
+
+  // Determine if we should show combo offer
+  const shouldShowComboOffer = useMemo(() => {
+    // Must have a combo offer to show
+    if (!latestComboOffer) return false;
+    
+    // For non-logged-in users: always show if combo offer exists
+    if (!user) {
+      return true;
+    }
+    
+    // For logged-in users: show if they don't have subscription
+    return !hasComboOfferForCategory && !hasCategorySubscription;
+  }, [user, hasComboOfferForCategory, hasCategorySubscription, latestComboOffer]);
+
+  // Add to cart mutation
+  const addToCartMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      await api.post('/cart', { categoryId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      alert('Added to cart successfully!');
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.message || 'Failed to add to cart');
+    },
+  });
 
   // Get section filter options (for tabs)
   const sectionFilters = useMemo(() => {
@@ -755,58 +860,85 @@ export default function CategoryPage() {
                     </div>
                   </div>
                 </div>
-                {/* Right side - Banking Combo Card (only for non-logged in users) */}
+                {/* Right side - Dynamic Combo Offer Card */}
                 <div className="pl-6 relative">
-                  {!user && (
+                  {shouldShowComboOffer && latestComboOffer && (
                     <div className="absolute top-0 right-0 z-10">
                       <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-visible shadow-xl w-80 max-w-[280px]">
                         <div className="absolute -top-2 -right-2 z-10">
                           <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
-                            NEW
+                            COMBO
                           </span>
                         </div>
                         <CardContent className="p-5">
                           <div className="mb-3">
                             <div className="flex items-center gap-2 mb-2">
                               <span className="text-xl font-bold">
-                                Complete Banking Combo
+                                {latestComboOffer.name}
                               </span>
                             </div>
-                            <div className="flex items-baseline gap-2 mb-2">
-                              <span className="text-2xl font-bold text-yellow-400">
-                                ₹549
-                              </span>
-                              <span className="text-xs text-gray-400 line-through">
-                                ₹2,999
-                              </span>
-                              <span className="text-xs bg-red-500 px-2 py-1 rounded">
-                                82% OFF
-                              </span>
-                            </div>
-                            <p className="text-xs text-gray-300">
-                              Get access to all banking exam preparation
-                              materials
-                            </p>
+                            {latestComboOffer.timePeriods && latestComboOffer.timePeriods.length > 0 ? (
+                              <div className="flex items-baseline gap-2 mb-2">
+                                <span className="text-2xl font-bold text-yellow-400">
+                                  ₹{latestComboOffer.timePeriods[0].price}
+                                </span>
+                                {latestComboOffer.timePeriods[0].originalPrice > latestComboOffer.timePeriods[0].price && (
+                                  <>
+                                    <span className="text-xs text-gray-400 line-through">
+                                      ₹{latestComboOffer.timePeriods[0].originalPrice}
+                                    </span>
+                                    <span className="text-xs bg-red-500 px-2 py-1 rounded">
+                                      {Math.round(((latestComboOffer.timePeriods[0].originalPrice - latestComboOffer.timePeriods[0].price) / latestComboOffer.timePeriods[0].originalPrice) * 100)}% OFF
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            ) : latestComboOffer.price ? (
+                              <div className="flex items-baseline gap-2 mb-2">
+                                <span className="text-2xl font-bold text-yellow-400">
+                                  ₹{latestComboOffer.price}
+                                </span>
+                                {latestComboOffer.originalPrice && latestComboOffer.originalPrice > latestComboOffer.price && (
+                                  <>
+                                    <span className="text-xs text-gray-400 line-through">
+                                      ₹{latestComboOffer.originalPrice}
+                                    </span>
+                                    <span className="text-xs bg-red-500 px-2 py-1 rounded">
+                                      {Math.round(((latestComboOffer.originalPrice - latestComboOffer.price) / latestComboOffer.originalPrice) * 100)}% OFF
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            ) : null}
+                            {latestComboOffer.description && (
+                              <p className="text-xs text-gray-300">
+                                {latestComboOffer.description}
+                              </p>
+                            )}
                           </div>
-                          <ul className="space-y-2 mb-4">
-                            {[
-                              "All Banking Test Series",
-                              "Previous Year Papers",
-                              "Unlimited Practice Tests",
-                              "Live Mock Tests",
-                              "Detailed Solutions",
-                            ].map((feature, idx) => (
-                              <li key={idx} className="flex items-center gap-2">
-                                <FiCheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
-                                <span className="text-xs">{feature}</span>
-                              </li>
-                            ))}
-                          </ul>
-                          <Link to="/register">
-                            <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 text-sm">
-                              Get Combo - ₹549
-                            </Button>
-                          </Link>
+                          {latestComboOffer.benefits && latestComboOffer.benefits.length > 0 && (
+                            <ul className="space-y-2 mb-4">
+                              {latestComboOffer.benefits.slice(0, 5).map((benefit: string, idx: number) => (
+                                <li key={idx} className="flex items-center gap-2">
+                                  <FiCheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                  <span className="text-xs">{benefit}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {user ? (
+                            <Link to={`/checkout?comboOfferId=${latestComboOffer._id}`}>
+                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 text-sm">
+                                Get Combo Offer
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Link to="/register">
+                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 text-sm">
+                                Get Combo Offer
+                              </Button>
+                            </Link>
+                          )}
                         </CardContent>
                       </Card>
                     </div>
@@ -1310,11 +1442,26 @@ export default function CategoryPage() {
                           </li>
                         ))}
                       </ul>
-                      <Link to={`/categories/${categoryId}/payment`}>
-                        <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                          Get Pass Pro
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            if (categoryId) {
+                              addToCartMutation.mutate(categoryId);
+                            }
+                          }}
+                          variant="outline"
+                          className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                          disabled={addToCartMutation.isPending}
+                        >
+                          <FiShoppingCart className="mr-2" />
+                          Add to Cart
                         </Button>
-                      </Link>
+                        <Link to={`/categories/${categoryId}/payment`} className="flex-1">
+                          <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                            Buy Now
+                          </Button>
+                        </Link>
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -1426,3 +1573,4 @@ export default function CategoryPage() {
     </Layout>
   );
 }
+

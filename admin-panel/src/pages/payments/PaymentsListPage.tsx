@@ -119,7 +119,7 @@ export default function PaymentsListPage() {
           <TableHeader>
             <TableRow className="bg-gray-50">
               <TableHead className="font-semibold text-gray-900">User</TableHead>
-              <TableHead className="font-semibold text-gray-900">Category</TableHead>
+              <TableHead className="font-semibold text-gray-900">Payment Type / Items</TableHead>
               <TableHead className="font-semibold text-gray-900">Amount</TableHead>
               <TableHead className="font-semibold text-gray-900">Status</TableHead>
               <TableHead className="font-semibold text-gray-900">Date</TableHead>
@@ -143,7 +143,41 @@ export default function PaymentsListPage() {
               payments.map((payment: any) => (
                 <TableRow key={payment._id} className="hover:bg-gray-50">
                   <TableCell className="text-gray-900">{payment.userId?.name}</TableCell>
-                  <TableCell className="text-gray-700">{payment.categoryId?.name}</TableCell>
+                  <TableCell className="text-gray-700">
+                    {payment.comboOfferId ? (
+                      <div>
+                        <div className="font-medium">Combo: {payment.comboOfferId?.name || 'Combo Offer'}</div>
+                        {payment.comboDurationMonths && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Duration: {payment.comboDurationMonths} {payment.comboDurationMonths === 1 ? 'Month' : 'Months'}
+                          </div>
+                        )}
+                        {payment.categoryIds && payment.categoryIds.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {payment.categoryIds.length} categories
+                          </div>
+                        )}
+                      </div>
+                    ) : payment.cartId ? (
+                      <div>
+                        <div className="font-medium">Cart Payment</div>
+                        {payment.categoryIds && payment.categoryIds.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {payment.categoryIds.length} items
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="font-medium">{payment.categoryId?.name || 'N/A'}</div>
+                        {payment.categoryIds && payment.categoryIds.length > 1 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            +{payment.categoryIds.length - 1} more
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="text-gray-900 font-medium">₹{payment.amount}</TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${

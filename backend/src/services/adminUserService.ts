@@ -59,10 +59,25 @@ export const adminUserService = {
   },
 
   async getUserSubscriptions(userId: string) {
-    return Subscription.find({ userId })
+    const subscriptions = await Subscription.find({ userId })
       .populate('categoryId', 'name price')
+      .populate('comboOfferId', 'name description imageUrl')
       .populate('paymentReferenceId', 'amount status')
       .sort({ createdAt: -1 });
+
+    // Manually populate categoryIds in comboOfferDetails for combo offer subscriptions
+    const { Category } = await import('../models/Category');
+    for (const subscription of subscriptions) {
+      if (subscription.isComboOffer && subscription.comboOfferDetails?.categoryIds) {
+        const categoryIds = subscription.comboOfferDetails.categoryIds;
+        const populatedCategories = await Category.find({
+          _id: { $in: categoryIds }
+        }).select('name price');
+        subscription.comboOfferDetails.categoryIds = populatedCategories as any;
+      }
+    }
+
+    return subscriptions;
   },
 
   async getUserAttempts(userId: string) {

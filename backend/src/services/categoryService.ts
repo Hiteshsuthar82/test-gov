@@ -93,23 +93,58 @@ export const categoryService = {
     const categoryIds = categories.map(cat => cat._id);
 
     // Batch fetch user counts for all categories
-    const userCountsAggregation = await Subscription.aggregate([
-      {
-        $match: {
-          categoryId: { $in: categoryIds },
-          status: 'APPROVED',
+    // Count both direct category subscriptions and combo offer subscriptions
+    const [directSubscriptions, comboSubscriptions] = await Promise.all([
+      Subscription.aggregate([
+        {
+          $match: {
+            categoryId: { $in: categoryIds },
+            isComboOffer: false,
+            status: 'APPROVED',
+          },
         },
-      },
-      {
-        $group: {
-          _id: '$categoryId',
-          count: { $sum: 1 },
+        {
+          $group: {
+            _id: '$categoryId',
+            count: { $sum: 1 },
+          },
         },
-      },
+      ]),
+      Subscription.aggregate([
+        {
+          $match: {
+            isComboOffer: true,
+            status: 'APPROVED',
+            'comboOfferDetails.categoryIds': { $in: categoryIds },
+          },
+        },
+        {
+          $unwind: '$comboOfferDetails.categoryIds',
+        },
+        {
+          $match: {
+            'comboOfferDetails.categoryIds': { $in: categoryIds },
+          },
+        },
+        {
+          $group: {
+            _id: '$comboOfferDetails.categoryIds',
+            count: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
-    const userCountsMap = new Map(
-      userCountsAggregation.map(item => [item._id.toString(), item.count])
-    );
+
+    // Combine counts from both direct and combo subscriptions
+    const userCountsMap = new Map<string, number>();
+    directSubscriptions.forEach(item => {
+      const catId = item._id.toString();
+      userCountsMap.set(catId, (userCountsMap.get(catId) || 0) + item.count);
+    });
+    comboSubscriptions.forEach(item => {
+      const catId = item._id.toString();
+      userCountsMap.set(catId, (userCountsMap.get(catId) || 0) + item.count);
+    });
 
     // Batch fetch all test sets for all categories
     const allTestSets = await TestSet.find({
@@ -265,14 +300,22 @@ export const categoryService = {
     // Parallel fetch all data
     const [
       discountPercentage,
-      userCount,
+      directUserCount,
+      comboUserCount,
       testSetIds,
-      subscription
+      directSubscription,
+      comboSubscription
     ] = await Promise.all([
       getUserDiscountPercentage(userId),
       Subscription.countDocuments({
         categoryId: category._id,
+        isComboOffer: false,
         status: 'APPROVED',
+      }),
+      Subscription.countDocuments({
+        isComboOffer: true,
+        status: 'APPROVED',
+        'comboOfferDetails.categoryIds': category._id,
       }),
       TestSet.find({
         categoryId: category._id,
@@ -281,8 +324,21 @@ export const categoryService = {
       userId ? Subscription.findOne({
         userId: new Types.ObjectId(userId),
         categoryId: new Types.ObjectId(categoryId),
+        isComboOffer: false,
+      }).lean() : Promise.resolve(null),
+      userId ? Subscription.findOne({
+        userId: new Types.ObjectId(userId),
+        isComboOffer: true,
+        status: 'APPROVED',
+        'comboOfferDetails.categoryIds': new Types.ObjectId(categoryId),
       }).lean() : Promise.resolve(null),
     ]);
+
+    // Combine user counts from direct and combo subscriptions
+    const userCount = directUserCount + comboUserCount;
+    
+    // Use combo subscription if no direct subscription found
+    const subscription = directSubscription || comboSubscription;
 
     const pricing = calculateDiscountedPrice(category.price, discountPercentage);
     const totalTests = category.totalSetsCount || 0;

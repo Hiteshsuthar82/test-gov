@@ -47,6 +47,9 @@ export const adminPaymentService = {
           }
         })
         .populate('categoryId', 'name price')
+        .populate('categoryIds', 'name price')
+        .populate('cartId')
+        .populate('comboOfferId', 'name price originalPrice description')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -67,7 +70,10 @@ export const adminPaymentService = {
   async getById(id: string) {
     const payment = await Payment.findById(id)
       .populate('userId', 'name email mobile')
-      .populate('categoryId', 'name price');
+      .populate('categoryId', 'name price')
+      .populate('categoryIds', 'name price')
+      .populate('cartId')
+      .populate('comboOfferId', 'name price originalPrice');
     if (!payment) {
       throw new Error('Payment not found');
     }
@@ -75,7 +81,10 @@ export const adminPaymentService = {
   },
 
   async approve(id: string, adminId: string, adminComment?: string) {
-    const payment = await Payment.findById(id);
+    const payment = await Payment.findById(id)
+      .populate('categoryId', 'name')
+      .populate('categoryIds', 'name')
+      .populate('comboOfferId', 'name');
     if (!payment) {
       throw new Error('Payment not found');
     }
@@ -86,26 +95,146 @@ export const adminPaymentService = {
     }
     await payment.save();
 
-    // Update subscription
-    const subscription = await Subscription.findOne({
-      userId: payment.userId,
-      categoryId: payment.categoryId,
-    });
+    // Handle combo offer subscriptions differently
+    let subscriptions: any[] = [];
+    
+    if (payment.comboOfferId) {
+      // For combo offers, approve the single combo offer subscription
+      const ComboOffer = (await import('../models/ComboOffer')).ComboOffer;
+      const comboOffer = await ComboOffer.findById(payment.comboOfferId);
+      
+      if (!comboOffer) {
+        throw new Error('Combo offer not found');
+      }
 
-    if (subscription) {
-      subscription.status = 'APPROVED';
-      subscription.paymentReferenceId = payment._id;
-      subscription.startsAt = new Date();
-      // Optional: set expiry (e.g., 1 year from now)
-      subscription.expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-      await subscription.save();
+      // Calculate expiry date based on selected duration
+      const startsAt = new Date();
+      let expiresAt: Date;
+      if (payment.comboDurationMonths) {
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + payment.comboDurationMonths);
+        expiresAt = expiryDate;
+      } else {
+        // Default to 1 year if no duration specified
+        expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      }
+
+      // Find the combo offer subscription
+      let subscription = await Subscription.findOne({
+        userId: payment.userId,
+        comboOfferId: payment.comboOfferId,
+        isComboOffer: true,
+      });
+
+      if (subscription) {
+        subscription.status = 'APPROVED';
+        subscription.paymentReferenceId = payment._id;
+        subscription.startsAt = startsAt;
+        subscription.expiresAt = expiresAt;
+        await subscription.save();
+      } else {
+        // If subscription doesn't exist, create it (shouldn't happen, but handle it)
+        const comboOfferDetails = {
+          _id: comboOffer._id.toString(),
+          name: comboOffer.name,
+          description: comboOffer.description,
+          imageUrl: comboOffer.imageUrl,
+          categoryIds: comboOffer.categoryIds,
+          price: comboOffer.price,
+          originalPrice: comboOffer.originalPrice,
+          benefits: comboOffer.benefits || [],
+        };
+
+        let selectedTimePeriod: any = null;
+        if (payment.comboDurationMonths && comboOffer.timePeriods) {
+          selectedTimePeriod = comboOffer.timePeriods.find(
+            (tp: any) => tp.months === payment.comboDurationMonths
+          );
+        }
+
+        subscription = await Subscription.create({
+          userId: payment.userId,
+          isComboOffer: true,
+          comboOfferId: payment.comboOfferId,
+          comboOfferDetails: comboOfferDetails,
+          selectedDurationMonths: payment.comboDurationMonths,
+          selectedTimePeriod: selectedTimePeriod,
+          status: 'APPROVED',
+          paymentReferenceId: payment._id,
+          startsAt: startsAt,
+          expiresAt: expiresAt,
+        });
+      }
+
+      subscriptions = [subscription];
+    } else {
+      // For regular category subscriptions, approve each category subscription
+      let categoryIds: any[] = [];
+      if (payment.categoryIds && payment.categoryIds.length > 0) {
+        categoryIds = payment.categoryIds;
+      } else if (payment.categoryId) {
+        categoryIds = [payment.categoryId];
+      }
+
+      subscriptions = await Promise.all(
+        categoryIds.map(async (categoryId) => {
+          const categoryObjId = categoryId._id || categoryId;
+          let subscription = await Subscription.findOne({
+            userId: payment.userId,
+            categoryId: categoryObjId,
+            isComboOffer: false,
+          });
+
+          // Default to 1 year (365 days) for regular subscriptions
+          const startsAt = new Date();
+          const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+          if (subscription) {
+            subscription.status = 'APPROVED';
+            subscription.paymentReferenceId = payment._id;
+            subscription.startsAt = startsAt;
+            subscription.expiresAt = expiresAt;
+            await subscription.save();
+          } else {
+            subscription = await Subscription.create({
+              userId: payment.userId,
+              categoryId: categoryObjId,
+              isComboOffer: false,
+              status: 'APPROVED',
+              paymentReferenceId: payment._id,
+              startsAt: startsAt,
+              expiresAt: expiresAt,
+            });
+          }
+
+          return subscription;
+        })
+      );
     }
 
     // Send notification
     try {
+      let message = '';
+      if (payment.comboOfferId) {
+        const comboOffer = await (await import('../models/ComboOffer')).ComboOffer.findById(payment.comboOfferId);
+        const comboName = comboOffer?.name || 'Combo Offer';
+        message = `Your payment for combo offer "${comboName}" has been approved. You can now access all included categories.`;
+      } else {
+        let categoryIds: any[] = [];
+        if (payment.categoryIds && payment.categoryIds.length > 0) {
+          categoryIds = payment.categoryIds;
+        } else if (payment.categoryId) {
+          categoryIds = [payment.categoryId];
+        }
+        const categoryNames = categoryIds.map((cat: any) => cat.name || 'category').join(', ');
+        message = categoryIds.length > 1
+          ? `Your payment for ${categoryIds.length} categories has been approved. You can now access all test sets.`
+          : `Your payment for ${categoryNames} has been approved. You can now access all test sets.`;
+      }
+
       await notificationService.sendNotification({
         title: 'Payment Approved',
-        message: `Your payment for ${(payment.categoryId as any)?.name || 'category'} has been approved. You can now access all test sets.`,
+        message,
         type: 'payment_approved',
         target: 'USER',
         userId: payment.userId.toString(),
@@ -115,11 +244,12 @@ export const adminPaymentService = {
       console.error('Failed to send notification:', error);
     }
 
-    return { payment, subscription };
+    return { payment, subscriptions };
   },
 
   async reject(id: string, adminId: string, adminComment: string) {
-    const payment = await Payment.findById(id);
+    const payment = await Payment.findById(id)
+      .populate('categoryIds', 'name');
     if (!payment) {
       throw new Error('Payment not found');
     }
@@ -128,19 +258,34 @@ export const adminPaymentService = {
     payment.adminComment = adminComment;
     await payment.save();
 
-    // Update subscription
-    const subscription = await Subscription.findOne({
-      userId: payment.userId,
-      categoryId: payment.categoryId,
-    });
-
-    if (subscription) {
-      subscription.status = 'REJECTED';
-      subscription.paymentReferenceId = payment._id;
-      await subscription.save();
+    // Determine category IDs to reject
+    let categoryIds: any[] = [];
+    if (payment.categoryIds && payment.categoryIds.length > 0) {
+      categoryIds = payment.categoryIds;
+    } else if (payment.categoryId) {
+      categoryIds = [payment.categoryId];
     }
 
-    return { payment, subscription };
+    // Update subscriptions for all categories
+    const subscriptions = await Promise.all(
+      categoryIds.map(async (categoryId) => {
+        const categoryObjId = categoryId._id || categoryId;
+        const subscription = await Subscription.findOne({
+          userId: payment.userId,
+          categoryId: categoryObjId,
+        });
+
+        if (subscription) {
+          subscription.status = 'REJECTED';
+          subscription.paymentReferenceId = payment._id;
+          await subscription.save();
+        }
+
+        return subscription;
+      })
+    );
+
+    return { payment, subscriptions };
   },
 };
 

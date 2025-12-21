@@ -23,6 +23,10 @@ import NotificationsHistoryPage from './pages/notifications/NotificationsHistory
 import PartnersListPage from './pages/partners/PartnersListPage'
 import PartnerFormPage from './pages/partners/PartnerFormPage'
 import LeaderboardListPage from './pages/leaderboard/LeaderboardListPage'
+import ComboOffersListPage from './pages/comboOffers/ComboOffersListPage'
+import ComboOfferFormPage from './pages/comboOffers/ComboOfferFormPage'
+import CartsListPage from './pages/carts/CartsListPage'
+import CartDetailPage from './pages/carts/CartDetailPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token)
@@ -67,6 +71,11 @@ function App() {
           <Route path="partners/new" element={<PartnerFormPage />} />
           <Route path="partners/:id/edit" element={<PartnerFormPage />} />
           <Route path="leaderboard" element={<LeaderboardListPage />} />
+          <Route path="combo-offers" element={<ComboOffersListPage />} />
+          <Route path="combo-offers/new" element={<ComboOfferFormPage />} />
+          <Route path="combo-offers/:id/edit" element={<ComboOfferFormPage />} />
+          <Route path="carts" element={<CartsListPage />} />
+          <Route path="carts/:id" element={<CartDetailPage />} />
           <Route path="notifications/send" element={<SendNotificationPage />} />
           <Route path="notifications" element={<NotificationsHistoryPage />} />
         </Route>

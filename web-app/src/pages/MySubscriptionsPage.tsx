@@ -8,11 +8,39 @@ import { FiCheckCircle, FiClock, FiXCircle, FiArrowRight, FiCalendar } from 'rea
 
 interface Subscription {
   _id: string
-  categoryId: {
+  categoryId?: {
     _id: string
     name: string
     price: number
     bannerImageUrl?: string
+  }
+  isComboOffer: boolean
+  comboOfferId?: {
+    _id: string
+    name: string
+    description?: string
+    imageUrl?: string
+  }
+  comboOfferDetails?: {
+    _id: string
+    name: string
+    description?: string
+    imageUrl?: string
+    categoryIds: Array<{
+      _id: string
+      name: string
+      price: number
+      bannerImageUrl?: string
+    }>
+    price?: number
+    originalPrice?: number
+    benefits: string[]
+  }
+  selectedDurationMonths?: number
+  selectedTimePeriod?: {
+    months: number
+    price: number
+    originalPrice: number
   }
   status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'
   paymentReferenceId?: {
@@ -93,16 +121,48 @@ export default function MySubscriptionsPage() {
                 key={subscription._id}
                 className={`hover:shadow-lg transition-shadow ${getStatusColor(subscription.status)}`}
               >
-                {subscription.categoryId?.bannerImageUrl && (
+                {/* Combo Offer Image or Category Image */}
+                {subscription.isComboOffer ? (
+                  subscription.comboOfferDetails?.imageUrl ? (
+                    <img
+                      src={subscription.comboOfferDetails.imageUrl}
+                      alt={subscription.comboOfferDetails.name}
+                      className="w-full h-32 object-cover rounded-t-lg"
+                    />
+                  ) : subscription.comboOfferDetails?.categoryIds?.[0]?.bannerImageUrl ? (
+                    <img
+                      src={subscription.comboOfferDetails.categoryIds[0].bannerImageUrl}
+                      alt={subscription.comboOfferDetails.name}
+                      className="w-full h-32 object-cover rounded-t-lg"
+                    />
+                  ) : null
+                ) : subscription.categoryId?.bannerImageUrl ? (
                   <img
                     src={subscription.categoryId.bannerImageUrl}
                     alt={subscription.categoryId.name}
                     className="w-full h-32 object-cover rounded-t-lg"
                   />
-                )}
+                ) : null}
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-xl">{subscription.categoryId?.name || 'Category'}</CardTitle>
+                    <div className="flex-1">
+                      {subscription.isComboOffer ? (
+                        <>
+                          <CardTitle className="text-xl">
+                            {subscription.comboOfferDetails?.name || 'Combo Offer'}
+                          </CardTitle>
+                          <div className="mt-1">
+                            <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded">
+                              COMBO
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <CardTitle className="text-xl">
+                          {subscription.categoryId?.name || 'Category'}
+                        </CardTitle>
+                      )}
+                    </div>
                     <div className="flex items-center">
                       {getStatusIcon(subscription.status)}
                     </div>
@@ -115,6 +175,53 @@ export default function MySubscriptionsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 mb-4">
+                    {/* Combo Offer Details */}
+                    {subscription.isComboOffer && subscription.comboOfferDetails && (
+                      <>
+                        {subscription.comboOfferDetails.description && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            {subscription.comboOfferDetails.description}
+                          </p>
+                        )}
+                        {subscription.selectedDurationMonths && (
+                          <div className="text-sm">
+                            <span className="text-gray-600">Duration: </span>
+                            <span className="font-semibold">
+                              {subscription.selectedDurationMonths} {subscription.selectedDurationMonths === 1 ? 'Month' : 'Months'}
+                            </span>
+                          </div>
+                        )}
+                        {subscription.comboOfferDetails.categoryIds && subscription.comboOfferDetails.categoryIds.length > 0 && (
+                          <div className="text-sm">
+                            <span className="text-gray-600">Includes: </span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {subscription.comboOfferDetails.categoryIds.map((cat: any, idx: number) => (
+                                <span
+                                  key={idx}
+                                  className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded"
+                                >
+                                  {cat.name || cat}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {subscription.comboOfferDetails.benefits && subscription.comboOfferDetails.benefits.length > 0 && (
+                          <div className="text-sm">
+                            <span className="text-gray-600">Benefits: </span>
+                            <ul className="mt-1 space-y-1">
+                              {subscription.comboOfferDetails.benefits.slice(0, 3).map((benefit: string, idx: number) => (
+                                <li key={idx} className="flex items-center gap-1 text-xs text-gray-600">
+                                  <FiCheckCircle className="w-3 h-3 text-green-500" />
+                                  {benefit}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    
                     {subscription.paymentReferenceId && (
                       <div className="text-sm">
                         <span className="text-gray-600">Amount Paid: </span>
@@ -138,7 +245,15 @@ export default function MySubscriptionsPage() {
                       <span>Subscribed: {formatDate(subscription.createdAt)}</span>
                     </div>
                   </div>
-                  {subscription.status === 'APPROVED' && subscription.categoryId?._id && (
+                  {subscription.status === 'APPROVED' && subscription.isComboOffer && subscription.comboOfferDetails?.categoryIds && subscription.comboOfferDetails.categoryIds.length > 0 && (
+                    <Link to={`/categories/${subscription.comboOfferDetails.categoryIds[0]._id || subscription.comboOfferDetails.categoryIds[0]}`}>
+                      <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                        View Categories
+                        <FiArrowRight className="ml-2" />
+                      </Button>
+                    </Link>
+                  )}
+                  {subscription.status === 'APPROVED' && !subscription.isComboOffer && subscription.categoryId?._id && (
                     <Link to={`/categories/${subscription.categoryId._id}`}>
                       <Button className="w-full bg-purple-600 hover:bg-purple-700">
                         View Category

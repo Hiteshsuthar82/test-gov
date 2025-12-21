@@ -7,6 +7,10 @@ export const testSetController = {
   getSetsByCategory: async (req: AuthRequest, res: Response) => {
     try {
       const { categoryId } = req.params;
+
+      console.log('Authenticated user:', req.user);
+      console.log('Category ID:', categoryId);
+      
       const userId = req.user._id.toString();
       const { page, limit, sectionId, subsectionId } = req.query;
       const result = await testSetService.getSetsByCategory(

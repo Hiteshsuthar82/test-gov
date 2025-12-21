@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useForm, Controller } from 'react-hook-form'
 import { api } from '@/lib/api'
@@ -22,8 +22,17 @@ interface PaymentFormData {
 export default function PaymentPage() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [countdown, setCountdown] = useState(10)
+  
+  // Get payment type from location state or URL params (for backward compatibility)
+  const paymentState = location.state as { type?: string; cartId?: string; comboOfferId?: string; cart?: any; comboOffer?: any; amount?: number; durationMonths?: number } | null
+  const cartId = paymentState?.cartId || searchParams.get('cartId')
+  const comboOfferId = paymentState?.comboOfferId || searchParams.get('comboOfferId')
+  const comboDurationMonths = paymentState?.durationMonths
+  const paymentType = paymentState?.type || (cartId ? 'cart' : comboOfferId ? 'combo' : 'category')
   
   const {
     register,
@@ -39,15 +48,38 @@ export default function PaymentPage() {
     },
   })
 
+  // Fetch category if single category payment
   const { data: categoryData, isLoading: categoryLoading } = useQuery({
     queryKey: ['category', categoryId],
     queryFn: async () => {
       const response = await api.get(`/categories/${categoryId}/details`)
       return response.data.data
     },
-    enabled: !!categoryId,
+    enabled: !!categoryId && !cartId && !comboOfferId,
   })
   const category = categoryData?.category
+
+  // Fetch cart if cart payment (use state if available, otherwise fetch)
+  const { data: cartData } = useQuery({
+    queryKey: ['cart', cartId],
+    queryFn: async () => {
+      const response = await api.get('/cart')
+      return response.data.data
+    },
+    enabled: !!cartId && !paymentState?.cart,
+  })
+  const cart = paymentState?.cart || cartData
+
+  // Fetch combo offer if combo payment (use state if available, otherwise fetch)
+  const { data: comboOfferData } = useQuery({
+    queryKey: ['comboOffer', comboOfferId],
+    queryFn: async () => {
+      const response = await api.get(`/combo-offers/${comboOfferId}`)
+      return response.data.data
+    },
+    enabled: !!comboOfferId && !paymentState?.comboOffer,
+  })
+  const comboOffer = paymentState?.comboOffer || comboOfferData
 
   const paymentMutation = useMutation({
     mutationFn: async (formDataToSend: FormData) => {
@@ -80,11 +112,21 @@ export default function PaymentPage() {
       return
     }
 
-    const discountedPrice = category?.discountedPrice || category?.price || 0
-
     const formDataToSend = new FormData()
-    formDataToSend.append('categoryId', categoryId || '')
-    formDataToSend.append('amount', discountedPrice.toString())
+    
+    // Add payment type identifier
+    if (comboOfferId) {
+      formDataToSend.append('comboOfferId', comboOfferId)
+      if (comboDurationMonths) {
+        formDataToSend.append('comboDurationMonths', comboDurationMonths.toString())
+      }
+    } else if (cartId) {
+      formDataToSend.append('cartId', cartId)
+    } else if (categoryId) {
+      formDataToSend.append('categoryId', categoryId)
+    }
+    
+    formDataToSend.append('amount', paymentAmount.toString())
     formDataToSend.append('payerName', data.payerName)
     formDataToSend.append('payerUpiId', data.payerUpiId)
     if (data.upiTransactionId) {
@@ -105,10 +147,42 @@ export default function PaymentPage() {
   })
 
   const upiId = paymentConfig?.upiId || 'your-upi@paytm'
-  const discountedPrice = category?.discountedPrice || category?.price || 0
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${upiId}&am=${discountedPrice}&cu=INR&tn=TestPrep-${category?.name || 'Category'}`)}`
+  
+  let paymentAmount = 0
+  let paymentTitle = 'Payment'
+  let paymentDescription = ''
+  
+  if (paymentType === 'combo' && comboOffer) {
+    if (comboDurationMonths && comboOffer.timePeriods) {
+      const selectedPeriod = comboOffer.timePeriods.find((tp: any) => tp.months === comboDurationMonths)
+      if (selectedPeriod) {
+        paymentAmount = selectedPeriod.price
+      } else {
+        paymentAmount = comboOffer.price || 0
+      }
+    } else {
+      paymentAmount = comboOffer.price || 0
+    }
+    paymentTitle = comboOffer.name
+    paymentDescription = comboOffer.description || ''
+    if (comboDurationMonths) {
+      paymentDescription += ` (${comboDurationMonths} ${comboDurationMonths === 1 ? 'Month' : 'Months'})`
+    }
+  } else if (paymentType === 'cart' && cart) {
+    paymentAmount = cart.totalAmount || 0
+    paymentTitle = 'Cart Payment'
+    paymentDescription = cart.items?.map((item: any) => item.categoryId?.name || item.categoryId?._id).filter(Boolean).join(', ') || ''
+  } else if (paymentType === 'category' && category) {
+    paymentAmount = category.discountedPrice || category.price || 0
+    paymentTitle = category.name || 'Category'
+    paymentDescription = category.description || ''
+  } else if (paymentState?.amount) {
+    paymentAmount = paymentState.amount
+  }
+  
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${upiId}&am=${paymentAmount}&cu=INR&tn=TestPrep-${paymentTitle}`)}`
 
-  if (categoryLoading) {
+  if (categoryLoading && !cartId && !comboOfferId) {
     return (
       <Layout>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">Loading...</div>
@@ -180,16 +254,29 @@ export default function PaymentPage() {
       </Dialog>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Link to={`/categories/${categoryId}`} className="inline-flex items-center text-purple-600 hover:text-purple-700 mb-6">
-          <FiArrowLeft className="mr-2" />
-          Back to Category
-        </Link>
+        {categoryId ? (
+          <Link to={`/categories/${categoryId}`} className="inline-flex items-center text-purple-600 hover:text-purple-700 mb-6">
+            <FiArrowLeft className="mr-2" />
+            Back to Category
+          </Link>
+        ) : (
+          <Link to={cartId ? '/cart' : '/checkout'} className="inline-flex items-center text-purple-600 hover:text-purple-700 mb-6">
+            <FiArrowLeft className="mr-2" />
+            Back to {cartId ? 'Cart' : 'Checkout'}
+          </Link>
+        )}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl">Subscribe to {category?.name}</CardTitle>
+            <CardTitle className="text-3xl">
+              {comboOfferId ? `Purchase ${paymentTitle}` : cartId ? 'Cart Payment' : categoryId ? `Subscribe to ${category?.name}` : 'Payment'}
+            </CardTitle>
             <CardDescription>
-              Complete the payment to get access to all test series in this category
+              {comboOfferId 
+                ? 'Complete the payment to get access to all categories in this combo offer'
+                : cartId
+                ? 'Complete the payment to get access to all selected categories'
+                : 'Complete the payment to get access to all test series in this category'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -197,21 +284,96 @@ export default function PaymentPage() {
               {/* Payment Details */}
               <div>
                 <div className="mb-6 p-4 bg-purple-50 rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-600">Category:</span>
-                    <span className="font-semibold">{category?.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Amount:</span>
-                    <div className="text-right">
-                      {category?.hasDiscount ? (
-                        <div>
-                          <div className="text-2xl font-bold text-purple-600">₹{category.discountedPrice}</div>
-                          <div className="text-sm text-gray-500 line-through">₹{category.originalPrice}</div>
-                        </div>
-                      ) : (
-                        <div className="text-2xl font-bold text-purple-600">₹{category?.price || 0}</div>
-                      )}
+                  <h3 className="font-semibold text-gray-900 mb-4">Order Summary</h3>
+                  
+                  {/* Cart Items */}
+                  {paymentType === 'cart' && cart && cart.items && cart.items.length > 0 && (
+                    <div className="mb-4 space-y-2">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Items in Cart:</p>
+                      {cart.items.map((item: any, index: number) => {
+                        const categoryName = item.categoryId?.name || 'Category'
+                        const itemPrice = item.discountedPrice || item.price || 0
+                        return (
+                          <div key={index} className="flex justify-between items-center text-sm bg-white p-2 rounded">
+                            <span className="text-gray-700">{categoryName}</span>
+                            <span className="font-medium">₹{itemPrice}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Combo Offer Details */}
+                  {paymentType === 'combo' && comboOffer && (
+                    <div className="mb-4 space-y-2">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Combo Offer Details:</p>
+                      <div className="bg-white p-3 rounded">
+                        <p className="font-semibold text-gray-900 mb-1">{comboOffer.name}</p>
+                        {comboOffer.description && (
+                          <p className="text-xs text-gray-600 mb-2">{comboOffer.description}</p>
+                        )}
+                        {comboOffer.categoryIds && comboOffer.categoryIds.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs text-gray-600 mb-1">Includes:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {comboOffer.categoryIds.map((cat: any, idx: number) => (
+                                <span key={idx} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                  {cat.name || cat}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {comboOffer.benefits && comboOffer.benefits.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {comboOffer.benefits.slice(0, 3).map((benefit: string, idx: number) => (
+                              <li key={idx} className="text-xs text-gray-600 flex items-center gap-1">
+                                <FiCheckCircle className="w-3 h-3 text-green-500" />
+                                {benefit}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {comboDurationMonths && (
+                          <p className="text-xs font-medium text-purple-600 mt-2">
+                            Duration: {comboDurationMonths} {comboDurationMonths === 1 ? 'Month' : 'Months'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Single Category */}
+                  {paymentType === 'category' && category && (
+                    <div className="mb-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Category:</p>
+                      <div className="bg-white p-3 rounded">
+                        <p className="font-semibold text-gray-900">{category.name}</p>
+                        {category.description && (
+                          <p className="text-xs text-gray-600 mt-1">{category.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total Amount */}
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 font-medium">Total Amount:</span>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-purple-600">₹{paymentAmount}</div>
+                        {paymentType === 'combo' && comboOffer && comboDurationMonths && comboOffer.timePeriods && (
+                          (() => {
+                            const selectedPeriod = comboOffer.timePeriods.find((tp: any) => tp.months === comboDurationMonths)
+                            return selectedPeriod && selectedPeriod.originalPrice > selectedPeriod.price ? (
+                              <div className="text-sm text-gray-500 line-through">₹{selectedPeriod.originalPrice}</div>
+                            ) : null
+                          })()
+                        )}
+                        {paymentType === 'combo' && comboOffer && !comboDurationMonths && comboOffer.originalPrice > comboOffer.price && (
+                          <div className="text-sm text-gray-500 line-through">₹{comboOffer.originalPrice}</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -359,11 +521,7 @@ export default function PaymentPage() {
                       <div className="flex items-start">
                         <FiCheckCircle className="mr-2 mt-1 text-blue-600 flex-shrink-0" />
                         <span>
-                          Enter the amount: <strong>₹{(() => {
-                            const discountedPrice = category?.discountedPrice || category?.price || 0
-                            const originalPrice = category?.originalPrice || category?.price || 0
-                            return category?.hasDiscount ? `₹${discountedPrice} (Original: ₹${originalPrice})` : `₹${originalPrice}`
-                          })()}</strong>
+                          Enter the amount: <strong>₹{paymentAmount}</strong>
                         </span>
                       </div>
                       <div className="flex items-start">

@@ -139,7 +139,30 @@ export default function SubscriptionsListPage() {
               subscriptions.map((sub: any) => (
                 <TableRow key={sub._id} className="hover:bg-gray-50">
                   <TableCell className="text-gray-900">{sub.userId?.name}</TableCell>
-                  <TableCell className="text-gray-700">{sub.categoryId?.name}</TableCell>
+                  <TableCell className="text-gray-700">
+                    {sub.isComboOffer ? (
+                      <div>
+                        <div className="font-medium flex items-center gap-2">
+                          <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded">
+                            COMBO
+                          </span>
+                          {sub.comboOfferDetails?.name || 'Combo Offer'}
+                        </div>
+                        {sub.selectedDurationMonths && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Duration: {sub.selectedDurationMonths} {sub.selectedDurationMonths === 1 ? 'Month' : 'Months'}
+                          </div>
+                        )}
+                        {sub.comboOfferDetails?.categoryIds && sub.comboOfferDetails.categoryIds.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Includes: {sub.comboOfferDetails.categoryIds.map((cat: any) => cat.name || cat).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>{sub.categoryId?.name || 'N/A'}</div>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       sub.status === 'APPROVED' ? 'bg-green-100 text-green-800' :

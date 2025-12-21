@@ -23,6 +23,8 @@ import leaderboardRoutes from './routes/leaderboard';
 import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
 import partnerRoutes from './routes/partners';
+import cartRoutes from './routes/cart';
+import comboOfferRoutes from './routes/comboOffers';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,6 +56,8 @@ app.use('/attempts', attemptRoutes);
 app.use('/leaderboard', leaderboardRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/partners', partnerRoutes);
+app.use('/cart', cartRoutes);
+app.use('/combo-offers', comboOfferRoutes);
 
 // Admin routes
 app.use('/admin/auth', adminAuthRoutes);

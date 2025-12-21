@@ -1,5 +1,6 @@
 import { Subscription } from '../models/Subscription';
 import { User } from '../models/User';
+import { Category } from '../models/Category';
 import { Types } from 'mongoose';
 
 export const adminSubscriptionService = {
@@ -49,12 +50,26 @@ export const adminSubscriptionService = {
           }
         })
         .populate('categoryId', 'name price')
+        .populate('comboOfferId', 'name description imageUrl')
         .populate('paymentReferenceId', 'amount status')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
       Subscription.countDocuments(filter),
     ]);
+
+    // Populate categoryIds in comboOfferDetails for combo offer subscriptions
+    for (const subscription of subscriptions) {
+      if (subscription.isComboOffer && subscription.comboOfferDetails?.categoryIds) {
+        const categoryIds = subscription.comboOfferDetails.categoryIds;
+        const populatedCategories = await Category.find({
+          _id: { $in: categoryIds }
+        }).select('name price bannerImageUrl');
+        
+        // Replace ObjectIds with populated category objects
+        subscription.comboOfferDetails.categoryIds = populatedCategories as any;
+      }
+    }
 
     return {
       subscriptions,
@@ -71,10 +86,22 @@ export const adminSubscriptionService = {
     const subscription = await Subscription.findById(id)
       .populate('userId', 'name email mobile')
       .populate('categoryId', 'name price')
+      .populate('comboOfferId', 'name description imageUrl')
       .populate('paymentReferenceId');
     if (!subscription) {
       throw new Error('Subscription not found');
     }
+
+    // Populate categoryIds in comboOfferDetails if it's a combo offer
+    if (subscription.isComboOffer && subscription.comboOfferDetails?.categoryIds) {
+      const categoryIds = subscription.comboOfferDetails.categoryIds;
+      const populatedCategories = await Category.find({
+        _id: { $in: categoryIds }
+      }).select('name price bannerImageUrl');
+      
+      subscription.comboOfferDetails.categoryIds = populatedCategories as any;
+    }
+
     return subscription;
   },
 

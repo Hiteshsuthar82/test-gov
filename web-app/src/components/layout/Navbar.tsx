@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
-import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList, FiChevronDown, FiBell } from 'react-icons/fi'
+import { FiUser, FiLogOut, FiHome, FiBook, FiMenu, FiX, FiAward, FiList, FiChevronDown, FiBell, FiShoppingCart } from 'react-icons/fi'
 import type { IconType } from 'react-icons'
 
 interface NavItem {
@@ -90,6 +90,20 @@ export default function Navbar() {
             <div className="hidden lg:flex items-center space-x-2">
               {isAuthenticated ? (
                 <>
+                  {/* Cart Icon */}
+                  <Link to="/cart">
+                    <button
+                      className={`p-2 rounded-lg transition-colors relative ${
+                        location.pathname === '/cart'
+                          ? 'bg-purple-50 text-purple-600'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title="Shopping Cart"
+                    >
+                      <FiShoppingCart className="w-5 h-5" />
+                    </button>
+                  </Link>
+
                   {/* Notice Board Icon */}
                   <Link to="/notices">
                     <button
@@ -283,6 +297,18 @@ export default function Navbar() {
                   >
                     <FiHome className="w-5 h-5" />
                     <span>Home</span>
+                  </Link>
+                  <Link
+                    to="/cart"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      location.pathname === '/cart'
+                        ? 'bg-purple-50 text-purple-700 font-medium'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FiShoppingCart className="w-5 h-5" />
+                    <span>Cart</span>
                   </Link>
                   <Link
                     to="/notices"

@@ -23,13 +23,31 @@ export const notificationService = {
       if (!data.categoryId) {
         throw new Error('categoryId is required for CATEGORY_USERS target');
       }
-      const subscriptions = await Subscription.find({
-        categoryId: new Types.ObjectId(data.categoryId),
-        status: 'APPROVED',
-      });
-      const userIds = subscriptions.map((s) => s.userId);
+      // Get both direct category subscriptions and combo offer subscriptions
+      const [directSubscriptions, comboSubscriptions] = await Promise.all([
+        Subscription.find({
+          categoryId: new Types.ObjectId(data.categoryId),
+          isComboOffer: false,
+          status: 'APPROVED',
+        }),
+        Subscription.find({
+          isComboOffer: true,
+          status: 'APPROVED',
+          'comboOfferDetails.categoryIds': new Types.ObjectId(data.categoryId),
+        }),
+      ]);
+      
+      // Combine user IDs from both subscription types
+      const userIds = [
+        ...directSubscriptions.map((s) => s.userId),
+        ...comboSubscriptions.map((s) => s.userId),
+      ];
+      
+      // Remove duplicates
+      const uniqueUserIds = [...new Set(userIds.map(id => id.toString()))];
+      
       targetUsers = await User.find({
-        _id: { $in: userIds },
+        _id: { $in: uniqueUserIds },
         isBlocked: false,
         fcmToken: { $exists: true, $ne: null },
       });
@@ -84,12 +102,32 @@ export const notificationService = {
     const limit = parseInt(query.limit?.toString() || '20', 10);
     const skip = (page - 1) * limit;
 
-    // Get user's subscriptions
+    // Get user's subscriptions (both direct and combo offers)
     const subscriptions = await Subscription.find({
       userId: new Types.ObjectId(userId),
       status: 'APPROVED',
     });
-    const categoryIds = subscriptions.map((s) => s.categoryId);
+    
+    // Extract category IDs from direct subscriptions
+    const directCategoryIds = subscriptions
+      .filter(s => !s.isComboOffer && s.categoryId)
+      .map((s) => s.categoryId);
+    
+    // Extract category IDs from combo offer subscriptions
+    const comboCategoryIds: Types.ObjectId[] = [];
+    subscriptions
+      .filter(s => s.isComboOffer && s.comboOfferDetails?.categoryIds)
+      .forEach(s => {
+        const categoryIds = s.comboOfferDetails?.categoryIds || [];
+        categoryIds.forEach((catId: any) => {
+          if (catId && !comboCategoryIds.some(id => id.toString() === catId.toString())) {
+            comboCategoryIds.push(catId instanceof Types.ObjectId ? catId : new Types.ObjectId(catId));
+          }
+        });
+      });
+    
+    // Combine all category IDs
+    const categoryIds = [...directCategoryIds, ...comboCategoryIds];
 
     const notifications = await Notification.find({
       $or: [
