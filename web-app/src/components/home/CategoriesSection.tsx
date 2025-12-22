@@ -1,6 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
-import { FiTarget, FiArrowRight, FiZap, FiGlobe, FiPlus } from "react-icons/fi";
+import { FiTarget, FiArrowRight, FiZap, FiGlobe, FiShoppingCart } from "react-icons/fi";
+import { BsCartCheck } from "react-icons/bs";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 interface Category {
   _id: string;
@@ -38,6 +42,120 @@ export default function CategoriesSection({
   categories,
   isLoading,
 }: CategoriesSectionProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+
+  // Fetch user subscriptions to check subscription status
+  const { data: userSubscriptions } = useQuery({
+    queryKey: ['userSubscriptions'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/subscriptions/me');
+        return response.data.data || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!user,
+  });
+
+  // Fetch cart to check if category is in cart
+  const { data: cart } = useQuery({
+    queryKey: ['cart'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/cart');
+        return response.data.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!user,
+  });
+
+  // Helper function to check if a category is in cart
+  const isCategoryInCart = (categoryId: string): boolean => {
+    if (!cart || !cart.items || !categoryId) return false;
+    return cart.items.some((item: any) => 
+      (item.categoryId?._id || item.categoryId)?.toString() === categoryId
+    );
+  };
+
+  // Helper function to check if a category is subscribed
+  const isCategorySubscribed = (categoryId: string): boolean => {
+    if (!user || !userSubscriptions || !categoryId) return false;
+
+    const now = new Date();
+
+    // Check for direct category subscription
+    const hasDirectSubscription = userSubscriptions.some((sub: any) => {
+      if (!sub.isComboOffer && sub.categoryId) {
+        const subCategoryId = (sub.categoryId._id || sub.categoryId).toString();
+        if (subCategoryId === categoryId && sub.status === 'APPROVED') {
+          // Check if subscription is still valid (not expired)
+          if (!sub.expiresAt || new Date(sub.expiresAt) >= now) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    if (hasDirectSubscription) return true;
+
+    // Check for combo offer subscription that includes this category
+    const hasComboSubscription = userSubscriptions.some((sub: any) => {
+      if (sub.isComboOffer && sub.comboOfferDetails?.categoryIds && sub.status === 'APPROVED') {
+        const includesCategory = sub.comboOfferDetails.categoryIds.some(
+          (cat: any) => (cat._id || cat).toString() === categoryId
+        );
+        if (includesCategory) {
+          // Check if combo subscription is still valid (not expired)
+          if (!sub.expiresAt || new Date(sub.expiresAt) >= now) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    return hasComboSubscription;
+  };
+
+  // Add to cart mutation
+  const addToCartMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      await api.post('/cart', { categoryId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      alert('Added to cart successfully!');
+    },
+    onError: (error: any) => {
+      const errorMessage = error.response?.data?.message || 'Failed to add to cart';
+      if (errorMessage.includes('already in cart')) {
+        alert('This item is already in your cart!');
+      } else {
+        alert(errorMessage);
+      }
+    },
+  });
+
+  const handleAddToCart = (categoryId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!user) {
+      if (confirm('Please login to add items to cart. Do you want to login?')) {
+        navigate('/login');
+      }
+      return;
+    }
+
+    addToCartMutation.mutate(categoryId);
+  };
+
   return (
     <div className="mb-16 relative py-12 overflow-hidden">
       {/* Dotted connecting lines background - Same as FeaturesSection */}
@@ -219,9 +337,28 @@ export default function CategoriesSection({
                           <FiArrowRight className="w-2.5 h-2.5" />
                         </button>
                       </Link>
-                      <button className="w-8 h-8 border-2 border-purple-500 rounded-md flex items-center justify-center hover:bg-purple-50 transition-colors duration-200 flex-shrink-0">
-                        <FiPlus className="w-4 h-4 text-purple-500 font-bold" />
-                      </button>
+                      {!isCategorySubscribed(category._id) && (
+                        isCategoryInCart(category._id) ? (
+                          <button 
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigate('/cart');
+                            }}
+                            className="w-8 h-8 border-2 border-purple-500 rounded-md flex items-center justify-center hover:bg-purple-50 transition-colors duration-200 flex-shrink-0"
+                          >
+                            <BsCartCheck className="w-4 h-4 text-purple-500 font-bold" />
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={(e) => handleAddToCart(category._id, e)}
+                            disabled={addToCartMutation.isPending}
+                            className="w-8 h-8 border-2 border-purple-500 rounded-md flex items-center justify-center hover:bg-purple-50 transition-colors duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <FiShoppingCart className="w-4 h-4 text-purple-500 font-bold" />
+                          </button>
+                        )
+                      )}
                     </div>
                   </CardContent>
                 </Card>

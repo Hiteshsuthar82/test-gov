@@ -27,6 +27,8 @@ import {
   FiShoppingCart,
 } from "react-icons/fi";
 import { useAuthStore } from "@/store/authStore";
+import { AiOutlineNumber } from "react-icons/ai";
+import { BsCartCheck } from "react-icons/bs";
 
 interface TestSet {
   _id: string;
@@ -396,6 +398,28 @@ export default function CategoryPage() {
     return !hasComboOfferForCategory && !hasCategorySubscription;
   }, [user, hasComboOfferForCategory, hasCategorySubscription, latestComboOffer]);
 
+  // Fetch cart to check if category is in cart
+  const { data: cart } = useQuery({
+    queryKey: ['cart'],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/cart');
+        return response.data.data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!user,
+  });
+
+  // Check if category is in cart
+  const isInCart = useMemo(() => {
+    if (!cart || !cart.items || !categoryId) return false;
+    return cart.items.some((item: any) => 
+      (item.categoryId?._id || item.categoryId)?.toString() === categoryId
+    );
+  }, [cart, categoryId]);
+
   // Add to cart mutation
   const addToCartMutation = useMutation({
     mutationFn: async (categoryId: string) => {
@@ -407,6 +431,20 @@ export default function CategoryPage() {
     },
     onError: (error: any) => {
       alert(error.response?.data?.message || 'Failed to add to cart');
+    },
+  });
+
+  // Remove from cart mutation
+  const removeFromCartMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      await api.delete(`/cart/items/${categoryId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      alert('Removed from cart successfully!');
+    },
+    onError: (error: any) => {
+      alert(error.response?.data?.message || 'Failed to remove from cart');
     },
   });
 
@@ -839,14 +877,14 @@ export default function CategoryPage() {
                         <span>Sections Info</span>
                         <FiChevronDown className="w-4 h-4" />
                       </button>
-                      {category.userCount && category.userCount > 0 && (
-                        <div className="flex items-center gap-2">
-                          <FiUsers className="w-4 h-4" />
-                          <span>
-                            {formatUserCount(category.userCount)} Users
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <FiUsers className="w-4 h-4" />
+                        <span>
+                          {category.userCount && category.userCount > 0
+                            ? `${formatUserCount(category.userCount)} Users`
+                            : "No users"}
+                        </span>
+                      </div>
                       {category.languages && category.languages.length > 0 && (
                         <div className="flex items-center gap-2">
                           <FiGlobe className="w-4 h-4" />
@@ -1001,13 +1039,6 @@ export default function CategoryPage() {
                         Suggested Next Test
                       </h2>
                       <Card className="border-2 border-gray-200 hover:shadow-lg transition-shadow relative">
-                        {isFree && (
-                          <div className="absolute top-3 left-3 z-10">
-                            <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
-                              FREE
-                            </span>
-                          </div>
-                        )}
                         <div>
                           <div className="flex items-start justify-between gap-4 px-5 py-4">
                             <div className="flex-1">
@@ -1015,20 +1046,29 @@ export default function CategoryPage() {
                                 <h3 className="font-bold text-gray-900 text-lg">
                                   {suggestedTest.name}
                                 </h3>
-                                {category?.userCount &&
-                                  category.userCount > 0 && (
-                                    <div className="flex items-center gap-1 text-sm text-gray-600">
-                                      <FiZap className="w-4 h-4 text-yellow-500" />
-                                      <span>
-                                        {formatUserCount(category.userCount)}{" "}
-                                        Users
-                                      </span>
-                                    </div>
-                                  )}
+                                
+                                {category?.userCount !== undefined && (
+                                  <div className="flex items-center gap-1 text-sm text-gray-600">
+                                    <FiZap className="w-4 h-4 text-yellow-500" />
+                                    <span>
+                                      {category.userCount > 0
+                                        ? `${formatUserCount(category.userCount)} Users`
+                                        : "No users"}
+                                    </span>
+                                  </div>
+                                )}
+                                {isFree && (
+                          <div className="z-10">
+                            <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
+                              FREE
+                            </span>
+                          </div>
+                        )}
                               </div>
                               <div className="flex items-center gap-4 text-sm text-gray-600">
                                 <div className="flex items-center gap-1">
-                                  <span>?</span>
+                                  {/* <span>?</span> */}
+                                  <AiOutlineNumber className="w-4 h-4" />
                                   <span>
                                     {suggestedTest.totalQuestions || 0}{" "}
                                     Questions
@@ -1209,19 +1249,21 @@ export default function CategoryPage() {
                           isLocked ? "opacity-75 border-gray-300" : ""
                         }`}
                       >
-                        {isFreeTest && (
-                          <div className="absolute top-3 left-3 z-10">
+                        <div className="">
+                          {/* Title */}
+                          <div className="px-5 py-4 mb-1">
+                            <div className="flex items-center gap-3">
+                            <h5 className="font-bold text-gray-900 text-base">
+                              {testSet.name}
+                            </h5>
+{isFreeTest && (
+                          <div className="z-10">
                             <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
                               FREE
                             </span>
                           </div>
                         )}
-                        <div className="">
-                          {/* Title */}
-                          <div className="px-5 py-4">
-                            <h5 className="font-bold text-gray-900 mb-1 text-base">
-                              {testSet.name}
-                            </h5>
+                            </div>
 
                             {/* Performance Metrics and Action Buttons Row */}
                             <div className="flex items-center justify-between">
@@ -1411,56 +1453,135 @@ export default function CategoryPage() {
                 (!subscriptionStatus ||
                   subscriptionStatus.status !== "APPROVED") && (
                   <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
-                    <div className="absolute top-2 right-2">
-                      <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
-                        NEW
-                      </span>
-                    </div>
+                    {latestComboOffer && (
+                      <div className="absolute top-2 right-2">
+                        <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
+                          COMBO
+                        </span>
+                      </div>
+                    )}
                     <CardContent className="p-6">
                       <div className="mb-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-2xl font-bold">testbook</span>
-                          <span className="bg-yellow-400 text-gray-900 px-2 py-1 rounded text-xs font-bold">
-                            PASS PRO
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-300">
-                          The Ultimate Subscription for Pro Aspirants
-                        </p>
+                        <h3 className="text-2xl font-bold mb-4">Pricing Details</h3>
+                        {/* Show pricing for category when no combo offer */}
+                        {!latestComboOffer && category && (
+                          <div className="flex items-baseline gap-2">
+                            {categoryData?.category?.discountedPrice !== undefined && categoryData?.category?.originalPrice !== undefined ? (
+                              <>
+                                <span className="text-2xl font-bold text-yellow-400">
+                                  ₹{categoryData.category.discountedPrice}
+                                </span>
+                                {categoryData.category.originalPrice > categoryData.category.discountedPrice && (
+                                  <>
+                                    <span className="text-xs text-gray-400 line-through">
+                                      ₹{categoryData.category.originalPrice}
+                                    </span>
+                                    {categoryData.category.hasDiscount && (
+                                      <span className="text-xs bg-red-500 px-2 py-1 rounded">
+                                        {Math.round(((categoryData.category.originalPrice - categoryData.category.discountedPrice) / categoryData.category.originalPrice) * 100)}% OFF
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            ) : category.price !== undefined && (
+                              <span className="text-2xl font-bold text-yellow-400">
+                                {category.price > 0 ? `₹${category.price}` : "Free"}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <ul className="space-y-3 mb-6">
-                        {[
-                          "All Test Series",
-                          "All Prev. Year Paper",
-                          "Unlimited Practice",
-                          "Pro Live Tests",
-                          "Unlimited Test Re-Attempts",
-                        ].map((feature, idx) => (
-                          <li key={idx} className="flex items-center gap-2">
+                      {latestComboOffer?.benefits && latestComboOffer.benefits.length > 0 ? (
+                        <ul className="space-y-3 mb-6">
+                          {latestComboOffer.benefits.map((benefit: string, idx: number) => (
+                            <li key={idx} className="flex items-center gap-2">
+                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                              <span className="text-sm">{benefit}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <ul className="space-y-3 mb-6">
+                          {category?.totalSetsCount && category.totalSetsCount > 0 && (
+                            <li className="flex items-center gap-2">
+                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                              <span className="text-sm">{category.totalSetsCount} Test Series</span>
+                            </li>
+                          )}
+                          {(category?.freeTests !== undefined && category?.freeTests > 0) && (
+                            <li className="flex items-center gap-2">
+                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                              <span className="text-sm">{category.freeTests} Free Tests</span>
+                            </li>
+                          )}
+                          {category?.languages && category.languages.length > 0 && (
+                            <li className="flex items-center gap-2">
+                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                              <span className="text-sm">Available in {category.languages.join(", ")}</span>
+                            </li>
+                          )}
+                          <li className="flex items-center gap-2">
                             <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                            <span className="text-sm">{feature}</span>
+                            <span className="text-sm">Weekly live test</span>
                           </li>
-                        ))}
-                      </ul>
+                          <li className="flex items-center gap-2">
+                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                            <span className="text-sm">Unlimited Practice</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                            <span className="text-sm">Unlimited Test Re-Attempts</span>
+                          </li>
+                        </ul>
+                      )}
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => {
-                            if (categoryId) {
-                              addToCartMutation.mutate(categoryId);
-                            }
-                          }}
-                          variant="outline"
-                          className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                          disabled={addToCartMutation.isPending}
-                        >
-                          <FiShoppingCart className="mr-2" />
-                          Add to Cart
-                        </Button>
-                        <Link to={`/categories/${categoryId}/payment`} className="flex-1">
-                          <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                            Buy Now
-                          </Button>
-                        </Link>
+                        {latestComboOffer ? (
+                          <>
+                            <Link to={`/checkout?comboOfferId=${latestComboOffer._id}`} className="flex-1">
+                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                                Get Combo Offer
+                              </Button>
+                            </Link>
+                          </>
+                        ) : (
+                          <>
+                            {isInCart ? (
+                              <Button
+                                onClick={() => {
+                                  if (categoryId) {
+                                    removeFromCartMutation.mutate(categoryId);
+                                  }
+                                }}
+                                variant="outline"
+                                className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                                disabled={removeFromCartMutation.isPending}
+                              >
+                                <BsCartCheck className="mr-2" />
+                                Added
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() => {
+                                  if (categoryId) {
+                                    addToCartMutation.mutate(categoryId);
+                                  }
+                                }}
+                                variant="outline"
+                                className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                                disabled={addToCartMutation.isPending}
+                              >
+                                <FiShoppingCart className="mr-2" />
+                                Add to Cart
+                              </Button>
+                            )}
+                            <Link to={`/categories/${categoryId}/payment`} className="flex-1">
+                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                                Buy Now
+                              </Button>
+                            </Link>
+                          </>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
