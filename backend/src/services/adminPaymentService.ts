@@ -81,31 +81,50 @@ export const adminPaymentService = {
   },
 
   async approve(id: string, adminId: string, adminComment?: string) {
+    console.log('=== ADMIN PAYMENT SERVICE: Starting payment approval ===');
+    console.log('Step 1: Input data received:', {
+      paymentId: id,
+      adminId: adminId,
+      hasComment: !!adminComment,
+    });
+
     const payment = await Payment.findById(id)
       .populate('categoryId', 'name')
       .populate('categoryIds', 'name')
       .populate('comboOfferId', 'name');
     if (!payment) {
+      console.log('Step 1.1: ERROR - Payment not found');
       throw new Error('Payment not found');
     }
+
+    console.log('Step 2: Payment found. Payment type:', {
+      hasComboOfferId: !!payment.comboOfferId,
+      hasCategoryIds: !!(payment.categoryIds && payment.categoryIds.length > 0),
+      hasCategoryId: !!payment.categoryId,
+    });
 
     payment.status = 'APPROVED';
     if (adminComment) {
       payment.adminComment = adminComment;
     }
     await payment.save();
+    console.log('Step 3: Payment status updated to APPROVED');
 
     // Handle combo offer subscriptions differently
     let subscriptions: any[] = [];
     
     if (payment.comboOfferId) {
+      console.log('Step 4: Processing combo offer payment approval');
       // For combo offers, approve the single combo offer subscription
       const ComboOffer = (await import('../models/ComboOffer')).ComboOffer;
       const comboOffer = await ComboOffer.findById(payment.comboOfferId);
       
       if (!comboOffer) {
+        console.log('Step 4.1: ERROR - Combo offer not found');
         throw new Error('Combo offer not found');
       }
+      
+      console.log('Step 4.1: Combo offer found:', comboOffer.name);
 
       // Calculate expiry date based on selected duration
       const startsAt = new Date();
@@ -120,19 +139,25 @@ export const adminPaymentService = {
       }
 
       // Find the combo offer subscription
+      console.log('Step 4.2: Searching for combo offer subscription');
       let subscription = await Subscription.findOne({
         userId: payment.userId,
         comboOfferId: payment.comboOfferId,
         isComboOffer: true,
       });
 
+      console.log('Step 4.3: Combo offer subscription search result:', subscription ? 'Found' : 'Not found');
+      
       if (subscription) {
+        console.log('Step 4.4: Approving existing combo offer subscription with ID:', subscription._id.toString());
         subscription.status = 'APPROVED';
         subscription.paymentReferenceId = payment._id;
         subscription.startsAt = startsAt;
         subscription.expiresAt = expiresAt;
         await subscription.save();
+        console.log('Step 4.5: Combo offer subscription approved successfully');
       } else {
+        console.log('Step 4.4: Creating new combo offer subscription');
         // If subscription doesn't exist, create it (shouldn't happen, but handle it)
         const comboOfferDetails = {
           _id: comboOffer._id.toString(),
@@ -164,10 +189,13 @@ export const adminPaymentService = {
           startsAt: startsAt,
           expiresAt: expiresAt,
         });
+        console.log('Step 4.5: Combo offer subscription created successfully with ID:', subscription._id.toString());
       }
 
       subscriptions = [subscription];
+      console.log('Step 4.6: Combo offer approval complete');
     } else {
+      console.log('Step 4: Processing category payment approval');
       // For regular category subscriptions, approve each category subscription
       let categoryIds: any[] = [];
       if (payment.categoryIds && payment.categoryIds.length > 0) {
@@ -176,28 +204,38 @@ export const adminPaymentService = {
         categoryIds = [payment.categoryId];
       }
 
+      console.log('Step 4.1: Category IDs to approve:', categoryIds.length);
+      console.log('Step 4.2: Category IDs:', categoryIds.map((cat: any) => (cat._id || cat).toString()));
+
       subscriptions = await Promise.all(
-        categoryIds.map(async (categoryId) => {
+        categoryIds.map(async (categoryId, index) => {
           const categoryObjId = categoryId._id || categoryId;
+          console.log(`Step 4.3.${index + 1}: Processing category ${index + 1}/${categoryIds.length}:`, categoryObjId.toString());
+          
           // Find subscription by categoryId first (most specific)
           let subscription = await Subscription.findOne({
             userId: payment.userId,
             categoryId: categoryObjId,
             isComboOffer: false,
           });
+          
+          console.log(`Step 4.3.${index + 1}.1: Category subscription search result:`, subscription ? 'Found' : 'Not found');
 
           // Default to 1 year (365 days) for regular subscriptions
           const startsAt = new Date();
           const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
           if (subscription) {
+            console.log(`Step 4.3.${index + 1}.2: Approving existing category subscription with ID:`, subscription._id.toString());
             subscription.status = 'APPROVED';
             subscription.paymentReferenceId = payment._id;
             subscription.startsAt = startsAt;
             subscription.expiresAt = expiresAt;
             subscription.isComboOffer = false; // Ensure it's marked as non-combo
             await subscription.save();
+            console.log(`Step 4.3.${index + 1}.3: Category subscription approved successfully`);
           } else {
+            console.log(`Step 4.3.${index + 1}.2: Creating new category subscription`);
             // Try to create new subscription
             try {
               subscription = await Subscription.create({
@@ -286,51 +324,148 @@ export const adminPaymentService = {
         userId: payment.userId.toString(),
         createdByAdminId: adminId,
       });
+      console.log('Step 5.1: Notification sent successfully');
     } catch (error) {
-      console.error('Failed to send notification:', error);
+      console.error('Step 5: ERROR - Failed to send notification:', error);
     }
 
+    console.log('Step 6: Payment approval complete');
+    console.log('=== ADMIN PAYMENT SERVICE: Payment approval finished ===');
     return { payment, subscriptions };
   },
 
   async reject(id: string, adminId: string, adminComment: string) {
+    console.log('=== ADMIN PAYMENT SERVICE: Starting payment rejection ===');
+    console.log('Step 1: Input data received:', {
+      paymentId: id,
+      adminId: adminId,
+      hasComment: !!adminComment,
+    });
+
     const payment = await Payment.findById(id)
-      .populate('categoryIds', 'name');
+      .populate('categoryIds', 'name')
+      .populate('comboOfferId', 'name');
     if (!payment) {
+      console.log('Step 1.1: ERROR - Payment not found');
       throw new Error('Payment not found');
     }
+
+    console.log('Step 2: Payment found. Payment type:', {
+      hasComboOfferId: !!payment.comboOfferId,
+      hasCategoryIds: !!(payment.categoryIds && payment.categoryIds.length > 0),
+      hasCategoryId: !!payment.categoryId,
+    });
 
     payment.status = 'REJECTED';
     payment.adminComment = adminComment;
     await payment.save();
+    console.log('Step 3: Payment status updated to REJECTED');
 
-    // Determine category IDs to reject
-    let categoryIds: any[] = [];
-    if (payment.categoryIds && payment.categoryIds.length > 0) {
-      categoryIds = payment.categoryIds;
-    } else if (payment.categoryId) {
-      categoryIds = [payment.categoryId];
+    // Handle combo offer subscriptions differently
+    let subscriptions: any[] = [];
+    
+    if (payment.comboOfferId) {
+      console.log('Step 4: Processing combo offer payment rejection');
+      // For combo offers, reject the single combo offer subscription
+      // Find the combo offer subscription
+      let subscription = await Subscription.findOne({
+        userId: payment.userId,
+        comboOfferId: payment.comboOfferId,
+        isComboOffer: true,
+      });
+
+      console.log('Step 4.1: Combo offer subscription search result:', subscription ? 'Found' : 'Not found');
+      
+      if (subscription) {
+        console.log('Step 4.2: Rejecting combo offer subscription with ID:', subscription._id.toString());
+        subscription.status = 'REJECTED';
+        subscription.paymentReferenceId = payment._id;
+        await subscription.save();
+        console.log('Step 4.3: Combo offer subscription rejected successfully');
+      } else {
+        console.log('Step 4.2: WARNING - Combo offer subscription not found for rejection');
+      }
+
+      subscriptions = subscription ? [subscription] : [];
+    } else {
+      console.log('Step 4: Processing category payment rejection');
+      // For regular category subscriptions, reject each category subscription
+      // Determine category IDs to reject
+      let categoryIds: any[] = [];
+      if (payment.categoryIds && payment.categoryIds.length > 0) {
+        categoryIds = payment.categoryIds;
+      } else if (payment.categoryId) {
+        categoryIds = [payment.categoryId];
+      }
+
+      console.log('Step 4.1: Category IDs to reject:', categoryIds.length);
+      console.log('Step 4.2: Category IDs:', categoryIds.map((cat: any) => (cat._id || cat).toString()));
+
+      // Update subscriptions for all categories
+      subscriptions = await Promise.all(
+        categoryIds.map(async (categoryId, index) => {
+          const categoryObjId = categoryId._id || categoryId;
+          console.log(`Step 4.3.${index + 1}: Processing category ${index + 1}/${categoryIds.length}:`, categoryObjId.toString());
+          
+          const subscription = await Subscription.findOne({
+            userId: payment.userId,
+            categoryId: categoryObjId,
+            isComboOffer: false,
+          });
+
+          console.log(`Step 4.3.${index + 1}.1: Category subscription search result:`, subscription ? 'Found' : 'Not found');
+
+          if (subscription) {
+            console.log(`Step 4.3.${index + 1}.2: Rejecting category subscription with ID:`, subscription._id.toString());
+            subscription.status = 'REJECTED';
+            subscription.paymentReferenceId = payment._id;
+            await subscription.save();
+            console.log(`Step 4.3.${index + 1}.3: Category subscription rejected successfully`);
+          } else {
+            console.log(`Step 4.3.${index + 1}.2: WARNING - Category subscription not found for rejection`);
+          }
+
+          return subscription;
+        })
+      );
     }
 
-    // Update subscriptions for all categories
-    const subscriptions = await Promise.all(
-      categoryIds.map(async (categoryId) => {
-        const categoryObjId = categoryId._id || categoryId;
-        const subscription = await Subscription.findOne({
-          userId: payment.userId,
-          categoryId: categoryObjId,
-        });
-
-        if (subscription) {
-          subscription.status = 'REJECTED';
-          subscription.paymentReferenceId = payment._id;
-          await subscription.save();
+    // Send notification
+    try {
+      let message = '';
+      if (payment.comboOfferId) {
+        const comboOffer = await (await import('../models/ComboOffer')).ComboOffer.findById(payment.comboOfferId);
+        const comboName = comboOffer?.name || 'Combo Offer';
+        message = `Your payment for combo offer "${comboName}" has been rejected. ${adminComment ? `Reason: ${adminComment}` : ''}`;
+      } else {
+        let categoryIds: any[] = [];
+        if (payment.categoryIds && payment.categoryIds.length > 0) {
+          categoryIds = payment.categoryIds;
+        } else if (payment.categoryId) {
+          categoryIds = [payment.categoryId];
         }
+        const categoryNames = categoryIds.map((cat: any) => cat.name || 'category').join(', ');
+        message = categoryIds.length > 1
+          ? `Your payment for ${categoryIds.length} categories has been rejected. ${adminComment ? `Reason: ${adminComment}` : ''}`
+          : `Your payment for ${categoryNames} has been rejected. ${adminComment ? `Reason: ${adminComment}` : ''}`;
+      }
 
-        return subscription;
-      })
-    );
+      console.log('Step 5: Sending rejection notification');
+      await notificationService.sendNotification({
+        title: 'Payment Rejected',
+        message,
+        type: 'payment_rejected',
+        target: 'USER',
+        userId: payment.userId.toString(),
+        createdByAdminId: adminId,
+      });
+      console.log('Step 5.1: Notification sent successfully');
+    } catch (error) {
+      console.error('Step 5: ERROR - Failed to send notification:', error);
+    }
 
+    console.log('Step 6: Payment rejection complete');
+    console.log('=== ADMIN PAYMENT SERVICE: Payment rejection finished ===');
     return { payment, subscriptions };
   },
 };

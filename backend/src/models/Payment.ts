@@ -41,12 +41,7 @@ const PaymentSchema = new Schema<IPayment>(
   { timestamps: true }
 );
 
-PaymentSchema.index({ userId: 1 });
-PaymentSchema.index({ categoryId: 1 });
-PaymentSchema.index({ cartId: 1 });
-PaymentSchema.index({ comboOfferId: 1 });
-PaymentSchema.index({ status: 1 });
-PaymentSchema.index({ createdAt: -1 });
+// Removed all indexes as requested
 
 export const Payment = mongoose.model<IPayment>('Payment', PaymentSchema);
 

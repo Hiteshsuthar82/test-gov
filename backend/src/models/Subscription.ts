@@ -77,10 +77,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
   { timestamps: true }
 );
 
-// Unique index for category subscriptions
+// Unique index for category subscriptions - ensures one subscription per user per category
 SubscriptionSchema.index({ userId: 1, categoryId: 1 }, { unique: true, sparse: true });
-// Unique index for combo offer subscriptions
-SubscriptionSchema.index({ userId: 1, comboOfferId: 1 }, { unique: true, sparse: true });
+// Removed userId_1_comboOfferId_1 index as requested - it was causing duplicate key errors
+// Regular indexes for querying
 SubscriptionSchema.index({ userId: 1 });
 SubscriptionSchema.index({ categoryId: 1 });
 SubscriptionSchema.index({ comboOfferId: 1 });
