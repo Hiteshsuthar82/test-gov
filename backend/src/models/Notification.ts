@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface INotification extends Document {
   title: string;
   message: string;
-  type: 'general' | 'category' | 'testSet' | 'notice' | 'payment_approved';
+  type: 'general' | 'category' | 'testSet' | 'notice' | 'payment_approved' | 'payment_rejected';
   categoryId?: Types.ObjectId;
   testSetId?: Types.ObjectId;
   userId?: Types.ObjectId;
@@ -19,7 +19,7 @@ const NotificationSchema = new Schema<INotification>(
     message: { type: String, required: true },
     type: {
       type: String,
-      enum: ['general', 'category', 'testSet', 'notice', 'payment_approved'],
+      enum: ['general', 'category', 'testSet', 'notice', 'payment_approved' , 'payment_rejected'],
       required: true,
     },
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category' },

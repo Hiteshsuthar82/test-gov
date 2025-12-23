@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
+import toast from 'react-hot-toast';
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -31,7 +32,7 @@ export default function TestAttemptInstructionsPage() {
     },
     onError: (error: any) => {
       console.error("Failed to start attempt:", error);
-      alert(error?.response?.data?.message || "Failed to start the test. Please try again.");
+      toast.error(error?.response?.data?.message || "Failed to start the test. Please try again.");
     },
   });
 
@@ -46,7 +47,7 @@ export default function TestAttemptInstructionsPage() {
   const handleStartTest = () => {
     if (!isDeclarationAccepted) return;
     if (!testSetId) {
-      alert("Test set ID is missing. Please go back and try again.");
+      toast.error("Test set ID is missing. Please go back and try again.");
       return;
     }
 

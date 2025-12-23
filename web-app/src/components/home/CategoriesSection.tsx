@@ -1,4 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
+import toast from 'react-hot-toast';
+import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { FiTarget, FiArrowRight, FiZap, FiGlobe, FiShoppingCart } from "react-icons/fi";
 import { BsCartCheck } from "react-icons/bs";
@@ -45,6 +47,7 @@ export default function CategoriesSection({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const { confirm } = useConfirmation();
 
   // Fetch user subscriptions to check subscription status
   const { data: userSubscriptions } = useQuery({
@@ -130,24 +133,31 @@ export default function CategoriesSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });
-      alert('Added to cart successfully!');
+      toast.success('Added to cart successfully!');
     },
     onError: (error: any) => {
       const errorMessage = error.response?.data?.message || 'Failed to add to cart';
       if (errorMessage.includes('already in cart')) {
-        alert('This item is already in your cart!');
+        toast.error('This item is already in your cart!');
       } else {
-        alert(errorMessage);
+        toast.error(errorMessage);
       }
     },
   });
 
-  const handleAddToCart = (categoryId: string, e: React.MouseEvent) => {
+  const handleAddToCart = async (categoryId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     if (!user) {
-      if (confirm('Please login to add items to cart. Do you want to login?')) {
+      const confirmed = await confirm({
+        title: 'Login Required',
+        message: 'Please login to add items to cart. Do you want to login?',
+        confirmText: 'Login',
+        cancelText: 'Cancel',
+      });
+      
+      if (confirmed) {
         navigate('/login');
       }
       return;

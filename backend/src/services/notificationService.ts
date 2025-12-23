@@ -8,7 +8,7 @@ export const notificationService = {
   async sendNotification(data: {
     title: string;
     message: string;
-    type: 'general' | 'category' | 'testSet' | 'notice' | 'payment_approved';
+    type: 'general' | 'category' | 'testSet' | 'notice' | 'payment_approved' | 'payment_rejected';
     target: 'ALL' | 'CATEGORY_USERS' | 'USER';
     categoryId?: string;
     testSetId?: string;

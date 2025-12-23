@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
 import Layout from '@/components/layout/Layout'
 import { Card, CardContent } from '@/components/ui/card'
@@ -81,7 +82,7 @@ export default function CheckoutPage() {
   const handleProceedToPayment = () => {
     if (selectedComboOfferId && comboOffer) {
       if (!selectedDuration && comboOffer.timePeriods && comboOffer.timePeriods.length > 0) {
-        alert('Please select a duration')
+        toast.error('Please select a duration')
         return
       }
       const selectedPeriod = comboOffer.timePeriods?.find(tp => tp.months === selectedDuration)
@@ -105,7 +106,7 @@ export default function CheckoutPage() {
         }
       })
     } else if (cart && cart.items.length === 0) {
-      alert('Your cart is empty')
+      toast.error('Your cart is empty')
     }
   }
 

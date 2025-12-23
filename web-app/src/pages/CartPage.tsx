@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { useConfirmation } from '@/components/ui/confirmation-dialog'
 import { api } from '@/lib/api'
 import Layout from '@/components/layout/Layout'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,6 +32,7 @@ export default function CartPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
+  const { confirm } = useConfirmation()
 
   const { data: cart, isLoading } = useQuery({
     queryKey: ['cart'],
@@ -59,15 +61,31 @@ export default function CartPage() {
     },
   })
 
-  const handleRemoveItem = (categoryId: string) => {
-    if (confirm('Remove this item from cart?')) {
-      removeItemMutation.mutate(categoryId)
+  const handleRemoveItem = async (categoryId: string) => {
+    const confirmed = await confirm({
+      title: 'Remove Item',
+      message: 'Are you sure you want to remove this item from your cart?',
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+    
+    if (confirmed) {
+      removeItemMutation.mutate(categoryId);
     }
   }
 
-  const handleClearCart = () => {
-    if (confirm('Clear all items from cart?')) {
-      clearCartMutation.mutate()
+  const handleClearCart = async () => {
+    const confirmed = await confirm({
+      title: 'Clear Cart',
+      message: 'Are you sure you want to clear all items from your cart? This action cannot be undone.',
+      confirmText: 'Clear All',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+    
+    if (confirmed) {
+      clearCartMutation.mutate();
     }
   }
 

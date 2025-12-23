@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { Button } from './button'
 import { Input } from './input'
 import { Label } from './label'
@@ -41,13 +42,13 @@ export function ImageUpload({
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      toast.error('Please select an image file')
       return
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB')
+      toast.error('File size must be less than 5MB')
       return
     }
 

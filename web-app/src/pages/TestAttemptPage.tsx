@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1042,7 +1043,7 @@ export default function TestAttemptPage() {
       console.error('Failed to submit section:', error)
       // Show error message to user
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to submit section. Please try again.'
-      alert(errorMessage)
+      toast.error(errorMessage)
     },
   })
 

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from 'react-hot-toast';
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -452,10 +453,10 @@ export default function CategoryPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });
-      alert('Added to cart successfully!');
+      toast.success('Added to cart successfully!');
     },
     onError: (error: any) => {
-      alert(error.response?.data?.message || 'Failed to add to cart');
+      toast.error(error.response?.data?.message || 'Failed to add to cart');
     },
   });
 
@@ -466,10 +467,10 @@ export default function CategoryPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });
-      alert('Removed from cart successfully!');
+      toast.success('Removed from cart successfully!');
     },
     onError: (error: any) => {
-      alert(error.response?.data?.message || 'Failed to remove from cart');
+      toast.error(error.response?.data?.message || 'Failed to remove from cart');
     },
   });
 
@@ -555,7 +556,7 @@ export default function CategoryPage() {
     
     // Only require subscription if test is not free
     if (!isFreeTest && (!subscriptionStatus || subscriptionStatus.status !== "APPROVED")) {
-      alert("Please subscribe to this category first");
+      toast.error("Please subscribe to this category first");
       return;
     }
 
@@ -595,12 +596,12 @@ export default function CategoryPage() {
 
     // For paid tests, differentiate between no subscription and expired subscription
     if (!subscriptionStatus) {
-      alert("Please subscribe to this category first");
+      toast.error("Please subscribe to this category first");
       return;
     }
 
     if (subscriptionStatus.status === "EXPIRED") {
-      alert("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
       return;
     }
 
