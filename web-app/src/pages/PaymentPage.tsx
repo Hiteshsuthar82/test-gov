@@ -32,6 +32,7 @@ export default function PaymentPage() {
   const cartId = paymentState?.cartId || searchParams.get('cartId')
   const comboOfferId = paymentState?.comboOfferId || searchParams.get('comboOfferId')
   const comboDurationMonths = paymentState?.durationMonths
+  const categoryDurationMonths = searchParams.get('duration') ? parseInt(searchParams.get('duration')!) : undefined
   const paymentType = paymentState?.type || (cartId ? 'cart' : comboOfferId ? 'combo' : 'category')
   
   const {
@@ -124,6 +125,9 @@ export default function PaymentPage() {
       formDataToSend.append('cartId', cartId)
     } else if (categoryId) {
       formDataToSend.append('categoryId', categoryId)
+      if (categoryDurationMonths) {
+        formDataToSend.append('categoryDurationMonths', categoryDurationMonths.toString())
+      }
     }
     
     formDataToSend.append('amount', paymentAmount.toString())
@@ -173,9 +177,22 @@ export default function PaymentPage() {
     paymentTitle = 'Cart Payment'
     paymentDescription = cart.items?.map((item: any) => item.categoryId?.name || item.categoryId?._id).filter(Boolean).join(', ') || ''
   } else if (paymentType === 'category' && category) {
-    paymentAmount = category.discountedPrice || category.price || 0
+    // Handle time period pricing for categories
+    if (categoryDurationMonths && category.timePeriods) {
+      const selectedPeriod = category.timePeriods.find((tp: any) => tp.months === categoryDurationMonths)
+      if (selectedPeriod) {
+        paymentAmount = selectedPeriod.price
+      } else {
+        paymentAmount = category.discountedPrice || category.price || 0
+      }
+    } else {
+      paymentAmount = category.discountedPrice || category.price || 0
+    }
     paymentTitle = category.name || 'Category'
     paymentDescription = category.description || ''
+    if (categoryDurationMonths) {
+      paymentDescription += ` (${categoryDurationMonths} ${categoryDurationMonths === 1 ? 'Month' : 'Months'})`
+    }
   } else if (paymentState?.amount) {
     paymentAmount = paymentState.amount
   }

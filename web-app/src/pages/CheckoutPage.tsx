@@ -245,14 +245,22 @@ export default function CheckoutPage() {
                           )}
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{item.categoryId.name}</h3>
+                            {item.selectedDurationMonths && (
+                              <div className="text-xs text-gray-600 mb-1">
+                                Duration: {item.selectedDurationMonths} {item.selectedDurationMonths === 1 ? 'month' : 'months'}
+                              </div>
+                            )}
                             <div className="flex items-center gap-2">
-                              {item.discountedPrice && item.discountedPrice < (item.originalPrice || item.price) ? (
+                              {item.originalPrice && item.originalPrice > item.price ? (
                                 <>
                                   <span className="text-lg font-bold text-gray-900">
-                                    ₹{item.discountedPrice}
+                                    ₹{item.price}
                                   </span>
                                   <span className="text-sm text-gray-500 line-through">
-                                    ₹{item.originalPrice || item.price}
+                                    ₹{item.originalPrice}
+                                  </span>
+                                  <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded">
+                                    {Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)}% OFF
                                   </span>
                                 </>
                               ) : (

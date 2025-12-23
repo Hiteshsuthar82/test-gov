@@ -244,7 +244,6 @@ export const categoryService = {
 
     // Build response with all pre-fetched data
     const categoriesWithStats = categories.map((category) => {
-      const pricing = calculateDiscountedPrice(category.price, discountPercentage);
       const categoryIdStr = category._id.toString();
       
       const userCount = userCountsMap.get(categoryIdStr) || 0;
@@ -267,11 +266,20 @@ export const categoryService = {
 
       const completedSetsCount = completedSetsMap.get(categoryIdStr) || 0;
 
+      // Only apply discount pricing if category doesn't have timePeriods
+      let pricingData: any = {};
+      if (!category.timePeriods || category.timePeriods.length === 0) {
+        const pricing = calculateDiscountedPrice(category.price, discountPercentage);
+        pricingData = {
+          originalPrice: pricing.originalPrice,
+          discountedPrice: pricing.discountedPrice,
+          hasDiscount: pricing.hasDiscount,
+        };
+      }
+
       return {
         ...category,
-        originalPrice: pricing.originalPrice,
-        discountedPrice: pricing.discountedPrice,
-        hasDiscount: pricing.hasDiscount,
+        ...pricingData,
         userCount,
         totalTests,
         freeTests,
@@ -340,7 +348,12 @@ export const categoryService = {
     // Use combo subscription if no direct subscription found
     const subscription = directSubscription || comboSubscription;
 
-    const pricing = calculateDiscountedPrice(category.price, discountPercentage);
+    // Only calculate discount pricing if category doesn't have timePeriods
+    let pricing: any = null;
+    if (!category.timePeriods || category.timePeriods.length === 0) {
+      pricing = calculateDiscountedPrice(category.price, discountPercentage);
+    }
+    
     const totalTests = category.totalSetsCount || 0;
     const freeTests = category.price === 0 ? totalTests : 0;
 
@@ -386,9 +399,12 @@ export const categoryService = {
         descriptionFormatted: category.descriptionFormatted,
         bannerImageUrl: category.bannerImageUrl,
         price: category.price,
-        originalPrice: pricing.originalPrice,
-        discountedPrice: pricing.discountedPrice,
-        hasDiscount: pricing.hasDiscount,
+        ...(pricing ? {
+          originalPrice: pricing.originalPrice,
+          discountedPrice: pricing.discountedPrice,
+          hasDiscount: pricing.hasDiscount,
+        } : {}),
+        timePeriods: category.timePeriods, // Include time periods for dynamic pricing
         details: category.details,
         detailsFormatted: category.detailsFormatted,
         isActive: category.isActive,

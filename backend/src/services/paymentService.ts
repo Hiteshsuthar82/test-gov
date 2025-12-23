@@ -12,6 +12,7 @@ export const paymentService = {
     cartId?: string;
     comboOfferId?: string;
     comboDurationMonths?: number;
+    categoryDurationMonths?: number; // For single category with time periods
     amount: number;
     payerName: string;
     payerUpiId: string;
@@ -22,6 +23,8 @@ export const paymentService = {
     let categoryIds: Types.ObjectId[] = [];
     // Calculate categoryAmounts map for individual category amounts
     let categoryAmounts = new Map<string, number>();
+    // Store duration for each category
+    let categoryDurationMonthsMap = new Map<string, number>();
     
     if (data.comboOfferId) {
       // Payment for combo offer
@@ -48,6 +51,10 @@ export const paymentService = {
         const categoryObjectId = catId instanceof Types.ObjectId ? catId : new Types.ObjectId(catId);
         // Store individual amount for this category
         categoryAmounts.set(categoryObjectId.toString(), item.price || 0);
+        // Store duration if available
+        if (item.selectedDurationMonths) {
+          categoryDurationMonthsMap.set(categoryObjectId.toString(), item.selectedDurationMonths);
+        }
         return categoryObjectId;
       });
     } else if (data.categoryIds && data.categoryIds.length > 0) {
@@ -86,6 +93,8 @@ export const paymentService = {
       cartId: data.cartId ? new Types.ObjectId(data.cartId) : undefined,
       comboOfferId: data.comboOfferId ? new Types.ObjectId(data.comboOfferId) : undefined,
       comboDurationMonths: data.comboDurationMonths,
+      categoryDurationMonths: data.categoryDurationMonths, // Single category duration
+      categoryDurationMonthsMap: categoryDurationMonthsMap.size > 0 ? Object.fromEntries(categoryDurationMonthsMap) : undefined,
       amount: data.amount,
       categoryAmounts: categoryAmounts.size > 0 ? Object.fromEntries(categoryAmounts) : undefined,
       payerName: data.payerName,

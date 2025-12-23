@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface ITimePeriod {
+  months: number;
+  price: number;
+  originalPrice: number;
+}
+
 export interface ISubsection {
   subsectionId: string;
   name: string;
@@ -18,7 +24,9 @@ export interface ICategory extends Document {
   description?: string;
   descriptionFormatted?: string;
   bannerImageUrl?: string;
-  price: number;
+  price: number; // Deprecated - use timePeriods instead, kept for backward compatibility
+  originalPrice?: number; // Optional original price for backward compatibility
+  timePeriods?: ITimePeriod[]; // Dynamic pricing based on subscription duration
   details?: string;
   detailsFormatted?: string;
   isActive: boolean;
@@ -27,6 +35,15 @@ export interface ICategory extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const TimePeriodSchema = new Schema<ITimePeriod>(
+  {
+    months: { type: Number, required: true, min: 1 },
+    price: { type: Number, required: true, min: 0 },
+    originalPrice: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
 
 const SubsectionSchema = new Schema<ISubsection>(
   {
@@ -53,7 +70,9 @@ const CategorySchema = new Schema<ICategory>(
     description: { type: String },
     descriptionFormatted: { type: String },
     bannerImageUrl: { type: String },
-    price: { type: Number, required: true },
+    price: { type: Number, required: true }, // Keep as required for backward compatibility
+    originalPrice: { type: Number }, // Optional original price
+    timePeriods: [TimePeriodSchema], // Dynamic pricing periods
     details: { type: String },
     detailsFormatted: { type: String },
     isActive: { type: Boolean, default: true },

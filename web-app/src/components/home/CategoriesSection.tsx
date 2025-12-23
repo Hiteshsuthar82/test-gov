@@ -8,12 +8,19 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 
+interface TimePeriod {
+  months: number;
+  price: number;
+  originalPrice: number;
+}
+
 interface Category {
   _id: string;
   name: string;
   description: string;
   price: number;
   originalPrice?: number;
+  timePeriods?: TimePeriod[];
   discountedPrice?: number;
   hasDiscount?: boolean;
   bannerImageUrl?: string;
@@ -274,9 +281,31 @@ export default function CategoriesSection({
                         {category.name}
                       </h3>
 
-                      {/* Price Section with Discount */}
+                      {/* Price Section with Discount or Time Periods */}
                       <div className="mb-2">
-                        {hasDiscount ? (
+                        {category.timePeriods && category.timePeriods.length > 0 ? (
+                          <div>
+                            <div className="text-[10px] text-gray-500 mb-1">Starting from</div>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-sm font-bold text-gray-900">
+                                ₹{Math.min(...category.timePeriods.map(tp => tp.price))}
+                              </span>
+                              {category.timePeriods[0].originalPrice > category.timePeriods[0].price && (
+                                <>
+                                  <span className="text-xs text-gray-500 line-through">
+                                    ₹{category.timePeriods[0].originalPrice}
+                                  </span>
+                                  <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-semibold">
+                                    {Math.round(((category.timePeriods[0].originalPrice - category.timePeriods[0].price) / category.timePeriods[0].originalPrice) * 100)}% OFF
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            <div className="text-[9px] text-purple-600 mt-0.5">
+                              {category.timePeriods.length} duration{category.timePeriods.length > 1 ? 's' : ''} available
+                            </div>
+                          </div>
+                        ) : hasDiscount ? (
                           <div className="flex items-baseline gap-2">
                             <span className="text-sm font-bold text-gray-900">
                               ₹{category.discountedPrice}

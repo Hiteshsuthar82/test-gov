@@ -21,6 +21,8 @@ export const cartController = {
               _id: categoryId,
               name: item.categoryId.name,
               price: item.categoryId.price,
+              originalPrice: item.categoryId.originalPrice,
+              timePeriods: item.categoryId.timePeriods, // Include timePeriods for duration selection
               bannerImageUrl: item.categoryId.bannerImageUrl,
             },
             discountedPrice: categoryDetails?.category?.discountedPrice || item.price,
@@ -45,19 +47,19 @@ export const cartController = {
   addItem: async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user._id.toString();
-      const { categoryId } = req.body;
+      const { categoryId, selectedDurationMonths } = req.body;
 
       if (!categoryId) {
         return sendError(res, 'Category ID is required', 400);
       }
 
-      const cart = await cartService.addItem(userId, categoryId);
+      const cart = await cartService.addItem(userId, categoryId, selectedDurationMonths);
       
       // Calculate discounted price
       const categoryDetails = await categoryService.getDetails(categoryId, userId);
       const discountedPrice = categoryDetails?.category?.discountedPrice || categoryDetails?.category?.price || 0;
       
-      // Update item price with discount
+      // Update item price with discount (if discount applies)
       await cartService.updateItemPrice(userId, categoryId, discountedPrice);
       const updatedCart = await cartService.getCart(userId);
 
@@ -84,6 +86,23 @@ export const cartController = {
       const userId = req.user._id.toString();
       const cart = await cartService.clearCart(userId);
       sendSuccess(res, cart, 'Cart cleared');
+    } catch (error: any) {
+      sendError(res, error.message, 400);
+    }
+  },
+
+  updateItemDuration: async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user._id.toString();
+      const { categoryId } = req.params;
+      const { newDurationMonths } = req.body;
+
+      if (!newDurationMonths) {
+        return sendError(res, 'New duration in months is required', 400);
+      }
+
+      const cart = await cartService.updateItemDuration(userId, categoryId, newDurationMonths);
+      sendSuccess(res, cart, 'Item duration updated');
     } catch (error: any) {
       sendError(res, error.message, 400);
     }

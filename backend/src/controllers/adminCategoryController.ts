@@ -64,12 +64,26 @@ export const adminCategoryController = {
           }
         }
 
+        // Parse timePeriods if provided
+        let timePeriods = undefined;
+        if (req.body.timePeriods) {
+          try {
+            timePeriods = typeof req.body.timePeriods === 'string' 
+              ? JSON.parse(req.body.timePeriods) 
+              : req.body.timePeriods;
+          } catch (error) {
+            return sendError(res, 'Invalid timePeriods format', 400);
+          }
+        }
+
         const category = await adminCategoryService.create({
           name: req.body.name,
           description: req.body.description,
           descriptionFormatted: req.body.descriptionFormatted,
           bannerImageUrl: bannerImageUrl || undefined,
           price: parseFloat(req.body.price) || 0,
+          originalPrice: req.body.originalPrice ? parseFloat(req.body.originalPrice) : undefined,
+          timePeriods: timePeriods,
           details: req.body.details,
           detailsFormatted: req.body.detailsFormatted,
           isActive: req.body.isActive === 'true' || req.body.isActive === true,
@@ -167,6 +181,18 @@ export const adminCategoryController = {
           }
         }
 
+        // Parse timePeriods if provided
+        let timePeriods = undefined;
+        if (req.body.timePeriods !== undefined) {
+          try {
+            timePeriods = typeof req.body.timePeriods === 'string' 
+              ? JSON.parse(req.body.timePeriods) 
+              : req.body.timePeriods;
+          } catch (error) {
+            return sendError(res, 'Invalid timePeriods format', 400);
+          }
+        }
+
         const updateData: any = {
           name: req.body.name,
           description: req.body.description,
@@ -183,6 +209,14 @@ export const adminCategoryController = {
 
         if (sections !== undefined) {
           updateData.sections = sections;
+        }
+
+        if (req.body.originalPrice !== undefined) {
+          updateData.originalPrice = req.body.originalPrice ? parseFloat(req.body.originalPrice) : undefined;
+        }
+
+        if (timePeriods !== undefined) {
+          updateData.timePeriods = timePeriods;
         }
 
         const category = await adminCategoryService.update(id, updateData);

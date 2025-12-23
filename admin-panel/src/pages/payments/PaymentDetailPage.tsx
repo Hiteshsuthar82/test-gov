@@ -105,12 +105,23 @@ export default function PaymentDetailPage() {
                 {payment?.categoryIds && payment.categoryIds.length > 0 && (
                   <div className="mt-2">
                     <div className="text-xs text-gray-500">Cart Items ({payment.categoryIds.length}):</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {payment.categoryIds.map((cat: any, idx: number) => (
-                        <span key={idx} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                          {cat.name || cat}
-                        </span>
-                      ))}
+                    <div className="flex flex-col gap-2 mt-1">
+                      {payment.categoryIds.map((cat: any, idx: number) => {
+                        const categoryId = cat._id || cat;
+                        const duration = payment?.categoryDurationMonthsMap?.[categoryId];
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                              {cat.name || cat}
+                            </span>
+                            {duration && (
+                              <span className="text-xs text-gray-600">
+                                ({duration} {duration === 1 ? 'Month' : 'Months'})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -119,6 +130,14 @@ export default function PaymentDetailPage() {
               <div>
                 <div className="text-sm text-gray-500">Category</div>
                 <div className="font-medium">{payment?.categoryId?.name || 'N/A'}</div>
+                {payment?.categoryDurationMonths && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500">Selected Duration:</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {payment.categoryDurationMonths} {payment.categoryDurationMonths === 1 ? 'Month' : 'Months'}
+                    </div>
+                  </div>
+                )}
                 {payment?.categoryIds && payment.categoryIds.length > 1 && (
                   <div className="mt-2">
                     <div className="text-xs text-gray-500">Additional Categories:</div>

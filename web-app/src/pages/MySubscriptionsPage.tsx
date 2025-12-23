@@ -281,6 +281,16 @@ export default function MySubscriptionsPage() {
                           </div>
                         )}
 
+                        {/* Duration */}
+                        {subscription.selectedDurationMonths && (
+                          <div className="mb-2">
+                            <span className="text-xs text-gray-600">Duration: </span>
+                            <span className="text-sm font-semibold text-purple-600">
+                              {subscription.selectedDurationMonths} {subscription.selectedDurationMonths === 1 ? 'Month' : 'Months'}
+                            </span>
+                          </div>
+                        )}
+
                         {/* Dates */}
                         <div className="space-y-1 mb-3">
                           {subscription.startsAt && (

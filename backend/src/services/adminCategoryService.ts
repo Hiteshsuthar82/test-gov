@@ -46,6 +46,8 @@ export const adminCategoryService = {
     descriptionFormatted?: string;
     bannerImageUrl?: string;
     price: number;
+    originalPrice?: number;
+    timePeriods?: Array<{ months: number; price: number; originalPrice: number }>;
     details?: string;
     detailsFormatted?: string;
     isActive?: boolean;

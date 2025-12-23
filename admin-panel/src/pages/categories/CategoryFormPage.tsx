@@ -10,6 +10,12 @@ import { Button } from '../../components/ui/button'
 import { ImageUpload } from '../../components/ui/image-upload'
 import { RichTextEditor } from '../../components/ui/rich-text-editor'
 
+interface TimePeriod {
+  months: number
+  price: number
+  originalPrice: number
+}
+
 interface Subsection {
   subsectionId: string
   name: string
@@ -35,6 +41,8 @@ export default function CategoryFormPage() {
     descriptionFormatted: '',
     bannerImageUrl: '',
     price: 0,
+    originalPrice: 0,
+    timePeriods: [] as TimePeriod[],
     details: '',
     detailsFormatted: '',
     isActive: true,
@@ -58,11 +66,16 @@ export default function CategoryFormPage() {
         descriptionFormatted: data.descriptionFormatted || data.description || '',
         bannerImageUrl: data.bannerImageUrl || '',
         price: data.price || 0,
+        originalPrice: data.originalPrice || 0,
+        timePeriods: data.timePeriods || [],
         details: data.details || '',
         detailsFormatted: data.detailsFormatted || data.details || '',
         isActive: data.isActive ?? true,
         sections: data.sections || [],
       })
+      if (data.bannerImageUrl) {
+        setBannerImageUrl(data.bannerImageUrl)
+      }
     }
   }, [data])
 
@@ -98,6 +111,8 @@ export default function CategoryFormPage() {
     formDataToSend.append('description', formData.description || '')
     formDataToSend.append('descriptionFormatted', formData.descriptionFormatted || '')
     formDataToSend.append('price', formData.price.toString())
+    formDataToSend.append('originalPrice', formData.originalPrice.toString())
+    formDataToSend.append('timePeriods', JSON.stringify(formData.timePeriods))
     formDataToSend.append('details', formData.details || '')
     formDataToSend.append('detailsFormatted', formData.detailsFormatted || '')
     formDataToSend.append('isActive', formData.isActive.toString())
@@ -223,7 +238,7 @@ export default function CategoryFormPage() {
               />
             </div>
             <div>
-              <Label htmlFor="price">Price (₹) *</Label>
+              <Label htmlFor="price">Base Price (₹) *</Label>
               <Input
                 id="price"
                 type="number"
@@ -233,7 +248,118 @@ export default function CategoryFormPage() {
                 min="0"
                 step="0.01"
               />
+              <p className="text-xs text-gray-500 mt-1">Base price for backward compatibility. Use Time Periods for dynamic pricing.</p>
             </div>
+            <div>
+              <Label htmlFor="originalPrice">Original Price (₹)</Label>
+              <Input
+                id="originalPrice"
+                type="number"
+                value={formData.originalPrice}
+                onChange={(e) => setFormData({ ...formData, originalPrice: parseFloat(e.target.value) })}
+                min="0"
+                step="0.01"
+              />
+              <p className="text-xs text-gray-500 mt-1">Original price for showing discounts (optional)</p>
+            </div>
+            
+            {/* Time Periods Section */}
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <Label className="text-base font-semibold">Dynamic Pricing (Time Periods)</Label>
+                  <p className="text-xs text-gray-500">Add multiple subscription durations with different prices</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      timePeriods: [
+                        ...formData.timePeriods,
+                        { months: 1, price: 0, originalPrice: 0 }
+                      ]
+                    })
+                  }}
+                >
+                  Add Time Period
+                </Button>
+              </div>
+              
+              {formData.timePeriods.length === 0 ? (
+                <div className="text-center py-6 bg-gray-50 rounded-lg border-2 border-dashed">
+                  <p className="text-sm text-gray-500">No time periods added. Category will use base price.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {formData.timePeriods.map((period, index) => (
+                    <div key={index} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg border">
+                      <div className="flex-1 grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs">Duration (Months)</Label>
+                          <Input
+                            type="number"
+                            value={period.months}
+                            onChange={(e) => {
+                              const newTimePeriods = [...formData.timePeriods]
+                              newTimePeriods[index].months = parseInt(e.target.value) || 1
+                              setFormData({ ...formData, timePeriods: newTimePeriods })
+                            }}
+                            min="1"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Price (₹)</Label>
+                          <Input
+                            type="number"
+                            value={period.price}
+                            onChange={(e) => {
+                              const newTimePeriods = [...formData.timePeriods]
+                              newTimePeriods[index].price = parseFloat(e.target.value) || 0
+                              setFormData({ ...formData, timePeriods: newTimePeriods })
+                            }}
+                            min="0"
+                            step="0.01"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Original Price (₹)</Label>
+                          <Input
+                            type="number"
+                            value={period.originalPrice}
+                            onChange={(e) => {
+                              const newTimePeriods = [...formData.timePeriods]
+                              newTimePeriods[index].originalPrice = parseFloat(e.target.value) || 0
+                              setFormData({ ...formData, timePeriods: newTimePeriods })
+                            }}
+                            min="0"
+                            step="0.01"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const newTimePeriods = formData.timePeriods.filter((_, i) => i !== index)
+                          setFormData({ ...formData, timePeriods: newTimePeriods })
+                        }}
+                        className="mt-5"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
             <div>
               <RichTextEditor
                 value={formData.detailsFormatted || formData.details || ''}

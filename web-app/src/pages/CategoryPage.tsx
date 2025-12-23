@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import Layout from "@/components/layout/Layout";
 import {
   FiClock,
@@ -58,6 +59,12 @@ interface CategorySection {
   }>;
 }
 
+interface TimePeriod {
+  months: number;
+  price: number;
+  originalPrice: number;
+}
+
 interface Category {
   _id: string;
   name: string;
@@ -69,6 +76,8 @@ interface Category {
   userCount?: number;
   languages?: string[];
   price?: number;
+  originalPrice?: number;
+  timePeriods?: TimePeriod[];
   freeTests?: number;
 }
 
@@ -79,6 +88,7 @@ export default function CategoryPage() {
   const [selectedSubsection, setSelectedSubsection] = useState<string | null>(
     null
   );
+  const [selectedDurationMonths, setSelectedDurationMonths] = useState<number | undefined>(undefined);
 
   const { data: categoryData, isLoading: isLoadingCategory } = useQuery({
     queryKey: ["category", categoryId],
@@ -448,8 +458,8 @@ export default function CategoryPage() {
 
   // Add to cart mutation
   const addToCartMutation = useMutation({
-    mutationFn: async (categoryId: string) => {
-      await api.post('/cart', { categoryId });
+    mutationFn: async ({ categoryId, selectedDurationMonths }: { categoryId: string; selectedDurationMonths?: number }) => {
+      await api.post('/cart', { categoryId, selectedDurationMonths });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });
@@ -1406,7 +1416,11 @@ export default function CategoryPage() {
                                   </Button>
                                 </div>
                               ) : isLocked ? (
-                                <Link to={`/categories/${categoryId}/payment`}>
+                                <Link to={`/categories/${categoryId}/payment${
+                                  category?.timePeriods && category.timePeriods.length > 0
+                                    ? `?duration=${selectedDurationMonths || category.timePeriods[0].months}`
+                                    : ''
+                                }`}>
                                   <Button
                                     size="sm"
                                     className="bg-transparent text-purple-700 border border-purple-700 hover:bg-purple-100"
@@ -1515,35 +1529,92 @@ export default function CategoryPage() {
                         <h3 className="text-2xl font-bold mb-4">Pricing Details</h3>
                         {/* Always show pricing for category */}
                         {category && (
-                          <div className="flex items-baseline gap-2">
-                            {categoryData?.category?.discountedPrice !== undefined && categoryData?.category?.originalPrice !== undefined ? (
-                              <>
-                                <span className="text-2xl font-bold text-yellow-400">
-                                  ₹{categoryData.category.discountedPrice}
-                                </span>
-                                {categoryData.category.originalPrice > categoryData.category.discountedPrice && (
+                          <>
+                            {category.timePeriods && category.timePeriods.length > 0 ? (
+                              <div className="space-y-2">
+                                <Label className="text-white text-[10px] font-medium block">
+                                  Select Duration:
+                                </Label>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {category.timePeriods.map((period) => {
+                                    const isSelected = (selectedDurationMonths || category.timePeriods![0].months) === period.months;
+                                    const discount = period.originalPrice > period.price
+                                      ? Math.round(((period.originalPrice - period.price) / period.originalPrice) * 100)
+                                      : 0;
+                                    
+                                    return (
+                                      <button
+                                        key={period.months}
+                                        type="button"
+                                        onClick={() => setSelectedDurationMonths(period.months)}
+                                        className={`p-2 border-2 rounded-md text-left transition-all ${
+                                          isSelected
+                                            ? 'border-yellow-400 bg-yellow-400 bg-opacity-10'
+                                            : 'border-gray-600 hover:border-yellow-400 bg-gray-700 bg-opacity-50'
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-1">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="text-[11px] font-semibold text-white leading-tight">
+                                              {period.months} {period.months === 1 ? 'Month' : 'Months'}
+                                            </div>
+                                            <div className="flex flex-col gap-0.5 mt-1">
+                                              <span className="text-xs font-bold text-yellow-400">₹{period.price}</span>
+                                              {period.originalPrice > period.price && (
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                  <span className="text-[9px] text-gray-400 line-through">
+                                                    ₹{period.originalPrice}
+                                                  </span>
+                                                  {discount > 0 && (
+                                                    <span className="text-[8px] bg-red-500 text-white px-1 py-0.5 rounded">
+                                                      {discount}% OFF
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {isSelected && (
+                                            <FiCheckCircle className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                                          )}
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-baseline gap-2">
+                                {categoryData?.category?.discountedPrice !== undefined && categoryData?.category?.originalPrice !== undefined ? (
                                   <>
-                                    <span className="text-xs text-gray-400 line-through">
-                                      ₹{categoryData.category.originalPrice}
+                                    <span className="text-2xl font-bold text-yellow-400">
+                                      ₹{categoryData.category.discountedPrice}
                                     </span>
-                                    {categoryData.category.hasDiscount && (
-                                      <span className="text-xs bg-red-500 px-2 py-1 rounded">
-                                        {Math.round(((categoryData.category.originalPrice - categoryData.category.discountedPrice) / categoryData.category.originalPrice) * 100)}% OFF
-                                      </span>
+                                    {categoryData.category.originalPrice > categoryData.category.discountedPrice && (
+                                      <>
+                                        <span className="text-xs text-gray-400 line-through">
+                                          ₹{categoryData.category.originalPrice}
+                                        </span>
+                                        {categoryData.category.hasDiscount && (
+                                          <span className="text-xs bg-red-500 px-2 py-1 rounded">
+                                            {Math.round(((categoryData.category.originalPrice - categoryData.category.discountedPrice) / categoryData.category.originalPrice) * 100)}% OFF
+                                          </span>
+                                        )}
+                                      </>
                                     )}
                                   </>
+                                ) : category.price !== undefined && (
+                                  <span className="text-2xl font-bold text-yellow-400">
+                                    {category.price > 0 ? `₹${category.price}` : "Free"}
+                                  </span>
                                 )}
-                              </>
-                            ) : category.price !== undefined && (
-                              <span className="text-2xl font-bold text-yellow-400">
-                                {category.price > 0 ? `₹${category.price}` : "Free"}
-                              </span>
+                              </div>
                             )}
-                          </div>
+                          </>
                         )}
                       </div>
                       <ul className="space-y-3 mb-6">
-                        {category?.totalSetsCount && category.totalSetsCount > 0 && (
+                        {category?.totalSetsCount !== undefined && category.totalSetsCount > 0 && (
                           <li className="flex items-center gap-2">
                             <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                             <span className="text-sm">{category.totalSetsCount} Test Series</span>
@@ -1602,7 +1673,10 @@ export default function CategoryPage() {
                             <Button
                               onClick={() => {
                                 if (categoryId) {
-                                  addToCartMutation.mutate(categoryId);
+                                  const durationToUse = category?.timePeriods && category.timePeriods.length > 0
+                                    ? selectedDurationMonths || category.timePeriods[0].months
+                                    : undefined;
+                                  addToCartMutation.mutate({ categoryId, selectedDurationMonths: durationToUse });
                                 }
                               }}
                               variant="outline"
@@ -1613,7 +1687,14 @@ export default function CategoryPage() {
                               Add to Cart
                             </Button>
                           )}
-                          <Link to={`/categories/${categoryId}/payment`} className="flex-1">
+                          <Link 
+                            to={`/categories/${categoryId}/payment${
+                              category?.timePeriods && category.timePeriods.length > 0
+                                ? `?duration=${selectedDurationMonths || category.timePeriods[0].months}`
+                                : ''
+                            }`} 
+                            className="flex-1"
+                          >
                             <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
                               Buy Now
                             </Button>

@@ -101,7 +101,6 @@ export default function PaymentsListPage() {
           <Select
             value={selectedPartnerId}
             onChange={(e) => handlePartnerChange(e.target.value)}
-            placeholder="Filter by Partner"
             className="max-w-xs"
           >
             <option value="">All Partners</option>
@@ -164,12 +163,20 @@ export default function PaymentsListPage() {
                         {payment.categoryIds && payment.categoryIds.length > 0 && (
                           <div className="text-xs text-gray-500 mt-1">
                             {payment.categoryIds.length} {payment.categoryIds.length === 1 ? 'category' : 'categories'}
+                            {payment.categoryDurationMonthsMap && Object.keys(payment.categoryDurationMonthsMap).length > 0 && (
+                              <span className="ml-1">(with durations)</span>
+                            )}
                           </div>
                         )}
                       </div>
                     ) : (
                       <div>
                         <div className="font-medium">{payment.categoryId?.name || 'N/A'}</div>
+                        {payment.categoryDurationMonths && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Duration: {payment.categoryDurationMonths} {payment.categoryDurationMonths === 1 ? 'Month' : 'Months'}
+                          </div>
+                        )}
                         {payment.categoryIds && payment.categoryIds.length > 1 && (
                           <div className="text-xs text-gray-500 mt-1">
                             +{payment.categoryIds.length - 1} more

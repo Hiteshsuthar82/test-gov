@@ -311,9 +311,43 @@ export const adminPaymentService = {
             categoryAmount = payment.amount / categoryIds.length;
           }
 
-          // Default to 1 year (365 days) for regular subscriptions
+          // Get duration for this category
+          let selectedDurationMonths: number | undefined = undefined;
+          let selectedTimePeriod: any = null;
+          
+          // Try to get duration from payment
+          if (payment.categoryDurationMonths) {
+            // Single category payment with duration
+            selectedDurationMonths = payment.categoryDurationMonths;
+          } else if (payment.categoryDurationMonthsMap) {
+            // Cart payment with individual durations
+            if (payment.categoryDurationMonthsMap instanceof Map) {
+              selectedDurationMonths = payment.categoryDurationMonthsMap.get(categoryObjId.toString());
+            } else if (typeof payment.categoryDurationMonthsMap === 'object') {
+              selectedDurationMonths = (payment.categoryDurationMonthsMap as any)[categoryObjId.toString()];
+            }
+          }
+
+          // Get category to find time period details
+          const { Category } = await import('../models/Category');
+          const category = await Category.findById(categoryObjId);
+          
+          if (category && category.timePeriods && category.timePeriods.length > 0 && selectedDurationMonths) {
+            selectedTimePeriod = category.timePeriods.find((tp: any) => tp.months === selectedDurationMonths);
+          }
+
+          // Calculate expiry date based on duration
           const startsAt = new Date();
-          const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          let expiresAt: Date;
+          
+          if (selectedDurationMonths) {
+            // Use selected duration
+            expiresAt = new Date();
+            expiresAt.setMonth(expiresAt.getMonth() + selectedDurationMonths);
+          } else {
+            // Default to 1 year (365 days) for regular subscriptions without time periods
+            expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          }
 
           if (subscription) {
             subscription.status = 'APPROVED';
@@ -322,6 +356,8 @@ export const adminPaymentService = {
             subscription.expiresAt = expiresAt;
             subscription.isComboOffer = false; // Ensure it's marked as non-combo
             subscription.amount = categoryAmount;
+            subscription.selectedDurationMonths = selectedDurationMonths;
+            subscription.selectedTimePeriod = selectedTimePeriod;
             
             // Update history entry for this payment
             if (!subscription.subscriptionHistory) {
@@ -362,6 +398,8 @@ export const adminPaymentService = {
                 status: 'APPROVED',
                 paymentReferenceId: payment._id,
                 amount: categoryAmount,
+                selectedDurationMonths: selectedDurationMonths,
+                selectedTimePeriod: selectedTimePeriod,
                 startsAt: startsAt,
                 expiresAt: expiresAt,
                 subscriptionHistory: [{

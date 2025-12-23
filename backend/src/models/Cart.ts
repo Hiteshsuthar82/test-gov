@@ -4,6 +4,7 @@ export interface ICartItem {
   categoryId: Types.ObjectId;
   price: number;
   originalPrice?: number;
+  selectedDurationMonths?: number; // Selected time period duration (if category has time periods)
   addedAt: Date;
 }
 
@@ -20,6 +21,7 @@ const CartItemSchema = new Schema<ICartItem>(
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
     price: { type: Number, required: true },
     originalPrice: { type: Number },
+    selectedDurationMonths: { type: Number }, // Duration in months if time periods are available
     addedAt: { type: Date, default: Date.now },
   },
   { _id: false }

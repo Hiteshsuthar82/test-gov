@@ -49,6 +49,7 @@ export const paymentController = {
         cartId: req.body.cartId, // For cart payment
         comboOfferId: req.body.comboOfferId, // For combo offer payment
         comboDurationMonths: req.body.comboDurationMonths ? parseInt(req.body.comboDurationMonths) : undefined,
+        categoryDurationMonths: req.body.categoryDurationMonths ? parseInt(req.body.categoryDurationMonths) : undefined, // For single category with time periods
         amount: parseFloat(req.body.amount),
         payerName: req.body.payerName,
         payerUpiId: req.body.payerUpiId,
