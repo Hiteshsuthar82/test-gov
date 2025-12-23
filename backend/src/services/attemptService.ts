@@ -14,7 +14,10 @@ export const attemptService = {
 
     // Check subscription - only required if test is not free
     if (!testSet.isFree) {
-      // Check for direct category subscription
+      const now = new Date();
+      let hasValidSubscription = false;
+
+      // Priority 1: Check for APPROVED direct category subscription
       const categorySubscription = await Subscription.findOne({
         userId: new Types.ObjectId(userId),
         categoryId: testSet.categoryId,
@@ -22,8 +25,15 @@ export const attemptService = {
         status: 'APPROVED',
       });
 
-      // If no direct subscription, check for combo offer subscription that includes this category
-      if (!categorySubscription) {
+      if (categorySubscription) {
+        // Check if category subscription is still valid (not expired)
+        if (!categorySubscription.expiresAt || new Date(categorySubscription.expiresAt) >= now) {
+          hasValidSubscription = true;
+        }
+      }
+
+      // Priority 2: If no valid direct subscription, check for APPROVED combo offer subscription
+      if (!hasValidSubscription) {
         const comboSubscription = await Subscription.findOne({
           userId: new Types.ObjectId(userId),
           isComboOffer: true,
@@ -31,19 +41,16 @@ export const attemptService = {
           'comboOfferDetails.categoryIds': testSet.categoryId,
         });
 
-        if (!comboSubscription) {
-          throw new Error('Subscription not approved for this category');
+        if (comboSubscription) {
+          // Check if combo subscription is still valid (not expired)
+          if (!comboSubscription.expiresAt || new Date(comboSubscription.expiresAt) >= now) {
+            hasValidSubscription = true;
+          }
         }
+      }
 
-        // Check if combo subscription is still valid (not expired)
-        if (comboSubscription.expiresAt && new Date(comboSubscription.expiresAt) < new Date()) {
-          throw new Error('Your combo offer subscription has expired');
-        }
-      } else {
-        // Check if category subscription is still valid (not expired)
-        if (categorySubscription.expiresAt && new Date(categorySubscription.expiresAt) < new Date()) {
-          throw new Error('Your subscription has expired');
-        }
+      if (!hasValidSubscription) {
+        throw new Error('Subscription not approved for this category');
       }
     }
 

@@ -16,7 +16,8 @@ export const testSetService = {
     }
   ) {
     // Check subscription - but allow free tests even without subscription
-    // First check for direct category subscription
+    // Priority 1: Check for APPROVED direct category subscription
+    const now = new Date();
     let subscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       categoryId: new Types.ObjectId(categoryId),
@@ -24,7 +25,14 @@ export const testSetService = {
       status: 'APPROVED',
     }).lean();
 
-    // If no direct subscription, check for combo offer subscription that includes this category
+    // Check if direct subscription is still valid (not expired)
+    if (subscription) {
+      if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
+        subscription = null; // Subscription expired
+      }
+    }
+
+    // Priority 2: If no valid direct subscription, check for APPROVED combo offer subscription
     if (!subscription) {
       const comboSubscription = await Subscription.findOne({
         userId: new Types.ObjectId(userId),
@@ -35,16 +43,9 @@ export const testSetService = {
 
       if (comboSubscription) {
         // Check if combo subscription is still valid (not expired)
-        const now = new Date();
         if (!comboSubscription.expiresAt || new Date(comboSubscription.expiresAt) >= now) {
           subscription = comboSubscription;
         }
-      }
-    } else {
-      // Check if category subscription is still valid (not expired)
-      const now = new Date();
-      if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
-        subscription = null; // Subscription expired
       }
     }
 
@@ -165,16 +166,26 @@ export const testSetService = {
 
     // Check subscription - only required if test is not free
     if (!set.isFree) {
-      // Check for direct category subscription
-      let subscription = await Subscription.findOne({
+      const now = new Date();
+      let hasValidSubscription = false;
+
+      // Priority 1: Check for APPROVED direct category subscription
+      const categorySubscription = await Subscription.findOne({
         userId: new Types.ObjectId(userId),
         categoryId: set.categoryId,
         isComboOffer: false,
         status: 'APPROVED',
       });
 
-      // If no direct subscription, check for combo offer subscription that includes this category
-      if (!subscription) {
+      if (categorySubscription) {
+        // Check if category subscription is still valid (not expired)
+        if (!categorySubscription.expiresAt || new Date(categorySubscription.expiresAt) >= now) {
+          hasValidSubscription = true;
+        }
+      }
+
+      // Priority 2: If no valid direct subscription, check for APPROVED combo offer subscription
+      if (!hasValidSubscription) {
         const comboSubscription = await Subscription.findOne({
           userId: new Types.ObjectId(userId),
           isComboOffer: true,
@@ -182,21 +193,16 @@ export const testSetService = {
           'comboOfferDetails.categoryIds': set.categoryId,
         });
 
-        if (!comboSubscription) {
-          throw new Error('Subscription not approved for this category');
+        if (comboSubscription) {
+          // Check if combo subscription is still valid (not expired)
+          if (!comboSubscription.expiresAt || new Date(comboSubscription.expiresAt) >= now) {
+            hasValidSubscription = true;
+          }
         }
+      }
 
-        // Check if combo subscription is still valid (not expired)
-        const now = new Date();
-        if (comboSubscription.expiresAt && new Date(comboSubscription.expiresAt) < now) {
-          throw new Error('Your combo offer subscription has expired');
-        }
-      } else {
-        // Check if category subscription is still valid (not expired)
-        const now = new Date();
-        if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
-          throw new Error('Your subscription has expired');
-        }
+      if (!hasValidSubscription) {
+        throw new Error('Subscription not approved for this category');
       }
     }
 

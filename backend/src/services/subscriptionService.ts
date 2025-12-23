@@ -29,47 +29,76 @@ export const subscriptionService = {
   },
 
   async checkSubscription(userId: string, categoryId: string) {
-    // Check for direct category subscription
-    const categorySubscription = await Subscription.findOne({
+    const now = new Date();
+    const categoryObjectId = new Types.ObjectId(categoryId);
+
+    // Priority 1: Check for APPROVED direct category subscription
+    let approvedCategorySubscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
-      categoryId: new Types.ObjectId(categoryId),
+      categoryId: categoryObjectId,
+      isComboOffer: false,
+      status: 'APPROVED',
+    })
+      .select('status startsAt expiresAt categoryId')
+      .lean();
+
+    // Check if approved category subscription is still valid (not expired)
+    if (approvedCategorySubscription) {
+      if (approvedCategorySubscription.expiresAt && new Date(approvedCategorySubscription.expiresAt) < now) {
+        approvedCategorySubscription = null; // Subscription expired
+      } else {
+        // Found valid APPROVED direct subscription - return it
+        return {
+          status: approvedCategorySubscription.status,
+          startsAt: approvedCategorySubscription.startsAt,
+          expiresAt: approvedCategorySubscription.expiresAt,
+        };
+      }
+    }
+
+    // Priority 2: Check for APPROVED combo offer subscription that includes this category
+    let approvedComboSubscription = await Subscription.findOne({
+      userId: new Types.ObjectId(userId),
+      isComboOffer: true,
+      status: 'APPROVED',
+      'comboOfferDetails.categoryIds': categoryObjectId,
+    })
+      .select('status startsAt expiresAt comboOfferDetails')
+      .lean();
+
+    // Check if approved combo subscription is still valid (not expired)
+    if (approvedComboSubscription) {
+      if (approvedComboSubscription.expiresAt && new Date(approvedComboSubscription.expiresAt) < now) {
+        approvedComboSubscription = null; // Subscription expired
+      } else {
+        // Found valid APPROVED combo subscription - return it
+        return {
+          status: approvedComboSubscription.status,
+          startsAt: approvedComboSubscription.startsAt,
+          expiresAt: approvedComboSubscription.expiresAt,
+        };
+      }
+    }
+
+    // Priority 3: If no APPROVED subscription found, check for any direct category subscription (for status display)
+    // This is for showing PENDING_REVIEW or REJECTED status
+    const anyCategorySubscription = await Subscription.findOne({
+      userId: new Types.ObjectId(userId),
+      categoryId: categoryObjectId,
       isComboOffer: false,
     })
       .select('status startsAt expiresAt categoryId')
       .lean();
 
-    if (categorySubscription) {
+    if (anyCategorySubscription) {
       return {
-        status: categorySubscription.status,
-        startsAt: categorySubscription.startsAt,
-        expiresAt: categorySubscription.expiresAt,
+        status: anyCategorySubscription.status,
+        startsAt: anyCategorySubscription.startsAt,
+        expiresAt: anyCategorySubscription.expiresAt,
       };
     }
 
-    // Check for combo offer subscription that includes this category
-    const comboSubscription = await Subscription.findOne({
-      userId: new Types.ObjectId(userId),
-      isComboOffer: true,
-      status: 'APPROVED',
-      'comboOfferDetails.categoryIds': new Types.ObjectId(categoryId),
-    })
-      .select('status startsAt expiresAt comboOfferDetails')
-      .lean();
-
-    if (comboSubscription) {
-      // Check if subscription is still valid (not expired)
-      const now = new Date();
-      if (comboSubscription.expiresAt && new Date(comboSubscription.expiresAt) < now) {
-        return null; // Subscription expired
-      }
-
-      return {
-        status: comboSubscription.status,
-        startsAt: comboSubscription.startsAt,
-        expiresAt: comboSubscription.expiresAt,
-      };
-    }
-
+    // No subscription found
     return null;
   },
 };

@@ -356,11 +356,12 @@ export default function CategoryPage() {
     });
   }, [user, userSubscriptions, categoryId]);
 
-  // Check if user has category subscription (any status) for this category
-  const hasCategorySubscription = useMemo(() => {
+  // Check if user has PENDING_REVIEW category subscription for this category
+  // Only show "View Subscription Status" for PENDING_REVIEW, not for REJECTED or APPROVED
+  const hasPendingCategorySubscription = useMemo(() => {
     if (!user || !userSubscriptions || !categoryId) return false;
     return userSubscriptions.some((sub: any) => {
-      if (!sub.isComboOffer && sub.categoryId) {
+      if (!sub.isComboOffer && sub.categoryId && sub.status === 'PENDING_REVIEW') {
         const subCategoryId = (sub.categoryId._id || sub.categoryId).toString();
         return subCategoryId === categoryId;
       }
@@ -1549,8 +1550,8 @@ export default function CategoryPage() {
                           <span className="text-sm">Unlimited Test Re-Attempts</span>
                         </li>
                       </ul>
-                      {hasCategorySubscription ? (
-                        // If category subscription exists, show View Subscription Status button
+                      {hasPendingCategorySubscription ? (
+                        // If PENDING_REVIEW category subscription exists, show View Subscription Status button
                         <Link to="/subscriptions" className="w-full">
                           <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3">
                             View Subscription Status
