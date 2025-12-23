@@ -20,6 +20,8 @@ export const paymentService = {
   }) {
     // Determine category IDs based on payment type
     let categoryIds: Types.ObjectId[] = [];
+    // Calculate categoryAmounts map for individual category amounts
+    let categoryAmounts = new Map<string, number>();
     
     if (data.comboOfferId) {
       // Payment for combo offer
@@ -28,6 +30,8 @@ export const paymentService = {
         throw new Error('Combo offer not found');
       }
       categoryIds = comboOffer.categoryIds;
+      // For combo offers, the amount is for the entire combo, not individual categories
+      // So we don't set categoryAmounts for combo offers
     } else if (data.cartId) {
       // Payment from cart
       const cart = await Cart.findById(data.cartId).populate('items.categoryId');
@@ -41,14 +45,35 @@ export const paymentService = {
       categoryIds = cart.items.map((item: any) => {
         const catId = item.categoryId._id || item.categoryId;
         // Ensure it's an ObjectId instance
-        return catId instanceof Types.ObjectId ? catId : new Types.ObjectId(catId);
+        const categoryObjectId = catId instanceof Types.ObjectId ? catId : new Types.ObjectId(catId);
+        // Store individual amount for this category
+        categoryAmounts.set(categoryObjectId.toString(), item.price || 0);
+        return categoryObjectId;
       });
     } else if (data.categoryIds && data.categoryIds.length > 0) {
-      // Multiple categories directly
+      // Multiple categories directly - split amount equally (or use category prices if available)
       categoryIds = data.categoryIds.map(id => new Types.ObjectId(id));
+      // For direct category payments, we'll need to get prices from categories
+      const { Category } = await import('../models/Category');
+      const categories = await Category.find({ _id: { $in: categoryIds } });
+      const totalCategoryPrice = categories.reduce((sum, cat) => sum + (cat.price || 0), 0);
+      // If total category price matches payment amount, use individual prices
+      // Otherwise, split equally
+      if (Math.abs(totalCategoryPrice - data.amount) < 0.01) {
+        categories.forEach(cat => {
+          categoryAmounts.set(cat._id.toString(), cat.price || 0);
+        });
+      } else {
+        // Split equally
+        const amountPerCategory = data.amount / categoryIds.length;
+        categoryIds.forEach(catId => {
+          categoryAmounts.set(catId.toString(), amountPerCategory);
+        });
+      }
     } else if (data.categoryId) {
       // Single category (backward compatibility)
       categoryIds = [new Types.ObjectId(data.categoryId)];
+      categoryAmounts.set(categoryIds[0].toString(), data.amount);
     } else {
       throw new Error('Either categoryId, categoryIds, cartId, or comboOfferId must be provided');
     }
@@ -62,6 +87,7 @@ export const paymentService = {
       comboOfferId: data.comboOfferId ? new Types.ObjectId(data.comboOfferId) : undefined,
       comboDurationMonths: data.comboDurationMonths,
       amount: data.amount,
+      categoryAmounts: categoryAmounts.size > 0 ? Object.fromEntries(categoryAmounts) : undefined,
       payerName: data.payerName,
       payerUpiId: data.payerUpiId,
       upiTransactionId: data.upiTransactionId,
@@ -113,6 +139,24 @@ export const paymentService = {
         subscription.comboOfferDetails = comboOfferDetails;
         subscription.selectedDurationMonths = data.comboDurationMonths;
         subscription.selectedTimePeriod = selectedTimePeriod;
+        
+        // Add history entry
+        if (!subscription.subscriptionHistory) {
+          subscription.subscriptionHistory = [];
+        }
+        subscription.subscriptionHistory.push({
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          paymentReferenceId: payment._id,
+          status: 'PENDING_REVIEW',
+          isComboOffer: true,
+          amount: data.amount,
+          comboOfferId: new Types.ObjectId(data.comboOfferId),
+          comboOfferDetails: comboOfferDetails,
+          selectedDurationMonths: data.comboDurationMonths,
+          selectedTimePeriod: selectedTimePeriod,
+        });
+        
         await subscription.save();
       } else {
         subscription = await Subscription.create({
@@ -124,6 +168,18 @@ export const paymentService = {
           selectedTimePeriod: selectedTimePeriod,
           status: 'PENDING_REVIEW',
           paymentReferenceId: payment._id,
+          subscriptionHistory: [{
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            paymentReferenceId: payment._id,
+            status: 'PENDING_REVIEW',
+            isComboOffer: true,
+            amount: data.amount,
+            comboOfferId: new Types.ObjectId(data.comboOfferId),
+            comboOfferDetails: comboOfferDetails,
+            selectedDurationMonths: data.comboDurationMonths,
+            selectedTimePeriod: selectedTimePeriod,
+          }],
         });
       }
 
@@ -149,14 +205,36 @@ export const paymentService = {
             throw new Error(`Category ${categoryObjectId} is already part of a combo offer subscription`);
           }
 
+          // Get individual amount for this category from categoryAmounts
+          let categoryAmount = categoryAmounts.get(categoryObjectId.toString()) || 0;
+          // If no individual amount found in map, calculate from total amount divided by number of categories
+          if (categoryAmount === 0 && categoryIds.length > 0) {
+            categoryAmount = data.amount / categoryIds.length;
+          }
+
           if (subscription) {
             // Update existing subscription regardless of current status (REJECTED, PENDING_REVIEW, etc.)
             // IMPORTANT: Unset comboOfferId if it exists to avoid sparse index conflicts
             subscription.status = 'PENDING_REVIEW';
             subscription.paymentReferenceId = payment._id;
             subscription.isComboOffer = false;
+            subscription.amount = categoryAmount;
             // Explicitly unset comboOfferId to ensure it's completely removed (not null)
             subscription.comboOfferId = undefined;
+            
+            // Add history entry
+            if (!subscription.subscriptionHistory) {
+              subscription.subscriptionHistory = [];
+            }
+            subscription.subscriptionHistory.push({
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              paymentReferenceId: payment._id,
+              status: 'PENDING_REVIEW',
+              isComboOffer: false,
+              amount: categoryAmount,
+            });
+            
             // Use updateOne with $unset to ensure the field is completely removed from the document
             await Subscription.updateOne(
               { _id: subscription._id },
@@ -173,6 +251,15 @@ export const paymentService = {
               isComboOffer: false,
               status: 'PENDING_REVIEW',
               paymentReferenceId: payment._id,
+              amount: categoryAmount,
+              subscriptionHistory: [{
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                paymentReferenceId: payment._id,
+                status: 'PENDING_REVIEW',
+                isComboOffer: false,
+                amount: categoryAmount,
+              }],
             };
             // Explicitly ensure comboOfferId is NOT in the object (not even as undefined or null)
             delete subscriptionData.comboOfferId;
@@ -207,6 +294,20 @@ export const paymentService = {
                     subscription.paymentReferenceId = payment._id;
                     subscription.isComboOffer = false;
                     subscription.categoryId = categoryObjectId;
+                    subscription.amount = categoryAmount;
+                    
+                    // Add history entry
+                    if (!subscription.subscriptionHistory) {
+                      subscription.subscriptionHistory = [];
+                    }
+                    subscription.subscriptionHistory.push({
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      paymentReferenceId: payment._id,
+                      status: 'PENDING_REVIEW',
+                      isComboOffer: false,
+                    });
+                    
                     // Use $unset to completely remove comboOfferId field if it exists
                     await Subscription.updateOne(
                       { _id: subscription._id },
@@ -228,6 +329,20 @@ export const paymentService = {
                     subscription.paymentReferenceId = payment._id;
                     subscription.isComboOffer = false;
                     subscription.categoryId = categoryObjectId;
+                    subscription.amount = categoryAmount;
+                    
+                    // Add history entry
+                    if (!subscription.subscriptionHistory) {
+                      subscription.subscriptionHistory = [];
+                    }
+                    subscription.subscriptionHistory.push({
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      paymentReferenceId: payment._id,
+                      status: 'PENDING_REVIEW',
+                      isComboOffer: false,
+                    });
+                    
                     await Subscription.updateOne(
                       { _id: subscription._id },
                       { $unset: { comboOfferId: "" } }

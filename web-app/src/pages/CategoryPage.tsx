@@ -169,7 +169,9 @@ export default function CategoryPage() {
   const testSets = testSetsData?.sets || [];
   const allTestSets = allTestSetsForCount || [];
 
-  // Fetch all attempts for this category
+  const { user } = useAuthStore();
+
+  // Fetch all attempts for this category - always call when user is logged in
   const { data: allAttempts, isLoading: isLoadingAttempts } = useQuery({
     queryKey: ["allAttempts", categoryId],
     queryFn: async () => {
@@ -180,7 +182,7 @@ export default function CategoryPage() {
         return [];
       }
     },
-    enabled: !!categoryId && isSubscriptionApproved,
+    enabled: !!categoryId && !!user,
   });
 
   // Check if all critical APIs are loaded (for initial page load)
@@ -190,9 +192,8 @@ export default function CategoryPage() {
     !isLoadingCategory &&
     !isLoadingSubscription &&
     !isLoadingAllTestSets &&
-    (!isSubscriptionApproved || !isLoadingAttempts);
+    (!user || !isLoadingAttempts);
 
-  const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
   // Fetch leaderboard data for all test sets to get ranks

@@ -8,6 +8,7 @@ export interface IPayment extends Document {
   comboOfferId?: Types.ObjectId; // Reference to combo offer if payment is for combo
   comboDurationMonths?: number; // Duration in months for combo offer payment
   amount: number;
+  categoryAmounts?: Map<string, number>; // Map of categoryId (as string) to individual amount paid for that category
   payerName: string;
   payerUpiId: string;
   upiTransactionId?: string;
@@ -27,6 +28,7 @@ const PaymentSchema = new Schema<IPayment>(
     comboOfferId: { type: Schema.Types.ObjectId, ref: 'ComboOffer' }, // Reference to combo offer
     comboDurationMonths: { type: Number }, // Duration in months for combo offer
     amount: { type: Number, required: true },
+    categoryAmounts: { type: Map, of: Number }, // Map of categoryId (as string) to individual amount
     payerName: { type: String, required: true },
     payerUpiId: { type: String, required: true },
     upiTransactionId: { type: String },

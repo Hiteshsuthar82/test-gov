@@ -17,6 +17,21 @@ export interface ISelectedTimePeriod {
   originalPrice: number;
 }
 
+export interface ISubscriptionHistory {
+  createdAt: Date;
+  updatedAt: Date;
+  startsAt?: Date;
+  expiresAt?: Date;
+  paymentReferenceId: Types.ObjectId;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
+  isComboOffer: boolean;
+  amount?: number;
+  comboOfferId?: Types.ObjectId;
+  comboOfferDetails?: IComboOfferDetails;
+  selectedDurationMonths?: number;
+  selectedTimePeriod?: ISelectedTimePeriod;
+}
+
 export interface ISubscription extends Document {
   userId: Types.ObjectId;
   categoryId?: Types.ObjectId; // Optional for combo offers
@@ -27,8 +42,10 @@ export interface ISubscription extends Document {
   selectedTimePeriod?: ISelectedTimePeriod;
   status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
   paymentReferenceId?: Types.ObjectId;
+  amount?: number; // Individual amount paid for this subscription (for category subscriptions from cart)
   startsAt?: Date;
   expiresAt?: Date;
+  subscriptionHistory?: ISubscriptionHistory[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,6 +73,28 @@ const SelectedTimePeriodSchema = new Schema<ISelectedTimePeriod>(
   { _id: false }
 );
 
+const SubscriptionHistorySchema = new Schema<ISubscriptionHistory>(
+  {
+    createdAt: { type: Date, required: true, default: Date.now },
+    updatedAt: { type: Date, required: true, default: Date.now },
+    startsAt: { type: Date },
+    expiresAt: { type: Date },
+    paymentReferenceId: { type: Schema.Types.ObjectId, ref: 'Payment', required: true },
+    status: {
+      type: String,
+      enum: ['PENDING_REVIEW', 'APPROVED', 'REJECTED'],
+      required: true,
+    },
+    isComboOffer: { type: Boolean, required: true },
+    amount: { type: Number },
+    comboOfferId: { type: Schema.Types.ObjectId, ref: 'ComboOffer' },
+    comboOfferDetails: ComboOfferDetailsSchema,
+    selectedDurationMonths: { type: Number },
+    selectedTimePeriod: SelectedTimePeriodSchema,
+  },
+  { _id: false, timestamps: false }
+);
+
 const SubscriptionSchema = new Schema<ISubscription>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -71,8 +110,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
       required: true,
     },
     paymentReferenceId: { type: Schema.Types.ObjectId, ref: 'Payment' },
+    amount: { type: Number }, // Individual amount paid for this subscription
     startsAt: { type: Date },
     expiresAt: { type: Date },
+    subscriptionHistory: { type: [SubscriptionHistorySchema], default: [] },
   },
   { timestamps: true }
 );

@@ -131,6 +131,53 @@ export const adminPaymentService = {
         subscription.paymentReferenceId = payment._id;
         subscription.startsAt = startsAt;
         subscription.expiresAt = expiresAt;
+        
+        // Update history entry for this payment
+        if (!subscription.subscriptionHistory) {
+          subscription.subscriptionHistory = [];
+        }
+        const historyEntry = subscription.subscriptionHistory.find(
+          (h: any) => h.paymentReferenceId && h.paymentReferenceId.toString() === payment._id.toString()
+        );
+        if (historyEntry) {
+          historyEntry.status = 'APPROVED';
+          historyEntry.updatedAt = new Date();
+          historyEntry.startsAt = startsAt;
+          historyEntry.expiresAt = expiresAt;
+          // Update combo offer details if they exist
+          if (subscription.comboOfferDetails) {
+            historyEntry.comboOfferDetails = subscription.comboOfferDetails;
+          }
+          if (subscription.comboOfferId) {
+            historyEntry.comboOfferId = subscription.comboOfferId;
+          }
+          if (subscription.selectedDurationMonths) {
+            historyEntry.selectedDurationMonths = subscription.selectedDurationMonths;
+          }
+          if (subscription.selectedTimePeriod) {
+            historyEntry.selectedTimePeriod = subscription.selectedTimePeriod;
+          }
+          if (payment.amount) {
+            historyEntry.amount = payment.amount;
+          }
+        } else {
+          // Create history entry if it doesn't exist (safety fallback)
+          subscription.subscriptionHistory.push({
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            paymentReferenceId: payment._id,
+            status: 'APPROVED',
+            isComboOffer: true,
+            startsAt: startsAt,
+            expiresAt: expiresAt,
+            amount: payment.amount,
+            comboOfferId: subscription.comboOfferId,
+            comboOfferDetails: subscription.comboOfferDetails,
+            selectedDurationMonths: subscription.selectedDurationMonths,
+            selectedTimePeriod: subscription.selectedTimePeriod,
+          });
+        }
+        
         await subscription.save();
       } else {
         // If subscription doesn't exist, create it (shouldn't happen, but handle it)
@@ -163,6 +210,20 @@ export const adminPaymentService = {
           paymentReferenceId: payment._id,
           startsAt: startsAt,
           expiresAt: expiresAt,
+          subscriptionHistory: [{
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            paymentReferenceId: payment._id,
+            status: 'APPROVED',
+            isComboOffer: true,
+            startsAt: startsAt,
+            expiresAt: expiresAt,
+            amount: payment.amount,
+            comboOfferId: payment.comboOfferId,
+            comboOfferDetails: comboOfferDetails,
+            selectedDurationMonths: payment.comboDurationMonths,
+            selectedTimePeriod: selectedTimePeriod,
+          }],
         });
       }
 
@@ -186,6 +247,19 @@ export const adminPaymentService = {
             isComboOffer: false,
           });
 
+          // Get individual amount for this category from payment.categoryAmounts
+          let categoryAmount = 0;
+          if (payment.categoryAmounts && payment.categoryAmounts instanceof Map) {
+            categoryAmount = payment.categoryAmounts.get(categoryObjId.toString()) || 0;
+          } else if (payment.categoryAmounts && typeof payment.categoryAmounts === 'object') {
+            // Handle case where categoryAmounts is stored as plain object
+            categoryAmount = (payment.categoryAmounts as any)[categoryObjId.toString()] || 0;
+          }
+          // If no individual amount found, calculate from total amount divided by number of categories
+          if (categoryAmount === 0 && categoryIds.length > 0) {
+            categoryAmount = payment.amount / categoryIds.length;
+          }
+
           // Default to 1 year (365 days) for regular subscriptions
           const startsAt = new Date();
           const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
@@ -196,6 +270,35 @@ export const adminPaymentService = {
             subscription.startsAt = startsAt;
             subscription.expiresAt = expiresAt;
             subscription.isComboOffer = false; // Ensure it's marked as non-combo
+            subscription.amount = categoryAmount;
+            
+            // Update history entry for this payment
+            if (!subscription.subscriptionHistory) {
+              subscription.subscriptionHistory = [];
+            }
+            const historyEntry = subscription.subscriptionHistory.find(
+              (h: any) => h.paymentReferenceId && h.paymentReferenceId.toString() === payment._id.toString()
+            );
+            if (historyEntry) {
+              historyEntry.status = 'APPROVED';
+              historyEntry.updatedAt = new Date();
+              historyEntry.startsAt = startsAt;
+              historyEntry.expiresAt = expiresAt;
+              historyEntry.amount = categoryAmount;
+            } else {
+              // Create history entry if it doesn't exist (safety fallback)
+              subscription.subscriptionHistory.push({
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                paymentReferenceId: payment._id,
+                status: 'APPROVED',
+                isComboOffer: false,
+                startsAt: startsAt,
+                expiresAt: expiresAt,
+                amount: categoryAmount,
+              });
+            }
+            
             await subscription.save();
           } else {
             // Try to create new subscription
@@ -207,8 +310,19 @@ export const adminPaymentService = {
                 // Don't set comboOfferId - leave it undefined to avoid sparse index conflicts
                 status: 'APPROVED',
                 paymentReferenceId: payment._id,
+                amount: categoryAmount,
                 startsAt: startsAt,
                 expiresAt: expiresAt,
+                subscriptionHistory: [{
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                  paymentReferenceId: payment._id,
+                  status: 'APPROVED',
+                  isComboOffer: false,
+                  startsAt: startsAt,
+                  expiresAt: expiresAt,
+                  amount: categoryAmount,
+                }],
               });
             } catch (error: any) {
               // If duplicate key error (E11000), find and update existing subscription
@@ -242,6 +356,35 @@ export const adminPaymentService = {
                   subscription.startsAt = startsAt;
                   subscription.expiresAt = expiresAt;
                   subscription.isComboOffer = false;
+                  subscription.amount = categoryAmount;
+                  
+                  // Update history entry for this payment
+                  if (!subscription.subscriptionHistory) {
+                    subscription.subscriptionHistory = [];
+                  }
+                  const historyEntry = subscription.subscriptionHistory.find(
+                    (h: any) => h.paymentReferenceId && h.paymentReferenceId.toString() === payment._id.toString()
+                  );
+                  if (historyEntry) {
+                    historyEntry.status = 'APPROVED';
+                    historyEntry.updatedAt = new Date();
+                    historyEntry.startsAt = startsAt;
+                    historyEntry.expiresAt = expiresAt;
+                    historyEntry.amount = categoryAmount;
+                  } else {
+                    // Create history entry if it doesn't exist (safety fallback)
+                    subscription.subscriptionHistory.push({
+                      createdAt: new Date(),
+                      updatedAt: new Date(),
+                      paymentReferenceId: payment._id,
+                      status: 'APPROVED',
+                      isComboOffer: false,
+                      startsAt: startsAt,
+                      expiresAt: expiresAt,
+                      amount: categoryAmount,
+                    });
+                  }
+                  
                   await subscription.save();
                 } else {
                   // If we still can't find it, throw error
@@ -320,6 +463,49 @@ export const adminPaymentService = {
       if (subscription) {
         subscription.status = 'REJECTED';
         subscription.paymentReferenceId = payment._id;
+        
+        // Update history entry for this payment
+        if (!subscription.subscriptionHistory) {
+          subscription.subscriptionHistory = [];
+        }
+        const historyEntry = subscription.subscriptionHistory.find(
+          (h: any) => h.paymentReferenceId && h.paymentReferenceId.toString() === payment._id.toString()
+        );
+        if (historyEntry) {
+          historyEntry.status = 'REJECTED';
+          historyEntry.updatedAt = new Date();
+          // Update combo offer details if they exist
+          if (subscription.comboOfferDetails) {
+            historyEntry.comboOfferDetails = subscription.comboOfferDetails;
+          }
+          if (subscription.comboOfferId) {
+            historyEntry.comboOfferId = subscription.comboOfferId;
+          }
+          if (subscription.selectedDurationMonths) {
+            historyEntry.selectedDurationMonths = subscription.selectedDurationMonths;
+          }
+          if (subscription.selectedTimePeriod) {
+            historyEntry.selectedTimePeriod = subscription.selectedTimePeriod;
+          }
+          if (payment.amount) {
+            historyEntry.amount = payment.amount;
+          }
+        } else {
+          // Create history entry if it doesn't exist (safety fallback)
+          subscription.subscriptionHistory.push({
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            paymentReferenceId: payment._id,
+            status: 'REJECTED',
+            isComboOffer: true,
+            amount: payment.amount,
+            comboOfferId: subscription.comboOfferId,
+            comboOfferDetails: subscription.comboOfferDetails,
+            selectedDurationMonths: subscription.selectedDurationMonths,
+            selectedTimePeriod: subscription.selectedTimePeriod,
+          });
+        }
+        
         await subscription.save();
       }
 
@@ -347,6 +533,41 @@ export const adminPaymentService = {
           if (subscription) {
             subscription.status = 'REJECTED';
             subscription.paymentReferenceId = payment._id;
+            
+            // Get individual amount for this category from payment.categoryAmounts
+            let categoryAmount = 0;
+            if (payment.categoryAmounts && payment.categoryAmounts instanceof Map) {
+              categoryAmount = payment.categoryAmounts.get(categoryObjId.toString()) || 0;
+            } else if (payment.categoryAmounts && typeof payment.categoryAmounts === 'object') {
+              categoryAmount = (payment.categoryAmounts as any)[categoryObjId.toString()] || 0;
+            }
+            if (categoryAmount === 0 && categoryIds.length > 0) {
+              categoryAmount = payment.amount / categoryIds.length;
+            }
+            
+            // Update history entry for this payment
+            if (!subscription.subscriptionHistory) {
+              subscription.subscriptionHistory = [];
+            }
+            const historyEntry = subscription.subscriptionHistory.find(
+              (h: any) => h.paymentReferenceId && h.paymentReferenceId.toString() === payment._id.toString()
+            );
+            if (historyEntry) {
+              historyEntry.status = 'REJECTED';
+              historyEntry.updatedAt = new Date();
+              historyEntry.amount = categoryAmount;
+            } else {
+              // Create history entry if it doesn't exist (safety fallback)
+              subscription.subscriptionHistory.push({
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                paymentReferenceId: payment._id,
+                status: 'REJECTED',
+                isComboOffer: subscription.isComboOffer,
+                amount: categoryAmount,
+              });
+            }
+            
             await subscription.save();
           }
 
