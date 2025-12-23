@@ -43,6 +43,19 @@ export const paymentController = {
         return sendError(res, 'Payment screenshot is required', 400);
       }
 
+      // Parse categoryDurationMonthsMap if provided
+      let categoryDurationMonthsMap: Record<string, number> | undefined = undefined;
+      if (req.body.categoryDurationMonthsMap) {
+        try {
+          categoryDurationMonthsMap = JSON.parse(req.body.categoryDurationMonthsMap);
+        } catch (error) {
+          // If it's already an object, use it directly
+          if (typeof req.body.categoryDurationMonthsMap === 'object') {
+            categoryDurationMonthsMap = req.body.categoryDurationMonthsMap;
+          }
+        }
+      }
+
       const result = await paymentService.create({
         categoryId: req.body.categoryId, // For backward compatibility
         categoryIds: req.body.categoryIds, // For multiple categories
@@ -50,6 +63,7 @@ export const paymentController = {
         comboOfferId: req.body.comboOfferId, // For combo offer payment
         comboDurationMonths: req.body.comboDurationMonths ? parseInt(req.body.comboDurationMonths) : undefined,
         categoryDurationMonths: req.body.categoryDurationMonths ? parseInt(req.body.categoryDurationMonths) : undefined, // For single category with time periods
+        categoryDurationMonthsMap: categoryDurationMonthsMap, // For cart payments with multiple categories
         amount: parseFloat(req.body.amount),
         payerName: req.body.payerName,
         payerUpiId: req.body.payerUpiId,

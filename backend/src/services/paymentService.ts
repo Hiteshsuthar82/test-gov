@@ -13,6 +13,7 @@ export const paymentService = {
     comboOfferId?: string;
     comboDurationMonths?: number;
     categoryDurationMonths?: number; // For single category with time periods
+    categoryDurationMonthsMap?: Map<string, number> | Record<string, number>; // For cart with multiple categories
     amount: number;
     payerName: string;
     payerUpiId: string;
@@ -221,6 +222,31 @@ export const paymentService = {
             categoryAmount = data.amount / categoryIds.length;
           }
 
+          // Get duration for this category
+          let selectedDurationMonths: number | undefined = undefined;
+          let selectedTimePeriod: any = null;
+          
+          // For single category payment
+          if (data.categoryDurationMonths && categoryIds.length === 1) {
+            selectedDurationMonths = data.categoryDurationMonths;
+          }
+          // For cart payment with multiple categories
+          else if (data.categoryDurationMonthsMap) {
+            if (data.categoryDurationMonthsMap instanceof Map) {
+              selectedDurationMonths = data.categoryDurationMonthsMap.get(categoryObjectId.toString());
+            } else if (typeof data.categoryDurationMonthsMap === 'object') {
+              selectedDurationMonths = (data.categoryDurationMonthsMap as any)[categoryObjectId.toString()];
+            }
+          }
+
+          // Get category to find time period details
+          const { Category } = await import('../models/Category');
+          const category = await Category.findById(categoryObjectId);
+          
+          if (category && category.timePeriods && category.timePeriods.length > 0 && selectedDurationMonths) {
+            selectedTimePeriod = category.timePeriods.find((tp: any) => tp.months === selectedDurationMonths);
+          }
+
           if (subscription) {
             // Update existing subscription regardless of current status (REJECTED, PENDING_REVIEW, etc.)
             // IMPORTANT: Unset comboOfferId if it exists to avoid sparse index conflicts
@@ -228,6 +254,8 @@ export const paymentService = {
             subscription.paymentReferenceId = payment._id;
             subscription.isComboOffer = false;
             subscription.amount = categoryAmount;
+            subscription.selectedDurationMonths = selectedDurationMonths;
+            subscription.selectedTimePeriod = selectedTimePeriod;
             // Explicitly unset comboOfferId to ensure it's completely removed (not null)
             subscription.comboOfferId = undefined;
             
@@ -242,6 +270,8 @@ export const paymentService = {
               status: 'PENDING_REVIEW',
               isComboOffer: false,
               amount: categoryAmount,
+              selectedDurationMonths: selectedDurationMonths,
+              selectedTimePeriod: selectedTimePeriod,
             });
             
             // Use updateOne with $unset to ensure the field is completely removed from the document
@@ -261,6 +291,8 @@ export const paymentService = {
               status: 'PENDING_REVIEW',
               paymentReferenceId: payment._id,
               amount: categoryAmount,
+              selectedDurationMonths: selectedDurationMonths,
+              selectedTimePeriod: selectedTimePeriod,
               subscriptionHistory: [{
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -268,6 +300,8 @@ export const paymentService = {
                 status: 'PENDING_REVIEW',
                 isComboOffer: false,
                 amount: categoryAmount,
+                selectedDurationMonths: selectedDurationMonths,
+                selectedTimePeriod: selectedTimePeriod,
               }],
             };
             // Explicitly ensure comboOfferId is NOT in the object (not even as undefined or null)
@@ -304,6 +338,8 @@ export const paymentService = {
                     subscription.isComboOffer = false;
                     subscription.categoryId = categoryObjectId;
                     subscription.amount = categoryAmount;
+                    subscription.selectedDurationMonths = selectedDurationMonths;
+                    subscription.selectedTimePeriod = selectedTimePeriod;
                     
                     // Add history entry
                     if (!subscription.subscriptionHistory) {
@@ -315,6 +351,9 @@ export const paymentService = {
                       paymentReferenceId: payment._id,
                       status: 'PENDING_REVIEW',
                       isComboOffer: false,
+                      amount: categoryAmount,
+                      selectedDurationMonths: selectedDurationMonths,
+                      selectedTimePeriod: selectedTimePeriod,
                     });
                     
                     // Use $unset to completely remove comboOfferId field if it exists

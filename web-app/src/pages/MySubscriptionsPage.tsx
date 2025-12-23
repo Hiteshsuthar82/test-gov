@@ -435,11 +435,21 @@ export default function MySubscriptionsPage() {
                   Subscription History
                 </DialogTitle>
                 {selectedSubscription && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    {selectedSubscription.isComboOffer
-                      ? selectedSubscription.comboOfferDetails?.name || 'Combo Offer'
-                      : selectedSubscription.categoryId?.name || 'Category'}
-                  </p>
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600">
+                      {selectedSubscription.isComboOffer
+                        ? selectedSubscription.comboOfferDetails?.name || 'Combo Offer'
+                        : selectedSubscription.categoryId?.name || 'Category'}
+                    </p>
+                    {selectedSubscription.selectedDurationMonths && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <FiClock className="w-3.5 h-3.5 text-purple-500" />
+                        <span className="text-xs font-semibold text-purple-600">
+                          {selectedSubscription.selectedDurationMonths} {selectedSubscription.selectedDurationMonths === 1 ? 'Month' : 'Months'} Plan
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               <button
@@ -491,7 +501,7 @@ export default function MySubscriptionsPage() {
                           {/* Content Card */}
                           <div className="flex-1 bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                             <div className="flex items-start justify-between mb-3">
-                              <div>
+                              <div className="flex flex-wrap items-center gap-2">
                                 <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
                                   isApproved 
                                     ? 'bg-green-100 text-green-700' 
@@ -502,12 +512,17 @@ export default function MySubscriptionsPage() {
                                   {history.status.replace('_', ' ')}
                                 </div>
                                 {history.isComboOffer && (
-                                  <span className="ml-2 inline-block px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded">
+                                  <span className="inline-block px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded">
                                     COMBO
                                   </span>
                                 )}
+                                {history.selectedDurationMonths && (
+                                  <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+                                    {history.selectedDurationMonths} {history.selectedDurationMonths === 1 ? 'Mo' : 'Mos'}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-gray-500 flex-shrink-0">
                                 {formatDateTime(history.createdAt)}
                               </span>
                             </div>
@@ -538,8 +553,9 @@ export default function MySubscriptionsPage() {
 
                               {history.selectedDurationMonths && (
                                 <div className="flex items-center gap-2">
+                                  <FiClock className="w-4 h-4 text-purple-500" />
                                   <span className="text-gray-600">Duration:</span>
-                                  <span className="text-gray-900">
+                                  <span className="font-semibold text-purple-600">
                                     {history.selectedDurationMonths} {history.selectedDurationMonths === 1 ? 'Month' : 'Months'}
                                   </span>
                                 </div>

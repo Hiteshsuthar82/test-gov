@@ -372,6 +372,8 @@ export const adminPaymentService = {
               historyEntry.startsAt = startsAt;
               historyEntry.expiresAt = expiresAt;
               historyEntry.amount = categoryAmount;
+              historyEntry.selectedDurationMonths = selectedDurationMonths;
+              historyEntry.selectedTimePeriod = selectedTimePeriod;
             } else {
               // Create history entry if it doesn't exist (safety fallback)
               subscription.subscriptionHistory.push({
@@ -383,6 +385,8 @@ export const adminPaymentService = {
                 startsAt: startsAt,
                 expiresAt: expiresAt,
                 amount: categoryAmount,
+                selectedDurationMonths: selectedDurationMonths,
+                selectedTimePeriod: selectedTimePeriod,
               });
             }
             
@@ -411,6 +415,8 @@ export const adminPaymentService = {
                   startsAt: startsAt,
                   expiresAt: expiresAt,
                   amount: categoryAmount,
+                  selectedDurationMonths: selectedDurationMonths,
+                  selectedTimePeriod: selectedTimePeriod,
                 }],
               });
             } catch (error: any) {
@@ -446,6 +452,8 @@ export const adminPaymentService = {
                   subscription.expiresAt = expiresAt;
                   subscription.isComboOffer = false;
                   subscription.amount = categoryAmount;
+                  subscription.selectedDurationMonths = selectedDurationMonths;
+                  subscription.selectedTimePeriod = selectedTimePeriod;
                   
                   // Update history entry for this payment
                   if (!subscription.subscriptionHistory) {
@@ -460,6 +468,8 @@ export const adminPaymentService = {
                     historyEntry.startsAt = startsAt;
                     historyEntry.expiresAt = expiresAt;
                     historyEntry.amount = categoryAmount;
+                    historyEntry.selectedDurationMonths = selectedDurationMonths;
+                    historyEntry.selectedTimePeriod = selectedTimePeriod;
                   } else {
                     // Create history entry if it doesn't exist (safety fallback)
                     subscription.subscriptionHistory.push({
@@ -471,6 +481,8 @@ export const adminPaymentService = {
                       startsAt: startsAt,
                       expiresAt: expiresAt,
                       amount: categoryAmount,
+                      selectedDurationMonths: selectedDurationMonths,
+                      selectedTimePeriod: selectedTimePeriod,
                     });
                   }
                   

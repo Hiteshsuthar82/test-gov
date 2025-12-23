@@ -123,6 +123,18 @@ export default function PaymentPage() {
       }
     } else if (cartId) {
       formDataToSend.append('cartId', cartId)
+      // Add duration map for cart items if available
+      if (cart && cart.items) {
+        const durationMap: Record<string, number> = {}
+        cart.items.forEach((item: any) => {
+          if (item.selectedDurationMonths) {
+            durationMap[item.categoryId._id || item.categoryId] = item.selectedDurationMonths
+          }
+        })
+        if (Object.keys(durationMap).length > 0) {
+          formDataToSend.append('categoryDurationMonthsMap', JSON.stringify(durationMap))
+        }
+      }
     } else if (categoryId) {
       formDataToSend.append('categoryId', categoryId)
       if (categoryDurationMonths) {
