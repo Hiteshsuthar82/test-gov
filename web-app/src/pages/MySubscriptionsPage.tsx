@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import Layout from '@/components/layout/Layout'
 import { 
   FiCheckCircle, 
@@ -14,7 +14,8 @@ import {
   FiCalendar, 
   FiAlertCircle,
   FiTarget,
-  FiList
+  FiList,
+  FiX
 } from 'react-icons/fi'
 
 interface SubscriptionHistory {
@@ -415,22 +416,36 @@ export default function MySubscriptionsPage() {
 
       {/* History Modal */}
       <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900">
-              Subscription History
-            </DialogTitle>
-            {selectedSubscription && (
-              <p className="text-sm text-gray-600 mt-1">
-                {selectedSubscription.isComboOffer
-                  ? selectedSubscription.comboOfferDetails?.name || 'Combo Offer'
-                  : selectedSubscription.categoryId?.name || 'Category'}
-              </p>
-            )}
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          {/* Fixed Header */}
+          <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b bg-white">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <DialogTitle className="text-2xl font-bold text-gray-900">
+                  Subscription History
+                </DialogTitle>
+                {selectedSubscription && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {selectedSubscription.isComboOffer
+                      ? selectedSubscription.comboOfferDetails?.name || 'Combo Offer'
+                      : selectedSubscription.categoryId?.name || 'Category'}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="ml-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
           </DialogHeader>
 
-          {selectedSubscription && selectedSubscription.subscriptionHistory && selectedSubscription.subscriptionHistory.length > 0 ? (
-            <div className="mt-6 space-y-6">
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {selectedSubscription && selectedSubscription.subscriptionHistory && selectedSubscription.subscriptionHistory.length > 0 ? (
+              <div className="space-y-6">
               {/* Timeline */}
               <div className="relative">
                 {/* Timeline Line */}
@@ -532,12 +547,24 @@ export default function MySubscriptionsPage() {
                     })}
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              No history available
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No history available
+              </div>
+            )}
+          </div>
+
+          {/* Fixed Footer */}
+          <DialogFooter className="flex-shrink-0 px-6 py-4 border-t bg-white">
+            <Button
+              onClick={() => setIsHistoryModalOpen(false)}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Layout>
