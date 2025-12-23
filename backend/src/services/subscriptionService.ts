@@ -33,7 +33,7 @@ export const subscriptionService = {
     const categoryObjectId = new Types.ObjectId(categoryId);
 
     // Priority 1: Check for APPROVED direct category subscription
-    let approvedCategorySubscription = await Subscription.findOne({
+    const approvedCategorySubscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       categoryId: categoryObjectId,
       isComboOffer: false,
@@ -45,19 +45,24 @@ export const subscriptionService = {
     // Check if approved category subscription is still valid (not expired)
     if (approvedCategorySubscription) {
       if (approvedCategorySubscription.expiresAt && new Date(approvedCategorySubscription.expiresAt) < now) {
-        approvedCategorySubscription = null; // Subscription expired
-      } else {
-        // Found valid APPROVED direct subscription - return it
+        // Subscription expired - return EXPIRED status for UI logic
         return {
-          status: approvedCategorySubscription.status,
+          status: 'EXPIRED',
           startsAt: approvedCategorySubscription.startsAt,
           expiresAt: approvedCategorySubscription.expiresAt,
         };
       }
+
+      // Found valid APPROVED direct subscription - return it
+      return {
+        status: approvedCategorySubscription.status,
+        startsAt: approvedCategorySubscription.startsAt,
+        expiresAt: approvedCategorySubscription.expiresAt,
+      };
     }
 
     // Priority 2: Check for APPROVED combo offer subscription that includes this category
-    let approvedComboSubscription = await Subscription.findOne({
+    const approvedComboSubscription = await Subscription.findOne({
       userId: new Types.ObjectId(userId),
       isComboOffer: true,
       status: 'APPROVED',
@@ -69,15 +74,20 @@ export const subscriptionService = {
     // Check if approved combo subscription is still valid (not expired)
     if (approvedComboSubscription) {
       if (approvedComboSubscription.expiresAt && new Date(approvedComboSubscription.expiresAt) < now) {
-        approvedComboSubscription = null; // Subscription expired
-      } else {
-        // Found valid APPROVED combo subscription - return it
+        // Subscription expired - return EXPIRED status for UI logic
         return {
-          status: approvedComboSubscription.status,
+          status: 'EXPIRED',
           startsAt: approvedComboSubscription.startsAt,
           expiresAt: approvedComboSubscription.expiresAt,
         };
       }
+
+      // Found valid APPROVED combo subscription - return it
+      return {
+        status: approvedComboSubscription.status,
+        startsAt: approvedComboSubscription.startsAt,
+        expiresAt: approvedComboSubscription.expiresAt,
+      };
     }
 
     // Priority 3: If no APPROVED subscription found, check for any direct category subscription (for status display)

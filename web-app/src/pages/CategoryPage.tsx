@@ -581,6 +581,32 @@ export default function CategoryPage() {
     }
   };
 
+  const handleViewResults = (testSetId: string, attemptId: string) => {
+    // Check if this is a free test
+    const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
+    const isFreeTest = testSet?.isFree || false;
+
+    // For free tests, always allow viewing results
+    if (isFreeTest) {
+      navigate(`/test/${testSetId}/results/${attemptId}`);
+      return;
+    }
+
+    // For paid tests, differentiate between no subscription and expired subscription
+    if (!subscriptionStatus) {
+      alert("Please subscribe to this category first");
+      return;
+    }
+
+    if (subscriptionStatus.status === "EXPIRED") {
+      alert("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      return;
+    }
+
+    // If subscription is APPROVED (or any other allowed status), navigate to results
+    navigate(`/test/${testSetId}/results/${attemptId}`);
+  };
+
   // Get last attempt date for a test set
   const getLastAttemptDate = (testSetId: string) => {
     if (!allAttempts || !Array.isArray(allAttempts)) return null;
@@ -1361,9 +1387,7 @@ export default function CategoryPage() {
                                     size="sm"
                                     className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                     onClick={() =>
-                                      navigate(
-                                        `/test/${testSet._id}/results/${attemptData.attemptId}`
-                                      )
+                                      handleViewResults(testSet._id, attemptData.attemptId)
                                     }
                                   >
                                     Solution
@@ -1373,9 +1397,7 @@ export default function CategoryPage() {
                                     size="sm"
                                     className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                     onClick={() =>
-                                      navigate(
-                                        `/test/${testSet._id}/results/${attemptData.attemptId}`
-                                      )
+                                      handleViewResults(testSet._id, attemptData.attemptId)
                                     }
                                   >
                                     Analysis

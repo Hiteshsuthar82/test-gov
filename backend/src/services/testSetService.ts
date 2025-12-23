@@ -15,53 +15,11 @@ export const testSetService = {
       subsectionId?: string;
     }
   ) {
-    // Check subscription - but allow free tests even without subscription
-    // Priority 1: Check for APPROVED direct category subscription
-    const now = new Date();
-    let subscription = await Subscription.findOne({
-      userId: new Types.ObjectId(userId),
-      categoryId: new Types.ObjectId(categoryId),
-      isComboOffer: false,
-      status: 'APPROVED',
-    }).lean();
-
-    // Check if direct subscription is still valid (not expired)
-    if (subscription) {
-      if (subscription.expiresAt && new Date(subscription.expiresAt) < now) {
-        subscription = null; // Subscription expired
-      }
-    }
-
-    // Priority 2: If no valid direct subscription, check for APPROVED combo offer subscription
-    if (!subscription) {
-      const comboSubscription = await Subscription.findOne({
-        userId: new Types.ObjectId(userId),
-        isComboOffer: true,
-        status: 'APPROVED',
-        'comboOfferDetails.categoryIds': new Types.ObjectId(categoryId),
-      }).lean();
-
-      if (comboSubscription) {
-        // Check if combo subscription is still valid (not expired)
-        if (!comboSubscription.expiresAt || new Date(comboSubscription.expiresAt) >= now) {
-          subscription = comboSubscription;
-        }
-      }
-    }
-
-    // If no subscription, we'll filter to only show free tests
-    const hasSubscription = !!subscription;
-
-    // Build filter
+    // Build filter - always return all active sets for this category
     const filter: any = {
       categoryId: new Types.ObjectId(categoryId),
       isActive: true,
     };
-
-    // If no subscription, only show free tests
-    if (!hasSubscription) {
-      filter.isFree = true;
-    }
 
     if (options?.sectionId) {
       filter.sectionId = options.sectionId;
