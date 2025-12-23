@@ -323,11 +323,31 @@ export default function CategoryPage() {
     enabled: !!user,
   });
 
-  // Check if user has combo offer subscription that includes this category
-  const hasComboOfferForCategory = useMemo(() => {
+  // Check if user has APPROVED combo offer subscription that includes this category
+  const hasApprovedComboOfferForCategory = useMemo(() => {
+    if (!user || !userSubscriptions || !categoryId) return false;
+    const now = new Date();
+    return userSubscriptions.some((sub: any) => {
+      if (sub.isComboOffer && sub.status === 'APPROVED' && sub.comboOfferDetails?.categoryIds) {
+        const includesCategory = sub.comboOfferDetails.categoryIds.some(
+          (cat: any) => (cat._id || cat).toString() === categoryId
+        );
+        if (includesCategory) {
+          // Check if subscription is still valid (not expired)
+          if (!sub.expiresAt || new Date(sub.expiresAt) >= now) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+  }, [user, userSubscriptions, categoryId]);
+
+  // Check if user has PENDING_REVIEW combo offer subscription that includes this category
+  const hasPendingComboOfferForCategory = useMemo(() => {
     if (!user || !userSubscriptions || !categoryId) return false;
     return userSubscriptions.some((sub: any) => {
-      if (sub.isComboOffer && sub.comboOfferDetails?.categoryIds) {
+      if (sub.isComboOffer && sub.status === 'PENDING_REVIEW' && sub.comboOfferDetails?.categoryIds) {
         return sub.comboOfferDetails.categoryIds.some(
           (cat: any) => (cat._id || cat).toString() === categoryId
         );
@@ -336,20 +356,20 @@ export default function CategoryPage() {
     });
   }, [user, userSubscriptions, categoryId]);
 
-  // Check if user has direct category subscription
+  // Check if user has category subscription (any status) for this category
   const hasCategorySubscription = useMemo(() => {
     if (!user || !userSubscriptions || !categoryId) return false;
     return userSubscriptions.some((sub: any) => {
       if (!sub.isComboOffer && sub.categoryId) {
-        return (sub.categoryId._id || sub.categoryId).toString() === categoryId;
+        const subCategoryId = (sub.categoryId._id || sub.categoryId).toString();
+        return subCategoryId === categoryId;
       }
       return false;
     });
   }, [user, userSubscriptions, categoryId]);
 
   // Fetch active combo offers for this category
-  // For logged-in users: only fetch if they don't have subscription
-  // For non-logged-in users: always fetch
+  // Always fetch combo offers regardless of subscription status
   const { data: comboOffers } = useQuery({
     queryKey: ['comboOffers', categoryId],
     queryFn: async () => {
@@ -368,11 +388,7 @@ export default function CategoryPage() {
         return [];
       }
     },
-    enabled: !!categoryId && (
-      !user 
-        ? true // Always fetch for non-logged-in users
-        : (userSubscriptions !== undefined && !hasComboOfferForCategory && !hasCategorySubscription) // For logged-in users, wait for subscriptions and check
-    ),
+    enabled: !!categoryId, // Always fetch if categoryId exists
   });
 
   // Get the latest active combo offer (first one from the array, as they're sorted by createdAt desc)
@@ -385,6 +401,12 @@ export default function CategoryPage() {
   }, [comboOffers]);
 
   // Determine if we should show combo offer
+  // Show combo offer if:
+  // 1. Combo offer exists
+  // 2. User doesn't have APPROVED combo subscription for this category
+  // 3. Even if user has category subscription, still show combo offer
+  // 4. Even if combo subscription was rejected, still show combo offer
+  // 5. If PENDING_REVIEW combo subscription exists, show with message
   const shouldShowComboOffer = useMemo(() => {
     // Must have a combo offer to show
     if (!latestComboOffer) return false;
@@ -394,9 +416,10 @@ export default function CategoryPage() {
       return true;
     }
     
-    // For logged-in users: show if they don't have subscription
-    return !hasComboOfferForCategory && !hasCategorySubscription;
-  }, [user, hasComboOfferForCategory, hasCategorySubscription, latestComboOffer]);
+    // For logged-in users: show if they don't have APPROVED combo subscription
+    // (Don't check category subscription - show combo offer even if user has category subscription)
+    return !hasApprovedComboOfferForCategory;
+  }, [user, hasApprovedComboOfferForCategory, latestComboOffer]);
 
   // Fetch cart to check if category is in cart
   const { data: cart } = useQuery({
@@ -964,7 +987,14 @@ export default function CategoryPage() {
                               ))}
                             </ul>
                           )}
-                          {user ? (
+                          {hasPendingComboOfferForCategory ? (
+                            // If PENDING_REVIEW combo subscription exists, show message and link to subscriptions page
+                            <Link to="/subscriptions">
+                              <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 text-sm">
+                                View Subscription Status
+                              </Button>
+                            </Link>
+                          ) : user ? (
                             <Link to={`/checkout?comboOfferId=${latestComboOffer._id}`}>
                               <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 text-sm">
                                 Get Combo Offer
@@ -1449,9 +1479,11 @@ export default function CategoryPage() {
             {/* Right Sidebar */}
             <div className="lg:col-span-1 space-y-6 mt-32">
               {/* Subscription Card - Only for logged in users */}
+              {/* Hide pricing card only if user has APPROVED combo subscription for this category */}
               {user &&
                 (!subscriptionStatus ||
-                  subscriptionStatus.status !== "APPROVED") && (
+                  subscriptionStatus.status !== "APPROVED") &&
+                !hasApprovedComboOfferForCategory && (
                   <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
                     <CardContent className="p-6">
                       <div className="mb-4">
@@ -1517,42 +1549,52 @@ export default function CategoryPage() {
                           <span className="text-sm">Unlimited Test Re-Attempts</span>
                         </li>
                       </ul>
-                      <div className="flex gap-2">
-                        {isInCart ? (
-                          <Button
-                            onClick={() => {
-                              if (categoryId) {
-                                removeFromCartMutation.mutate(categoryId);
-                              }
-                            }}
-                            variant="outline"
-                            className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                            disabled={removeFromCartMutation.isPending}
-                          >
-                            <BsCartCheck className="mr-2" />
-                            Added
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={() => {
-                              if (categoryId) {
-                                addToCartMutation.mutate(categoryId);
-                              }
-                            }}
-                            variant="outline"
-                            className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                            disabled={addToCartMutation.isPending}
-                          >
-                            <FiShoppingCart className="mr-2" />
-                            Add to Cart
-                          </Button>
-                        )}
-                        <Link to={`/categories/${categoryId}/payment`} className="flex-1">
-                          <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                            Buy Now
+                      {hasCategorySubscription ? (
+                        // If category subscription exists, show View Subscription Status button
+                        <Link to="/subscriptions" className="w-full">
+                          <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3">
+                            View Subscription Status
                           </Button>
                         </Link>
-                      </div>
+                      ) : (
+                        // If no category subscription, show Add to Cart and Buy Now buttons
+                        <div className="flex gap-2">
+                          {isInCart ? (
+                            <Button
+                              onClick={() => {
+                                if (categoryId) {
+                                  removeFromCartMutation.mutate(categoryId);
+                                }
+                              }}
+                              variant="outline"
+                              className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                              disabled={removeFromCartMutation.isPending}
+                            >
+                              <BsCartCheck className="mr-2" />
+                              Added
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => {
+                                if (categoryId) {
+                                  addToCartMutation.mutate(categoryId);
+                                }
+                              }}
+                              variant="outline"
+                              className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                              disabled={addToCartMutation.isPending}
+                            >
+                              <FiShoppingCart className="mr-2" />
+                              Add to Cart
+                            </Button>
+                          )}
+                          <Link to={`/categories/${categoryId}/payment`} className="flex-1">
+                            <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                              Buy Now
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
