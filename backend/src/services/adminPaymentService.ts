@@ -179,6 +179,7 @@ export const adminPaymentService = {
       subscriptions = await Promise.all(
         categoryIds.map(async (categoryId) => {
           const categoryObjId = categoryId._id || categoryId;
+          // Find subscription by categoryId first (most specific)
           let subscription = await Subscription.findOne({
             userId: payment.userId,
             categoryId: categoryObjId,
@@ -194,17 +195,62 @@ export const adminPaymentService = {
             subscription.paymentReferenceId = payment._id;
             subscription.startsAt = startsAt;
             subscription.expiresAt = expiresAt;
+            subscription.isComboOffer = false; // Ensure it's marked as non-combo
             await subscription.save();
           } else {
-            subscription = await Subscription.create({
-              userId: payment.userId,
-              categoryId: categoryObjId,
-              isComboOffer: false,
-              status: 'APPROVED',
-              paymentReferenceId: payment._id,
-              startsAt: startsAt,
-              expiresAt: expiresAt,
-            });
+            // Try to create new subscription
+            try {
+              subscription = await Subscription.create({
+                userId: payment.userId,
+                categoryId: categoryObjId,
+                isComboOffer: false,
+                // Don't set comboOfferId - leave it undefined to avoid sparse index conflicts
+                status: 'APPROVED',
+                paymentReferenceId: payment._id,
+                startsAt: startsAt,
+                expiresAt: expiresAt,
+              });
+            } catch (error: any) {
+              // If duplicate key error (E11000), find and update existing subscription
+              if (error.code === 11000) {
+                // Try to find by categoryId (should exist due to userId+categoryId index)
+                subscription = await Subscription.findOne({
+                  userId: payment.userId,
+                  categoryId: categoryObjId,
+                });
+                
+                // If not found by categoryId, try to find by userId and comboOfferId: null
+                if (!subscription) {
+                  subscription = await Subscription.findOne({
+                    userId: payment.userId,
+                    $or: [
+                      { comboOfferId: null },
+                      { comboOfferId: { $exists: false } }
+                    ],
+                    isComboOffer: false,
+                  });
+                  
+                  // If found but for different category, update it to this category
+                  if (subscription) {
+                    subscription.categoryId = categoryObjId;
+                  }
+                }
+                
+                if (subscription) {
+                  subscription.status = 'APPROVED';
+                  subscription.paymentReferenceId = payment._id;
+                  subscription.startsAt = startsAt;
+                  subscription.expiresAt = expiresAt;
+                  subscription.isComboOffer = false;
+                  await subscription.save();
+                } else {
+                  // If we still can't find it, throw error
+                  throw new Error(`Duplicate subscription detected for user ${payment.userId} and category ${categoryObjId}, but subscription not found. Error: ${error.message}`);
+                }
+              } else {
+                throw error;
+              }
+            }
           }
 
           return subscription;

@@ -129,24 +129,92 @@ export const paymentService = {
       // For regular category subscriptions, create one per category
       subscriptions = await Promise.all(
         categoryIds.map(async (categoryId) => {
+          // Check for existing subscription by categoryId (this uses the userId+categoryId index)
           let subscription = await Subscription.findOne({
             userId: new Types.ObjectId(data.userId),
             categoryId: categoryId,
-            isComboOffer: false, // Ensure it's not a combo offer
           });
 
+          // If found but it's a combo offer subscription, skip it (shouldn't happen, but safety check)
+          if (subscription && subscription.isComboOffer) {
+            throw new Error(`Category ${categoryId} is already part of a combo offer subscription`);
+          }
+
           if (subscription) {
+            // Update existing subscription
             subscription.status = 'PENDING_REVIEW';
             subscription.paymentReferenceId = payment._id;
+            subscription.isComboOffer = false; // Ensure it's marked as non-combo
             await subscription.save();
           } else {
-            subscription = await Subscription.create({
-              userId: new Types.ObjectId(data.userId),
-              categoryId: categoryId,
-              isComboOffer: false,
-              status: 'PENDING_REVIEW',
-              paymentReferenceId: payment._id,
-            });
+            // No existing subscription for this category - create new one
+            // Don't include comboOfferId field for non-combo subscriptions (leave it undefined)
+            // This avoids conflicts with the sparse unique index on userId+comboOfferId
+            try {
+              subscription = await Subscription.create({
+                userId: new Types.ObjectId(data.userId),
+                categoryId: categoryId,
+                isComboOffer: false,
+                // Don't set comboOfferId at all - let it be undefined to avoid sparse index conflicts
+                status: 'PENDING_REVIEW',
+                paymentReferenceId: payment._id,
+              });
+            } catch (error: any) {
+              // If duplicate key error (E11000), it means subscription exists - find and update it
+              if (error.code === 11000) {
+                // The duplicate could be on userId+categoryId or userId+comboOfferId index
+                // First try to find by categoryId (most specific)
+                subscription = await Subscription.findOne({
+                  userId: new Types.ObjectId(data.userId),
+                  categoryId: categoryId,
+                });
+                
+                // If not found by categoryId, the duplicate is likely on userId+comboOfferId index
+                // This means there's a subscription with comboOfferId: null for this user
+                // but for a different category. We need to find it and check if we can update it
+                if (!subscription) {
+                  // Find subscription with comboOfferId: null/undefined
+                  subscription = await Subscription.findOne({
+                    userId: new Types.ObjectId(data.userId),
+                    $or: [
+                      { comboOfferId: null },
+                      { comboOfferId: { $exists: false } }
+                    ],
+                    isComboOffer: false,
+                  });
+                  
+                  // If found, check if it's for a different category
+                  // If so, we need to update it to this category (since we can only have one with comboOfferId: null)
+                  if (subscription) {
+                    // Update the existing subscription to this category
+                    subscription.categoryId = categoryId;
+                    subscription.status = 'PENDING_REVIEW';
+                    subscription.paymentReferenceId = payment._id;
+                    subscription.isComboOffer = false;
+                    await subscription.save();
+                  }
+                } else {
+                  // Found by categoryId - update it
+                  subscription.status = 'PENDING_REVIEW';
+                  subscription.paymentReferenceId = payment._id;
+                  subscription.isComboOffer = false;
+                  await subscription.save();
+                }
+                
+                if (!subscription) {
+                  // If we still can't find it, log the error and throw
+                  console.error('Duplicate key error but subscription not found:', {
+                    userId: data.userId,
+                    categoryId: categoryId.toString(),
+                    error: error.message,
+                    keyPattern: error.keyPattern,
+                  });
+                  throw new Error(`Duplicate subscription detected but not found. Please contact support. Error: ${error.message}`);
+                }
+              } else {
+                throw error;
+              }
+            }
           }
 
           return subscription;

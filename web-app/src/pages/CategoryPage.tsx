@@ -1453,18 +1453,11 @@ export default function CategoryPage() {
                 (!subscriptionStatus ||
                   subscriptionStatus.status !== "APPROVED") && (
                   <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white relative overflow-hidden">
-                    {latestComboOffer && (
-                      <div className="absolute top-2 right-2">
-                        <span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded transform rotate-12">
-                          COMBO
-                        </span>
-                      </div>
-                    )}
                     <CardContent className="p-6">
                       <div className="mb-4">
                         <h3 className="text-2xl font-bold mb-4">Pricing Details</h3>
-                        {/* Show pricing for category when no combo offer */}
-                        {!latestComboOffer && category && (
+                        {/* Always show pricing for category */}
+                        {category && (
                           <div className="flex items-baseline gap-2">
                             {categoryData?.category?.discountedPrice !== undefined && categoryData?.category?.originalPrice !== undefined ? (
                               <>
@@ -1492,96 +1485,73 @@ export default function CategoryPage() {
                           </div>
                         )}
                       </div>
-                      {latestComboOffer?.benefits && latestComboOffer.benefits.length > 0 ? (
-                        <ul className="space-y-3 mb-6">
-                          {latestComboOffer.benefits.map((benefit: string, idx: number) => (
-                            <li key={idx} className="flex items-center gap-2">
-                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                              <span className="text-sm">{benefit}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <ul className="space-y-3 mb-6">
-                          {category?.totalSetsCount && category.totalSetsCount > 0 && (
-                            <li className="flex items-center gap-2">
-                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                              <span className="text-sm">{category.totalSetsCount} Test Series</span>
-                            </li>
-                          )}
-                          {(category?.freeTests !== undefined && category?.freeTests > 0) && (
-                            <li className="flex items-center gap-2">
-                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                              <span className="text-sm">{category.freeTests} Free Tests</span>
-                            </li>
-                          )}
-                          {category?.languages && category.languages.length > 0 && (
-                            <li className="flex items-center gap-2">
-                              <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                              <span className="text-sm">Available in {category.languages.join(", ")}</span>
-                            </li>
-                          )}
+                      <ul className="space-y-3 mb-6">
+                        {category?.totalSetsCount && category.totalSetsCount > 0 && (
                           <li className="flex items-center gap-2">
                             <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                            <span className="text-sm">Weekly live test</span>
+                            <span className="text-sm">{category.totalSetsCount} Test Series</span>
                           </li>
-                          <li className="flex items-center gap-2">
-                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                            <span className="text-sm">Unlimited Practice</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
-                            <span className="text-sm">Unlimited Test Re-Attempts</span>
-                          </li>
-                        </ul>
-                      )}
-                      <div className="flex gap-2">
-                        {latestComboOffer ? (
-                          <>
-                            <Link to={`/checkout?comboOfferId=${latestComboOffer._id}`} className="flex-1">
-                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                                Get Combo Offer
-                              </Button>
-                            </Link>
-                          </>
-                        ) : (
-                          <>
-                            {isInCart ? (
-                              <Button
-                                onClick={() => {
-                                  if (categoryId) {
-                                    removeFromCartMutation.mutate(categoryId);
-                                  }
-                                }}
-                                variant="outline"
-                                className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                                disabled={removeFromCartMutation.isPending}
-                              >
-                                <BsCartCheck className="mr-2" />
-                                Added
-                              </Button>
-                            ) : (
-                              <Button
-                                onClick={() => {
-                                  if (categoryId) {
-                                    addToCartMutation.mutate(categoryId);
-                                  }
-                                }}
-                                variant="outline"
-                                className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                                disabled={addToCartMutation.isPending}
-                              >
-                                <FiShoppingCart className="mr-2" />
-                                Add to Cart
-                              </Button>
-                            )}
-                            <Link to={`/categories/${categoryId}/payment`} className="flex-1">
-                              <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
-                                Buy Now
-                              </Button>
-                            </Link>
-                          </>
                         )}
+                        {(category?.freeTests !== undefined && category?.freeTests > 0) && (
+                          <li className="flex items-center gap-2">
+                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                            <span className="text-sm">{category.freeTests} Free Tests</span>
+                          </li>
+                        )}
+                        {category?.languages && category.languages.length > 0 && (
+                          <li className="flex items-center gap-2">
+                            <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                            <span className="text-sm">Available in {category.languages.join(", ")}</span>
+                          </li>
+                        )}
+                        <li className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">Weekly live test</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">Unlimited Practice</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">Unlimited Test Re-Attempts</span>
+                        </li>
+                      </ul>
+                      <div className="flex gap-2">
+                        {isInCart ? (
+                          <Button
+                            onClick={() => {
+                              if (categoryId) {
+                                removeFromCartMutation.mutate(categoryId);
+                              }
+                            }}
+                            variant="outline"
+                            className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                            disabled={removeFromCartMutation.isPending}
+                          >
+                            <BsCartCheck className="mr-2" />
+                            Added
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => {
+                              if (categoryId) {
+                                addToCartMutation.mutate(categoryId);
+                              }
+                            }}
+                            variant="outline"
+                            className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
+                            disabled={addToCartMutation.isPending}
+                          >
+                            <FiShoppingCart className="mr-2" />
+                            Add to Cart
+                          </Button>
+                        )}
+                        <Link to={`/categories/${categoryId}/payment`} className="flex-1">
+                          <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3">
+                            Buy Now
+                          </Button>
+                        </Link>
                       </div>
                     </CardContent>
                   </Card>
