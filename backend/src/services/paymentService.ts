@@ -81,8 +81,8 @@ export const paymentService = {
     // Create payment
     const payment = await Payment.create({
       userId: new Types.ObjectId(data.userId),
-      categoryId: categoryIds.length === 1 ? categoryIds[0] : undefined, // For backward compatibility
-      categoryIds: categoryIds.length > 1 ? categoryIds : undefined,
+      categoryId: categoryIds.length === 1 && !data.cartId && !data.comboOfferId ? categoryIds[0] : undefined, // For backward compatibility (single category, not cart/combo)
+      categoryIds: (categoryIds.length > 0 && (data.cartId || data.comboOfferId || categoryIds.length > 1)) ? categoryIds : undefined, // Always store for cart/combo or multiple categories
       cartId: data.cartId ? new Types.ObjectId(data.cartId) : undefined,
       comboOfferId: data.comboOfferId ? new Types.ObjectId(data.comboOfferId) : undefined,
       comboDurationMonths: data.comboDurationMonths,

@@ -163,7 +163,7 @@ export default function PaymentsListPage() {
                         <div className="font-medium">Cart Payment</div>
                         {payment.categoryIds && payment.categoryIds.length > 0 && (
                           <div className="text-xs text-gray-500 mt-1">
-                            {payment.categoryIds.length} items
+                            {payment.categoryIds.length} {payment.categoryIds.length === 1 ? 'category' : 'categories'}
                           </div>
                         )}
                       </div>

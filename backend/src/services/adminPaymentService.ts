@@ -9,6 +9,7 @@ export const adminPaymentService = {
     status?: string;
     categoryId?: string;
     partnerId?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }) {
@@ -33,6 +34,56 @@ export const adminPaymentService = {
       } else {
         // No users with this partner, return empty result
         filter.userId = { $in: [] };
+      }
+    }
+
+    // Search by user name or category name
+    let userIdsFromSearch: Types.ObjectId[] = [];
+    let categoryIdsFromSearch: Types.ObjectId[] = [];
+    
+    if (query.search) {
+      const searchRegex = new RegExp(query.search, 'i');
+      
+      // Find users matching search
+      const matchingUsers = await User.find({
+        $or: [
+          { name: searchRegex },
+          { email: searchRegex },
+          { mobile: searchRegex }
+        ]
+      }).select('_id');
+      userIdsFromSearch = matchingUsers.map(u => u._id);
+      
+      // Find categories matching search
+      const Category = (await import('../models/Category')).Category;
+      const matchingCategories = await Category.find({
+        name: searchRegex
+      }).select('_id');
+      categoryIdsFromSearch = matchingCategories.map(c => c._id);
+      
+      // Apply search filter
+      const searchFilter: any = {
+        $or: []
+      };
+      
+      if (userIdsFromSearch.length > 0) {
+        searchFilter.$or.push({ userId: { $in: userIdsFromSearch } });
+      }
+      
+      if (categoryIdsFromSearch.length > 0) {
+        searchFilter.$or.push(
+          { categoryId: { $in: categoryIdsFromSearch } },
+          { categoryIds: { $in: categoryIdsFromSearch } }
+        );
+      }
+      
+      // If we have search results, add to filter
+      if (searchFilter.$or.length > 0) {
+        filter.$and = filter.$and || [];
+        filter.$and.push(searchFilter);
+      } else {
+        // No matches found, return empty result
+        filter._id = { $in: [] };
       }
     }
 
