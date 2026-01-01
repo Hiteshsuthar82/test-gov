@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { SubscriptionPopup } from "@/components/subscription";
 import Layout from "@/components/layout/Layout";
 import {
   FiClock,
@@ -92,6 +93,10 @@ export default function CategoryPage() {
 
   // Track if add to cart is in progress for this category
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+
+  // Subscription popup state
+  const [isSubscriptionPopupOpen, setIsSubscriptionPopupOpen] = useState(false);
+  const [popupSelectedDurationMonths, setPopupSelectedDurationMonths] = useState<number | undefined>(undefined);
 
   const { data: categoryData, isLoading: isLoadingCategory } = useQuery({
     queryKey: ["category", categoryId],
@@ -573,10 +578,12 @@ export default function CategoryPage() {
     // Check if this is a free test
     const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
     const isFreeTest = testSet?.isFree || false;
-    
+
     // Only require subscription if test is not free
     if (!isFreeTest && (!subscriptionStatus || subscriptionStatus.status !== "APPROVED")) {
-      toast.error("Please subscribe to this category first");
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
       return;
     }
 
@@ -621,7 +628,9 @@ export default function CategoryPage() {
     }
 
     if (subscriptionStatus.status === "EXPIRED") {
-      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
       return;
     }
 
@@ -647,7 +656,9 @@ export default function CategoryPage() {
     }
 
     if (subscriptionStatus.status === "EXPIRED") {
-      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
       return;
     }
 
@@ -673,7 +684,9 @@ export default function CategoryPage() {
     }
 
     if (subscriptionStatus.status === "EXPIRED") {
-      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
       return;
     }
 
@@ -748,6 +761,7 @@ export default function CategoryPage() {
     }
     return count.toString();
   };
+
 
   // Show full page shimmer only on initial load (not when section/subsection changes)
   if (isInitialLoad) {
@@ -899,6 +913,19 @@ export default function CategoryPage() {
 
   return (
     <Layout>
+      <SubscriptionPopup
+        isOpen={isSubscriptionPopupOpen}
+        onOpenChange={setIsSubscriptionPopupOpen}
+        selectedDurationMonths={popupSelectedDurationMonths}
+        onDurationChange={setPopupSelectedDurationMonths}
+        shouldShowComboOffer={shouldShowComboOffer}
+        latestComboOffer={latestComboOffer}
+        category={category}
+        categoryData={categoryData}
+        categoryId={categoryId}
+        hasPendingComboOfferForCategory={hasPendingComboOfferForCategory}
+        hasPendingCategorySubscription={hasPendingCategorySubscription}
+      />
       <div className="min-h-screen bg-gray-50 pt-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Header Section */}
@@ -1478,19 +1505,17 @@ export default function CategoryPage() {
                                   </Button>
                                 </div>
                               ) : isLocked ? (
-                                <Link to={`/categories/${categoryId}/payment${
-                                  category?.timePeriods && category.timePeriods.length > 0
-                                    ? `?duration=${selectedDurationMonths || category.timePeriods[0].months}`
-                                    : ''
-                                }`}>
-                                  <Button
-                                    size="sm"
-                                    className="bg-transparent text-purple-700 border border-purple-700 hover:bg-purple-100"
-                                  >
-                                    <FiLock className="mr-2" />
-                                    Unlock
-                                  </Button>
-                                </Link>
+                                <Button
+                                  size="sm"
+                                  className="bg-transparent text-purple-700 border border-purple-700 hover:bg-purple-100"
+                                  onClick={() => {
+                                    setPopupSelectedDurationMonths(undefined);
+                                    setIsSubscriptionPopupOpen(true);
+                                  }}
+                                >
+                                  <FiLock className="mr-2" />
+                                  Unlock
+                                </Button>
                               ) : (
                                 <Button
                                   size="sm"
@@ -1598,7 +1623,7 @@ export default function CategoryPage() {
                                   Select Duration:
                                 </Label>
                                 <div className="grid grid-cols-2 gap-1.5">
-                                  {category.timePeriods.map((period) => {
+                                  {category.timePeriods.map((period: TimePeriod) => {
                                     const isSelected = (selectedDurationMonths || category.timePeriods![0].months) === period.months;
                                     const discount = period.originalPrice > period.price
                                       ? Math.round(((period.originalPrice - period.price) / period.originalPrice) * 100)
@@ -1694,9 +1719,17 @@ export default function CategoryPage() {
                             <span className="text-sm">Available in {category.languages.join(", ")}</span>
                           </li>
                         )}
-                        <li className="flex items-center gap-2">
+                        {/* <li className="flex items-center gap-2">
                           <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                           <span className="text-sm">Weekly live test</span>
+                        </li> */}
+                        <li className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">chapter wise test</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          <span className="text-sm">section wise test</span>
                         </li>
                         <li className="flex items-center gap-2">
                           <FiCheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />

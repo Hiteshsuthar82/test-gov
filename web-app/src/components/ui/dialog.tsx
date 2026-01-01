@@ -26,9 +26,11 @@ export const Dialog: React.FC<DialogProps> = ({ open, children, onOpenChange, pr
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={preventClose ? undefined : handleBackdropClick}
     >
-      <div className="fixed inset-0 bg-black/50" />
+      <div 
+        className="fixed inset-0 bg-black/50" 
+        onClick={preventClose ? undefined : () => onOpenChange && onOpenChange(false)}
+      />
       <div className="relative z-50" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
