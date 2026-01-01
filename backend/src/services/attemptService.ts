@@ -619,7 +619,7 @@ export const attemptService = {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
-    }).populate('testSetId', 'totalMarks');
+    }).populate('testSetId', 'totalMarks durationMinutes sections hasSectionWiseTiming negativeMarking name');
 
     if (!attempt) {
       throw new Error('Attempt not found');
@@ -641,6 +641,7 @@ export const attemptService = {
 
       return {
         questionId: question._id,
+        questionOrder: question.questionOrder,
         sectionId: question.sectionId,
         languages: question.languages,
         direction: enContent.direction,
@@ -657,6 +658,7 @@ export const attemptService = {
         selectedOptionId: qa.selectedOptionId,
         isCorrect: qa.isCorrect,
         marks: question.marks,
+        averageTimeSeconds: question.averageTimeSeconds,
         explanationText: enContent.explanationText,
         explanationFormattedText: enContent.explanationFormattedText,
         explanationImageUrls: enContent.explanationImageUrls || [],
@@ -675,6 +677,16 @@ export const attemptService = {
       status: attempt.status,
       startedAt: attempt.startedAt,
       endedAt: attempt.endedAt,
+      categoryId: attempt.categoryId,
+      testSet: testSet ? {
+        _id: testSet._id,
+        name: testSet.name,
+        totalMarks: testSet.totalMarks,
+        durationMinutes: testSet.durationMinutes,
+        sections: testSet.sections,
+        hasSectionWiseTiming: testSet.hasSectionWiseTiming,
+        negativeMarking: testSet.negativeMarking,
+      } : null,
       questions: detailedQuestions,
     };
   },

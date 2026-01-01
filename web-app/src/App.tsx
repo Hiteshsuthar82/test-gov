@@ -20,6 +20,8 @@ import NoticesPage from './pages/NoticesPage'
 import TestAttemptInstructionsPage from './pages/TestAttemptInstructionsPage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
+import AnalysisPage from './pages/AnalysisPage'
+import SolutionPage from './pages/SolutionPage'
 
 const queryClient = new QueryClient()
 
@@ -104,6 +106,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ResultsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test/:testSetId/analysis/:attemptId"
+            element={
+              <ProtectedRoute>
+                <AnalysisPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test/:testSetId/solution/:attemptId"
+            element={
+              <ProtectedRoute>
+                <SolutionPage />
               </ProtectedRoute>
             }
           />

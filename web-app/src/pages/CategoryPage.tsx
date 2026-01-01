@@ -619,6 +619,58 @@ export default function CategoryPage() {
     navigate(`/test/${testSetId}/results/${attemptId}`);
   };
 
+  const handleViewAnalysis = (testSetId: string, attemptId: string) => {
+    // Check if this is a free test
+    const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
+    const isFreeTest = testSet?.isFree || false;
+
+    // For free tests, always allow viewing analysis
+    if (isFreeTest) {
+      navigate(`/test/${testSetId}/analysis/${attemptId}`);
+      return;
+    }
+
+    // For paid tests, differentiate between no subscription and expired subscription
+    if (!subscriptionStatus) {
+      toast.error("Please subscribe to this category first");
+      return;
+    }
+
+    if (subscriptionStatus.status === "EXPIRED") {
+      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      return;
+    }
+
+    // If subscription is APPROVED (or any other allowed status), navigate to analysis
+    navigate(`/test/${testSetId}/analysis/${attemptId}`);
+  };
+
+  const handleViewSolution = (testSetId: string, attemptId: string) => {
+    // Check if this is a free test
+    const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
+    const isFreeTest = testSet?.isFree || false;
+
+    // For free tests, always allow viewing solution
+    if (isFreeTest) {
+      navigate(`/test/${testSetId}/solution/${attemptId}`);
+      return;
+    }
+
+    // For paid tests, differentiate between no subscription and expired subscription
+    if (!subscriptionStatus) {
+      toast.error("Please subscribe to this category first");
+      return;
+    }
+
+    if (subscriptionStatus.status === "EXPIRED") {
+      toast.error("Your current subscription has expired. Please take another subscription to see the solution and analysis.");
+      return;
+    }
+
+    // If subscription is APPROVED (or any other allowed status), navigate to solution
+    navigate(`/test/${testSetId}/solution/${attemptId}`);
+  };
+
   // Get last attempt date for a test set
   const getLastAttemptDate = (testSetId: string) => {
     if (!allAttempts || !Array.isArray(allAttempts)) return null;
@@ -1399,7 +1451,7 @@ export default function CategoryPage() {
                                     size="sm"
                                     className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                     onClick={() =>
-                                      handleViewResults(testSet._id, attemptData.attemptId)
+                                      handleViewSolution(testSet._id, attemptData.attemptId)
                                     }
                                   >
                                     Solution
@@ -1409,7 +1461,7 @@ export default function CategoryPage() {
                                     size="sm"
                                     className="border-purple-500 text-purple-600 hover:bg-purple-50"
                                     onClick={() =>
-                                      handleViewResults(testSet._id, attemptData.attemptId)
+                                      handleViewAnalysis(testSet._id, attemptData.attemptId)
                                     }
                                   >
                                     Analysis
