@@ -152,7 +152,7 @@ export default function CartPage() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white pt-20">
+      <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header Section */}
           <div className="mb-8">
