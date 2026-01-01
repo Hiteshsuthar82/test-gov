@@ -7,6 +7,7 @@ import { BsCartCheck } from "react-icons/bs";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { useState } from "react";
 
 interface TimePeriod {
   months: number;
@@ -55,6 +56,9 @@ export default function CategoriesSection({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { confirm } = useConfirmation();
+
+  // Track which category is currently being added to cart
+  const [addingToCartCategoryId, setAddingToCartCategoryId] = useState<string | null>(null);
 
   // Fetch user subscriptions to check subscription status
   const { data: userSubscriptions } = useQuery({
@@ -136,11 +140,25 @@ export default function CategoriesSection({
   // Add to cart mutation
   const addToCartMutation = useMutation({
     mutationFn: async (categoryId: string) => {
-      await api.post('/cart', { categoryId });
+      setAddingToCartCategoryId(categoryId);
+
+      // Find the category and get the lowest duration
+      const category = categories?.find(cat => cat._id === categoryId);
+      const lowestDuration = category?.timePeriods && category.timePeriods.length > 0
+        ? Math.min(...category.timePeriods.map(tp => tp.months))
+        : undefined;
+
+      const response = await api.post('/cart', {
+        categoryId,
+        selectedDurationMonths: lowestDuration
+      });
+      return response.data.data; // Return the updated cart data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    onSuccess: (updatedCart) => {
+      // Update local cart data directly from API response
+      queryClient.setQueryData(['cart'], updatedCart);
       toast.success('Added to cart successfully!');
+      setAddingToCartCategoryId(null);
     },
     onError: (error: any) => {
       const errorMessage = error.response?.data?.message || 'Failed to add to cart';
@@ -149,6 +167,7 @@ export default function CategoriesSection({
       } else {
         toast.error(errorMessage);
       }
+      setAddingToCartCategoryId(null);
     },
   });
 
@@ -389,12 +408,16 @@ export default function CategoriesSection({
                             <BsCartCheck className="w-4 h-4 text-purple-500 font-bold" />
                           </button>
                         ) : (
-                          <button 
+                          <button
                             onClick={(e) => handleAddToCart(category._id, e)}
-                            disabled={addToCartMutation.isPending}
+                            disabled={addingToCartCategoryId === category._id}
                             className="w-8 h-8 border-2 border-purple-500 rounded-md flex items-center justify-center hover:bg-purple-50 transition-colors duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <FiShoppingCart className="w-4 h-4 text-purple-500 font-bold" />
+                            {addingToCartCategoryId === category._id ? (
+                              <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <FiShoppingCart className="w-4 h-4 text-purple-500 font-bold" />
+                            )}
                           </button>
                         )
                       )}

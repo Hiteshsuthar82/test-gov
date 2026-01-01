@@ -90,6 +90,9 @@ export default function CategoryPage() {
   );
   const [selectedDurationMonths, setSelectedDurationMonths] = useState<number | undefined>(undefined);
 
+  // Track if add to cart is in progress for this category
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+
   const { data: categoryData, isLoading: isLoadingCategory } = useQuery({
     queryKey: ["category", categoryId],
     queryFn: async () => {
@@ -459,24 +462,31 @@ export default function CategoryPage() {
   // Add to cart mutation
   const addToCartMutation = useMutation({
     mutationFn: async ({ categoryId, selectedDurationMonths }: { categoryId: string; selectedDurationMonths?: number }) => {
-      await api.post('/cart', { categoryId, selectedDurationMonths });
+      setIsAddingToCart(true);
+      const response = await api.post('/cart', { categoryId, selectedDurationMonths });
+      return response.data.data; // Return the updated cart data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    onSuccess: (updatedCart) => {
+      // Update local cart data directly from API response
+      queryClient.setQueryData(['cart'], updatedCart);
       toast.success('Added to cart successfully!');
+      setIsAddingToCart(false);
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to add to cart');
+      setIsAddingToCart(false);
     },
   });
 
   // Remove from cart mutation
   const removeFromCartMutation = useMutation({
     mutationFn: async (categoryId: string) => {
-      await api.delete(`/cart/items/${categoryId}`);
+      const response = await api.delete(`/cart/items/${categoryId}`);
+      return response.data.data; // Return the updated cart data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    onSuccess: (updatedCart) => {
+      // Update local cart data directly from API response
+      queryClient.setQueryData(['cart'], updatedCart);
       toast.success('Removed from cart successfully!');
     },
     onError: (error: any) => {
@@ -1733,10 +1743,10 @@ export default function CategoryPage() {
                               }}
                               variant="outline"
                               className="flex-1 border-purple-600 text-purple-600 hover:bg-purple-50"
-                              disabled={addToCartMutation.isPending}
+                              disabled={isAddingToCart}
                             >
                               <FiShoppingCart className="mr-2" />
-                              Add to Cart
+                              {isAddingToCart ? 'Adding...' : 'Add to Cart'}
                             </Button>
                           )}
                           <Link 

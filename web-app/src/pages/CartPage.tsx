@@ -58,7 +58,36 @@ export default function CartPage() {
     mutationFn: async (categoryId: string) => {
       await api.delete(`/cart/items/${categoryId}`)
     },
-    onSuccess: () => {
+    onMutate: async (categoryId) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['cart'] })
+
+      // Snapshot the previous value
+      const previousCart = queryClient.getQueryData(['cart'])
+
+      // Optimistically update to a new value
+      queryClient.setQueryData(['cart'], (old: any) => {
+        if (!old) return old
+        return {
+          ...old,
+          items: old.items.filter((item: any) => item.categoryId._id !== categoryId),
+          totalAmount: old.items
+            .filter((item: any) => item.categoryId._id !== categoryId)
+            .reduce((sum: number, item: any) => sum + item.price, 0)
+        }
+      })
+
+      return { previousCart }
+    },
+    onError: (err, categoryId, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousCart) {
+        queryClient.setQueryData(['cart'], context.previousCart)
+      }
+      toast.error('Failed to remove item from cart')
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure server state is correct
       queryClient.invalidateQueries({ queryKey: ['cart'] })
     },
   })
@@ -67,7 +96,34 @@ export default function CartPage() {
     mutationFn: async () => {
       await api.delete('/cart')
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['cart'] })
+
+      // Snapshot the previous value
+      const previousCart = queryClient.getQueryData(['cart'])
+
+      // Optimistically update to empty cart
+      queryClient.setQueryData(['cart'], (old: any) => {
+        if (!old) return old
+        return {
+          ...old,
+          items: [],
+          totalAmount: 0
+        }
+      })
+
+      return { previousCart }
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousCart) {
+        queryClient.setQueryData(['cart'], context.previousCart)
+      }
+      toast.error('Failed to clear cart')
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure server state is correct
       queryClient.invalidateQueries({ queryKey: ['cart'] })
     },
   })
@@ -76,12 +132,59 @@ export default function CartPage() {
     mutationFn: async ({ categoryId, newDurationMonths }: { categoryId: string; newDurationMonths: number }) => {
       await api.patch(`/cart/items/${categoryId}/duration`, { newDurationMonths })
     },
+    onMutate: async ({ categoryId, newDurationMonths }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['cart'] })
+
+      // Snapshot the previous value
+      const previousCart = queryClient.getQueryData(['cart'])
+
+      // Optimistically update the item's duration and price
+      queryClient.setQueryData(['cart'], (old: any) => {
+        if (!old) return old
+
+        const updatedItems = old.items.map((item: any) => {
+          if (item.categoryId._id === categoryId) {
+            // Find the selected time period for the new duration
+            const selectedTimePeriod = item.categoryId.timePeriods?.find(
+              (tp: any) => tp.months === newDurationMonths
+            )
+
+            if (selectedTimePeriod) {
+              return {
+                ...item,
+                selectedDurationMonths: newDurationMonths,
+                price: selectedTimePeriod.price,
+                originalPrice: selectedTimePeriod.originalPrice,
+                discountedPrice: selectedTimePeriod.price
+              }
+            }
+          }
+          return item
+        })
+
+        return {
+          ...old,
+          items: updatedItems,
+          totalAmount: updatedItems.reduce((sum: number, item: any) => sum + item.price, 0)
+        }
+      })
+
+      return { previousCart }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cart'] })
       toast.success('Duration updated successfully')
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update duration')
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousCart) {
+        queryClient.setQueryData(['cart'], context.previousCart)
+      }
+      toast.error('Failed to update duration')
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure server state is correct
+      queryClient.invalidateQueries({ queryKey: ['cart'] })
     },
   })
 
@@ -225,8 +328,21 @@ export default function CartPage() {
                         
                         {/* Content */}
                         <div className="flex-1 min-w-0">
+                          <div className='flex justify-between'>
                           {/* Title */}
                           <h3 className="font-bold text-gray-900 mb-2">{item.categoryId.name}</h3>
+
+{/* Remove Button */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveItem(item.categoryId._id)}
+                              disabled={removeItemMutation.isPending}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 px-2"
+                            >
+                              <FiTrash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                           
                           {/* Duration Selector - Similar to checkout page combo design */}
                           {item.categoryId.timePeriods && item.categoryId.timePeriods.length > 0 && (
@@ -290,8 +406,10 @@ export default function CartPage() {
                             </div>
                           )}
                           
-                          {/* Price */}
+                          {/* show only if their is zero or one duration is available */}
+                          { !item.selectedDurationMonths && (
                           <div className="flex items-center justify-between">
+                            {/* Price */}
                             <div className="flex items-baseline gap-2">
                               {item.originalPrice && item.originalPrice > item.price ? (
                                 <>
@@ -311,18 +429,8 @@ export default function CartPage() {
                                 </span>
                               )}
                             </div>
-                            
-                            {/* Remove Button */}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveItem(item.categoryId._id)}
-                              disabled={removeItemMutation.isPending}
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 px-2"
-                            >
-                              <FiTrash2 className="w-4 h-4" />
-                            </Button>
                           </div>
+                          )}
                         </div>
                       </div>
                     </CardContent>

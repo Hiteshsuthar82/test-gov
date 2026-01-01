@@ -14,7 +14,6 @@ export const cartController = {
       const itemsWithDiscount = await Promise.all(
         cart.items.map(async (item: any) => {
           const categoryId = item.categoryId._id?.toString() || item.categoryId.toString();
-          const categoryDetails = await categoryService.getDetails(categoryId, userId);
           return {
             ...item.toObject(),
             categoryId: {
@@ -25,8 +24,8 @@ export const cartController = {
               timePeriods: item.categoryId.timePeriods, // Include timePeriods for duration selection
               bannerImageUrl: item.categoryId.bannerImageUrl,
             },
-            discountedPrice: categoryDetails?.category?.discountedPrice || item.price,
-            originalPrice: categoryDetails?.category?.price || item.originalPrice,
+            discountedPrice: item.price,
+            originalPrice: item.originalPrice,
           };
         })
       );
@@ -55,12 +54,6 @@ export const cartController = {
 
       const cart = await cartService.addItem(userId, categoryId, selectedDurationMonths);
       
-      // Calculate discounted price
-      const categoryDetails = await categoryService.getDetails(categoryId, userId);
-      const discountedPrice = categoryDetails?.category?.discountedPrice || categoryDetails?.category?.price || 0;
-      
-      // Update item price with discount (if discount applies)
-      await cartService.updateItemPrice(userId, categoryId, discountedPrice);
       const updatedCart = await cartService.getCart(userId);
 
       sendSuccess(res, updatedCart, 'Item added to cart');

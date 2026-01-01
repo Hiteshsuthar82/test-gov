@@ -31,13 +31,13 @@ export default function HomePage() {
     },
   })
 
-  const { data: notices, isLoading: noticesLoading } = useQuery({
-    queryKey: ['notices'],
-    queryFn: async () => {
-      const response = await api.get('/notices?active=true')
-      return response.data.data || []
-    },
-  })
+  // const { data: notices, isLoading: noticesLoading } = useQuery({
+  //   queryKey: ['notices'],
+  //   queryFn: async () => {
+  //     const response = await api.get('/notices?active=true')
+  //     return response.data.data || []
+  //   },
+  // })
 
   return (
     <Layout>
@@ -59,7 +59,7 @@ export default function HomePage() {
           <FeaturesSection />
 
           {/* Weekly Live Exam Banner */}
-          <WeeklyLiveExamBanner />
+          {/* <WeeklyLiveExamBanner /> */}
 
           {/* How It Works Section */}
           <HowItWorksSection />
