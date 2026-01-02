@@ -3,12 +3,13 @@ import Navbar from './Navbar'
 
 interface LayoutProps {
   children: ReactNode
+  hideNavbar?: boolean
 }
 
-export default function Layout({ children }: LayoutProps) {
+export default function Layout({ children, hideNavbar = false }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
+      {!hideNavbar && <Navbar />}
       <main>{children}</main>
     </div>
   )

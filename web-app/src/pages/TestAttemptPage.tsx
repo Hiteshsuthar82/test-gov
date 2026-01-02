@@ -1958,7 +1958,7 @@ export default function TestAttemptPage() {
 
   if (isLoadingAttempt || !questions || questions.length === 0 || !currentQuestion) {
     return (
-      <Layout>
+      <Layout hideNavbar={true}>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">Loading...</div>
       </Layout>
     )
@@ -1967,7 +1967,7 @@ export default function TestAttemptPage() {
   // Safety check for options
   if (!currentQuestionContent || !currentQuestionContent.options || !Array.isArray(currentQuestionContent.options)) {
     return (
-      <Layout>
+      <Layout hideNavbar={true}>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">
           Error: Question data is incomplete. Please refresh the page.
         </div>
@@ -2052,7 +2052,7 @@ export default function TestAttemptPage() {
     : null
 
   return (
-    <Layout>
+    <Layout hideNavbar={true}>
       <div className="h-screen flex flex-col overflow-hidden">
         {/* Pause Confirmation Dialog */}
         <Dialog open={showPauseConfirmation} onOpenChange={setShowPauseConfirmation}>

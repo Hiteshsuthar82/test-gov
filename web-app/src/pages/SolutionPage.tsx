@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import Layout from '@/components/layout/Layout'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { FiChevronsLeft, FiChevronsRight, FiChevronLeft, FiCheckCircle, FiXCircle, FiCircle, FiBook, FiFileText, FiX } from 'react-icons/fi'
+import { FiChevronsLeft, FiChevronsRight, FiChevronLeft, FiCheckCircle, FiXCircle, FiCircle, FiBook, FiFileText, FiX, FiArrowLeft, FiBarChart2 } from 'react-icons/fi'
 import { useAuthStore } from '@/store/authStore'
 
 interface Question {
@@ -321,7 +321,7 @@ export default function SolutionPage() {
 
   if (isLoading) {
     return (
-      <Layout>
+      <Layout hideNavbar={true}>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">Loading...</div>
       </Layout>
     )
@@ -329,7 +329,7 @@ export default function SolutionPage() {
 
   if (!results || !currentQuestion) {
     return (
-      <Layout>
+      <Layout hideNavbar={true}>
         <div className="max-w-7xl mx-auto px-4 py-12 text-center">Solution not found</div>
       </Layout>
     )
@@ -338,30 +338,70 @@ export default function SolutionPage() {
   const availableLanguages = getAvailableLanguages(currentQuestion)
 
   return (
-    <Layout>
+    <Layout hideNavbar={true}>
       <div className="h-screen flex flex-col overflow-hidden">
         {/* Top Header */}
-        <div className="border-b bg-white px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <div className="text-xl font-bold">{testSet?.name}</div>
-          {showQuestionPaper && (
+        <div className="border-b bg-white px-6 py-3 flex items-center justify-between flex-shrink-0">
+          {/* Left Section - Back Arrow and Test Info */}
+          <div className="flex items-center gap-4">
+            {/* Back Arrow */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(-1)}
+              className="p-2 hover:bg-gray-100"
+            >
+              <FiArrowLeft className="w-5 h-5" />
+            </Button>
+
+            {/* Test Information */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <div className="text-lg font-bold text-gray-900 leading-none">{testSet?.name}</div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">
+                  {results?.category?.name || 'Category'}
+                </span>
+                <span className="text-gray-400 h-fit text-xs">•</span>
+                <span className="font-medium text-blue-600">
+                  {results?.category?.section?.name || 'Section'}
+                </span>
+              </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Section - Analysis Button */}
+          <div className="flex items-center gap-4">
+            {showQuestionPaper && (
+              <Button
+                variant="outline"
+                onClick={() => setIsEbookView(!isEbookView)}
+                size="sm"
+              >
+                {isEbookView ? (
+                  <>
+                    <FiX className="mr-2" />
+                    Exit eBook View
+                  </>
+                ) : (
+                  <>
+                    <FiBook className="mr-2" />
+                    eBook View
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               variant="outline"
-              onClick={() => setIsEbookView(!isEbookView)}
+              onClick={() => navigate(`/test/${testSetId}/analysis/${attemptId}`)}
               size="sm"
+              className="flex items-center gap-2"
             >
-              {isEbookView ? (
-                <>
-                  <FiX className="mr-2" />
-                  Exit eBook View
-                </>
-              ) : (
-                <>
-                  <FiBook className="mr-2" />
-                  eBook View
-                </>
-              )}
+              <FiBarChart2 className="w-4 h-4" />
+              Analysis
             </Button>
-          )}
+          </div>
         </div>
 
         {/* Main Content Area */}
@@ -582,7 +622,7 @@ export default function SolutionPage() {
                         {currentQuestionContent.direction || currentQuestionContent.directionImageUrl ? (
                           <div className="grid grid-cols-2 gap-4 mb-4">
                             {/* Left Box: Direction */}
-                            <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-[calc(100vh-259px)]">
+                            <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-[calc(100vh-265px)]">
                               <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
                               {(() => {
                                 const rawDirectionContent = currentQuestionContent.directionFormattedText || currentQuestionContent.direction || ''
@@ -608,7 +648,7 @@ export default function SolutionPage() {
                               )}
                             </div>
                             {/* Right Box: Question, Conclusion, Options */}
-                            <div className="overflow-y-auto max-h-[calc(100vh-260px)]">
+                            <div className="overflow-y-auto max-h-[calc(100vh-265px)]">
                               {/* Question */}
                               <div className="mb-4">
                                 <div className="text-lg font-medium mb-2">
@@ -1158,7 +1198,7 @@ export default function SolutionPage() {
             {isSidebarOpen && (
               <div className="px-4 py-3 border-b">
                 <h3 className="font-semibold mb-3 text-sm">Indication</h3>
-                <div className="space-y-2 text-xs">
+                <div className="text-xs flex gap-x-5 gap-y-2 flex-wrap">
                   <div className="flex items-center">
                     <div className="w-4 h-4 bg-green-500 rounded-t-lg mr-2 flex-shrink-0" />
                     <span>Correct</span>
@@ -1176,7 +1216,7 @@ export default function SolutionPage() {
             )}
 
             {/* Speed Indicators */}
-            {isSidebarOpen && (
+            {/* {isSidebarOpen && (
               <div className="px-4 py-3 border-b">
                 <h3 className="font-semibold mb-2 text-sm">Speed Indicators</h3>
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1198,7 +1238,7 @@ export default function SolutionPage() {
                   </div>
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* Current Section Name */}
             {isSidebarOpen && selectedSectionId && (

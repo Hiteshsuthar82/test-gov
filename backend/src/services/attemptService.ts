@@ -3,6 +3,7 @@ import { TestSet } from '../models/TestSet';
 import { Question } from '../models/Question';
 import { Subscription } from '../models/Subscription';
 import { Leaderboard } from '../models/Leaderboard';
+import { Category } from '../models/Category';
 import { Types } from 'mongoose';
 
 export const attemptService = {
@@ -619,7 +620,7 @@ export const attemptService = {
     const attempt = await TestAttempt.findOne({
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
-    }).populate('testSetId', 'totalMarks durationMinutes sections hasSectionWiseTiming negativeMarking name');
+    }).populate('testSetId', 'totalMarks durationMinutes sections hasSectionWiseTiming negativeMarking name categoryId sectionId subsectionId');
 
     if (!attempt) {
       throw new Error('Attempt not found');
@@ -627,6 +628,10 @@ export const attemptService = {
 
     const testSet = attempt.testSetId as any;
     const totalMarks = testSet?.totalMarks || 0;
+
+    // Get category information
+    const category = await Category.findById(testSet?.categoryId).select('name sections');
+    const categorySection = category?.sections?.find((s: any) => s.sectionId === testSet?.sectionId);
 
     const questionIds = attempt.questions.map((q) => q.questionId);
     const questions = await Question.find({ _id: { $in: questionIds } });
@@ -678,6 +683,14 @@ export const attemptService = {
       startedAt: attempt.startedAt,
       endedAt: attempt.endedAt,
       categoryId: attempt.categoryId,
+      category: category ? {
+        _id: category._id,
+        name: category.name,
+        section: categorySection ? {
+          sectionId: categorySection.sectionId,
+          name: categorySection.name,
+        } : null,
+      } : null,
       testSet: testSet ? {
         _id: testSet._id,
         name: testSet.name,
@@ -686,6 +699,8 @@ export const attemptService = {
         sections: testSet.sections,
         hasSectionWiseTiming: testSet.hasSectionWiseTiming,
         negativeMarking: testSet.negativeMarking,
+        sectionId: testSet.sectionId,
+        subsectionId: testSet.subsectionId,
       } : null,
       questions: detailedQuestions,
     };

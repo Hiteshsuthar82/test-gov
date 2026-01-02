@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { ConfirmationProvider } from './components/ui/confirmation-dialog'
 import { useIsAuthenticated } from './store/authStore'
+import { useEffect } from 'react'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import HomePage from './pages/HomePage'
@@ -31,6 +32,101 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  useEffect(() => {
+    // Disable text selection
+    const disableSelection = (e: Event) => {
+      e.preventDefault()
+      return false
+    }
+
+    // Disable copy/paste/cut
+    const disableCopyPaste = (e: ClipboardEvent) => {
+      e.preventDefault()
+      return false
+    }
+
+    // Disable right-click context menu
+    const disableContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+      return false
+    }
+
+    // Disable keyboard shortcuts for copy/paste/select all
+    const disableKeyboardShortcuts = (e: KeyboardEvent) => {
+      // Ctrl+A (Select All), Ctrl+C (Copy), Ctrl+V (Paste), Ctrl+X (Cut)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'c' || e.key === 'v' || e.key === 'x')) {
+        e.preventDefault()
+        return false
+      }
+      // F12 (Dev Tools)
+      // if (e.key === 'F12') {
+      //   e.preventDefault()
+      //   return false
+      // }
+      // Ctrl+Shift+I (Dev Tools)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') {
+        e.preventDefault()
+        return false
+      }
+      // Ctrl+Shift+C (Inspect Element)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault()
+        return false
+      }
+      // Ctrl+Shift+J (Console)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') {
+        e.preventDefault()
+        return false
+      }
+      // Ctrl+U (View Source)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault()
+        return false
+      }
+    }
+
+    // Add event listeners
+    document.addEventListener('selectstart', disableSelection)
+    document.addEventListener('copy', disableCopyPaste)
+    document.addEventListener('paste', disableCopyPaste)
+    document.addEventListener('cut', disableCopyPaste)
+    document.addEventListener('contextmenu', disableContextMenu)
+    document.addEventListener('keydown', disableKeyboardShortcuts)
+
+    // Add CSS to prevent text selection
+    const style = document.createElement('style')
+    style.textContent = `
+      * {
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+      }
+
+      input, textarea, [contenteditable] {
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+        user-select: text !important;
+      }
+    `
+    document.head.appendChild(style)
+
+    // Cleanup function
+    return () => {
+      document.removeEventListener('selectstart', disableSelection)
+      document.removeEventListener('copy', disableCopyPaste)
+      document.removeEventListener('paste', disableCopyPaste)
+      document.removeEventListener('cut', disableCopyPaste)
+      document.removeEventListener('contextmenu', disableContextMenu)
+      document.removeEventListener('keydown', disableKeyboardShortcuts)
+      if (style.parentNode) {
+        style.parentNode.removeChild(style)
+      }
+    }
+  }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
       <ConfirmationProvider>
