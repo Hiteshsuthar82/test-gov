@@ -2333,7 +2333,7 @@ export default function TestAttemptPage() {
                 {currentQuestionContent.direction || currentQuestionContent.directionImageUrl ? (
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     {/* Left Box: Direction */}
-                    <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
+                    <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-[calc(100vh-285px)]">
                       <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
                       {(() => {
                         const rawDirectionContent = currentQuestionContent.directionFormattedText || currentQuestionContent.direction || ''
@@ -2359,7 +2359,7 @@ export default function TestAttemptPage() {
                       )}
                     </div>
                     {/* Right Box: Question, Conclusion, Options */}
-                    <div className="overflow-y-auto max-h-full">
+                    <div className="overflow-y-auto max-h-[calc(100vh-285px)]">
                       {/* Question */}
                       <div className="mb-4">
                         <div className="text-lg font-medium mb-2">
@@ -2424,7 +2424,7 @@ export default function TestAttemptPage() {
                           >
                             <div className="flex items-center">
                               <div
-                                className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                className={`min-w-6 max-w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
                                   selectedOptions[currentQuestion._id] === option.optionId
                                     ? 'border-purple-600 bg-purple-600'
                                     : 'border-gray-300'
@@ -2516,7 +2516,7 @@ export default function TestAttemptPage() {
                         >
                           <div className="flex items-center">
                             <div
-                              className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                              className={`min-w-6 max-w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
                                 selectedOptions[currentQuestion._id] === option.optionId
                                   ? 'border-purple-600 bg-purple-600'
                                   : 'border-gray-300'

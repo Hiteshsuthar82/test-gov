@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -203,21 +203,44 @@ export default function SolutionPage() {
 
   const sectionQuestions = selectedSectionId ? getSectionQuestions(selectedSectionId) : questions
 
+  // Get current question index within the section
+  const getCurrentSectionQuestionIndex = () => {
+    if (!selectedSectionId) return currentQuestionIndex
+    const currentQId = currentQuestion ? (currentQuestion.questionId || currentQuestion._id) : null
+    return sectionQuestions.findIndex((q: Question) => {
+      const qId = q.questionId || q._id
+      return qId === currentQId
+    })
+  }
+
+  const currentSectionQuestionIndex = getCurrentSectionQuestionIndex()
+
+  // Function to handle section changes and navigate to first question
+  const handleSectionChange = useCallback((sectionId: string) => {
+    setSelectedSectionId(sectionId)
+    const firstQuestionInSection = questions.find((q: Question) => q.sectionId === sectionId)
+    if (firstQuestionInSection) {
+      const firstQId = firstQuestionInSection.questionId || firstQuestionInSection._id
+      const firstIndex = questions.findIndex((q: Question) => {
+        const qId = q.questionId || q._id
+        return qId === firstQId
+      })
+      if (firstIndex >= 0) {
+        setCurrentQuestionIndex(firstIndex)
+      }
+    }
+  }, [questions])
+
+  // Check if current section is the last section
+  const sortedSections = sections.sort((a: any, b: any) => a.order - b.order)
+  const currentSectionIndex = selectedSectionId ? sortedSections.findIndex((s: any) => s.sectionId === selectedSectionId) : -1
+  const isLastSection = currentSectionIndex === sortedSections.length - 1
+  const isLastQuestionInSection = selectedSectionId && currentSectionQuestionIndex === sectionQuestions.length - 1
+
   // Set initial section
   useEffect(() => {
     if (hasSections && sections.length > 0 && !selectedSectionId) {
-      setSelectedSectionId(sections[0].sectionId)
-      const firstQuestionInSection = questions.find((q: Question) => q.sectionId === sections[0].sectionId)
-      if (firstQuestionInSection) {
-        const firstQId = firstQuestionInSection.questionId || firstQuestionInSection._id
-        const firstIndex = questions.findIndex((q: Question) => {
-          const qId = q.questionId || q._id
-          return qId === firstQId
-        })
-        if (firstIndex >= 0) {
-          setCurrentQuestionIndex(firstIndex)
-        }
-      }
+      handleSectionChange(sections[0].sectionId)
     }
   }, [hasSections, sections, questions, selectedSectionId])
 
@@ -499,14 +522,7 @@ export default function SolutionPage() {
                         return (
                           <button
                             key={section.sectionId}
-                            onClick={() => {
-                              setSelectedSectionId(section.sectionId)
-                              const firstQuestionInSection = questions.find((q: Question) => q.sectionId === section.sectionId)
-                              if (firstQuestionInSection) {
-                                const firstIndex = questions.findIndex((q: Question) => q._id === firstQuestionInSection._id)
-                                setCurrentQuestionIndex(firstIndex)
-                              }
-                            }}
+                            onClick={() => handleSectionChange(section.sectionId)}
                             className={`px-3 py-1 rounded text-sm font-medium ${
                               isSelected
                                 ? 'bg-blue-600 text-white'
@@ -523,7 +539,7 @@ export default function SolutionPage() {
                 {/* Question Number and Info */}
                 <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-50 flex-shrink-0">
                   <div className="text-lg font-semibold">
-                    Question {currentQuestion.questionOrder || (currentQuestionIndex + 1)} of {sectionQuestions.length}
+                    Question {selectedSectionId ? (currentSectionQuestionIndex + 1) : (currentQuestion.questionOrder || (currentQuestionIndex + 1))} of {sectionQuestions.length}
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 text-sm">
@@ -566,7 +582,7 @@ export default function SolutionPage() {
                         {currentQuestionContent.direction || currentQuestionContent.directionImageUrl ? (
                           <div className="grid grid-cols-2 gap-4 mb-4">
                             {/* Left Box: Direction */}
-                            <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
+                            <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-[calc(100vh-259px)]">
                               <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
                               {(() => {
                                 const rawDirectionContent = currentQuestionContent.directionFormattedText || currentQuestionContent.direction || ''
@@ -592,11 +608,11 @@ export default function SolutionPage() {
                               )}
                             </div>
                             {/* Right Box: Question, Conclusion, Options */}
-                            <div className="overflow-y-auto max-h-full">
+                            <div className="overflow-y-auto max-h-[calc(100vh-260px)]">
                               {/* Question */}
                               <div className="mb-4">
                                 <div className="text-lg font-medium mb-2">
-                                  {currentQuestion.questionOrder || (currentQuestionIndex + 1)}.{' '}
+                                  {selectedSectionId ? (currentSectionQuestionIndex + 1) : (currentQuestion.questionOrder || (currentQuestionIndex + 1))}.{' '}
                                   {currentQuestionContent.questionFormattedText ? (
                                     <span dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionFormattedText) }} />
                                   ) : currentQuestionContent.questionText ? (
@@ -692,7 +708,7 @@ export default function SolutionPage() {
                                     >
                                       <div className="flex items-center">
                                         <div
-                                          className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                          className={`min-w-6 max-w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
                                             isCorrect && showSolutionForThis
                                               ? 'border-green-600 bg-green-600'
                                               : isSelected && !isCorrect && showSolutionForThis
@@ -707,7 +723,17 @@ export default function SolutionPage() {
                                           )}
                                         </div>
                                         <span className="font-medium mr-2">{option.optionId}.</span>
-                                        <span>{option.text}</span>
+                                        {(() => {
+                                          const isHTML = containsHTML(option.text)
+                                          return isHTML ? (
+                                            <span
+                                              className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                              dangerouslySetInnerHTML={{ __html: decodeHTML(option.text) }}
+                                            />
+                                          ) : (
+                                            <span>{option.text}</span>
+                                          )
+                                        })()}
                                         {isCorrect && showSolutionForThis && (
                                           <FiCheckCircle className="ml-auto text-green-600" />
                                         )}
@@ -807,7 +833,7 @@ export default function SolutionPage() {
                             {/* Question */}
                             <div className="mb-4">
                               <div className="text-lg font-medium mb-2">
-                                {currentQuestion.questionOrder || (currentQuestionIndex + 1)}.{' '}
+                                {selectedSectionId ? (currentSectionQuestionIndex + 1) : (currentQuestion.questionOrder || (currentQuestionIndex + 1))}.{' '}
                                 {(() => {
                                   const isHTML = containsHTML(currentQuestionContent.questionFormattedText)
                                   return isHTML && currentQuestionContent.questionFormattedText ? (
@@ -895,7 +921,7 @@ export default function SolutionPage() {
                                   >
                                     <div className="flex items-center">
                                       <div
-                                        className={`w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
+                                        className={`min-w-6 max-w-6 h-6 rounded-full border-2 mr-3 flex items-center justify-center ${
                                           isCorrect && showSolutionForThis
                                             ? 'border-green-600 bg-green-600'
                                             : isSelected && !isCorrect && showSolutionForThis
@@ -910,7 +936,17 @@ export default function SolutionPage() {
                                         )}
                                       </div>
                                       <span className="font-medium mr-2">{option.optionId}.</span>
-                                      <span>{option.text}</span>
+                                      {(() => {
+                                        const isHTML = containsHTML(option.text)
+                                        return isHTML ? (
+                                          <span
+                                            className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                            dangerouslySetInnerHTML={{ __html: decodeHTML(option.text) }}
+                                          />
+                                        ) : (
+                                          <span>{option.text}</span>
+                                        )
+                                      })()}
                                       {isCorrect && showSolutionForThis && (
                                         <FiCheckCircle className="ml-auto text-green-600" />
                                       )}
@@ -1021,11 +1057,22 @@ export default function SolutionPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      if (currentQuestionIndex > 0) {
+                      if (selectedSectionId && currentSectionQuestionIndex > 0) {
+                        // Navigate to previous question in section
+                        const prevSectionQuestion = sectionQuestions[currentSectionQuestionIndex - 1]
+                        const prevGlobalIndex = questions.findIndex((q: Question) => {
+                          const qId = q.questionId || q._id
+                          const prevQId = prevSectionQuestion.questionId || prevSectionQuestion._id
+                          return qId === prevQId
+                        })
+                        if (prevGlobalIndex >= 0) {
+                          setCurrentQuestionIndex(prevGlobalIndex)
+                        }
+                      } else if (!selectedSectionId && currentQuestionIndex > 0) {
                         setCurrentQuestionIndex(currentQuestionIndex - 1)
                       }
                     }}
-                    disabled={currentQuestionIndex === 0}
+                    disabled={selectedSectionId ? currentSectionQuestionIndex === 0 : currentQuestionIndex === 0}
                     size="sm"
                   >
                     <FiChevronLeft className="mr-2" />
@@ -1042,18 +1089,45 @@ export default function SolutionPage() {
                       <span>Re-attempt Questions</span>
                     </label>
                   </div>
-                  <Button
-                    onClick={() => {
-                      if (currentQuestionIndex < questions.length - 1) {
-                        setCurrentQuestionIndex(currentQuestionIndex + 1)
-                      }
-                    }}
-                    disabled={currentQuestionIndex === questions.length - 1}
-                    size="sm"
-                  >
-                    Next
-                    <FiChevronLeft className="ml-2 rotate-180" />
-                  </Button>
+                  {selectedSectionId && isLastQuestionInSection && !isLastSection ? (
+                    <Button
+                      onClick={() => {
+                        // Move to next section
+                        const nextSection = sortedSections[currentSectionIndex + 1]
+                        if (nextSection) {
+                          handleSectionChange(nextSection.sectionId)
+                        }
+                      }}
+                      size="sm"
+                    >
+                      Next Section
+                      <FiChevronLeft className="ml-2 rotate-180" />
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => {
+                        if (selectedSectionId && currentSectionQuestionIndex < sectionQuestions.length - 1) {
+                          // Navigate to next question in section
+                          const nextSectionQuestion = sectionQuestions[currentSectionQuestionIndex + 1]
+                          const nextGlobalIndex = questions.findIndex((q: Question) => {
+                            const qId = q.questionId || q._id
+                            const nextQId = nextSectionQuestion.questionId || nextSectionQuestion._id
+                            return qId === nextQId
+                          })
+                          if (nextGlobalIndex >= 0) {
+                            setCurrentQuestionIndex(nextGlobalIndex)
+                          }
+                        } else if (!selectedSectionId && currentQuestionIndex < questions.length - 1) {
+                          setCurrentQuestionIndex(currentQuestionIndex + 1)
+                        }
+                      }}
+                      disabled={selectedSectionId ? Boolean(isLastQuestionInSection && isLastSection) : (currentQuestionIndex === questions.length - 1)}
+                      size="sm"
+                    >
+                      Next
+                      <FiChevronLeft className="ml-2 rotate-180" />
+                    </Button>
+                  )}
                 </div>
               </>
             )}
@@ -1174,7 +1248,7 @@ export default function SolutionPage() {
                         onClick={() => {
                           setCurrentQuestionIndex(globalIndex)
                           if (hasSections && q.sectionId && selectedSectionId !== q.sectionId) {
-                            setSelectedSectionId(q.sectionId)
+                            handleSectionChange(q.sectionId)
                           }
                         }}
                         className={boxClasses}
