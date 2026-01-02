@@ -112,6 +112,21 @@ export default function TestAttemptPage() {
   const justResumedRef = useRef(false) // Track if we just resumed to prevent flicker
   const skipTimerRecalculationRef = useRef(false) // Track if we should skip timer recalculation (after pause calculation)
 
+  // Helper to decode HTML entities
+  const decodeHTML = (html: string): string => {
+    if (!html || typeof html !== 'string') return html || ''
+    const textarea = document.createElement('textarea')
+    textarea.innerHTML = html
+    return textarea.value
+  }
+
+  // Helper to check if a string contains HTML
+  const containsHTML = (str: string | undefined | null): boolean => {
+    if (!str || typeof str !== 'string') return false
+    // Check for HTML tags (including escaped ones like &lt;)
+    return /<[a-z][\s\S]*>/i.test(str) || /&lt;[a-z][\s\S]*&gt;/i.test(str)
+  }
+
   const { data: attemptData, isLoading: isLoadingAttempt } = useQuery({
     queryKey: ['attempt', attemptId],
     queryFn: async () => {
@@ -2320,11 +2335,21 @@ export default function TestAttemptPage() {
                     {/* Left Box: Direction */}
                     <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
                       <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
-                      {currentQuestionContent.directionFormattedText ? (
-                        <div className="text-gray-700 mb-2" dangerouslySetInnerHTML={{ __html: currentQuestionContent.directionFormattedText }} />
-                      ) : currentQuestionContent.direction && (
-                        <p className="text-gray-700 mb-2">{currentQuestionContent.direction}</p>
-                      )}
+                      {(() => {
+                        const rawDirectionContent = currentQuestionContent.directionFormattedText || currentQuestionContent.direction || ''
+                        const isHTML = containsHTML(rawDirectionContent)
+                        // Decode HTML entities if it's HTML
+                        const directionContent = isHTML ? decodeHTML(rawDirectionContent) : rawDirectionContent
+
+                        return isHTML ? (
+                          <div
+                            className="text-gray-700 mb-2 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                            dangerouslySetInnerHTML={{ __html: directionContent }}
+                          />
+                        ) : directionContent ? (
+                          <p className="text-gray-700 mb-2">{directionContent}</p>
+                        ) : null
+                      })()}
                       {currentQuestionContent.directionImageUrl && (
                         <img
                           src={currentQuestionContent.directionImageUrl}
@@ -2339,11 +2364,17 @@ export default function TestAttemptPage() {
                       <div className="mb-4">
                         <div className="text-lg font-medium mb-2">
                           {currentQuestion.questionOrder}.{' '}
-                          {currentQuestionContent.questionFormattedText ? (
-                            <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
-                          ) : (
-                            <span>{currentQuestionContent.questionText}</span>
-                          )}
+                          {(() => {
+                            const isHTML = containsHTML(currentQuestionContent.questionFormattedText)
+                            return isHTML ? (
+                              <span
+                                className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionFormattedText) }}
+                              />
+                            ) : (
+                              <span>{currentQuestionContent.questionText}</span>
+                            )
+                          })()}
                         </div>
                         {currentQuestionContent.questionImageUrl && (
                           <img
@@ -2358,11 +2389,17 @@ export default function TestAttemptPage() {
                       {currentQuestionContent.conclusion && (
                         <div className="bg-green-50 p-4 rounded-lg mb-4">
                           <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
-                          {currentQuestionContent.conclusionFormattedText ? (
-                            <div className="text-gray-700" dangerouslySetInnerHTML={{ __html: currentQuestionContent.conclusionFormattedText }} />
-                          ) : (
-                            <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
-                          )}
+                          {(() => {
+                            const isHTML = containsHTML(currentQuestionContent.conclusionFormattedText)
+                            return isHTML ? (
+                              <div
+                                className="text-gray-700 prose prose-sm max-w-none [&_p]:mb-2 [&_strong]:font-bold"
+                                dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.conclusionFormattedText) }}
+                              />
+                            ) : (
+                              <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
+                            )
+                          })()}
                           {currentQuestionContent.conclusionImageUrl && (
                             <img
                               src={currentQuestionContent.conclusionImageUrl}
@@ -2398,7 +2435,17 @@ export default function TestAttemptPage() {
                                 )}
                               </div>
                               <span className="font-medium mr-2">{option.optionId}.</span>
-                              <span>{option.text}</span>
+                              {(() => {
+                                const isHTML = containsHTML(option.text)
+                                return isHTML ? (
+                                  <span
+                                    className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                    dangerouslySetInnerHTML={{ __html: decodeHTML(option.text) }}
+                                  />
+                                ) : (
+                                  <span>{option.text}</span>
+                                )
+                              })()}
                             </div>
                             {option.imageUrl && (
                               <img
@@ -2419,11 +2466,17 @@ export default function TestAttemptPage() {
                     <div className="mb-4">
                       <div className="text-lg font-medium mb-2">
                         {currentQuestion.questionOrder}.{' '}
-                        {currentQuestionContent.questionFormattedText ? (
-                          <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
-                        ) : (
-                          <span>{currentQuestionContent.questionText}</span>
-                        )}
+                        {(() => {
+                          const isHTML = containsHTML(currentQuestionContent.questionFormattedText)
+                          return isHTML ? (
+                            <span
+                              className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                              dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionFormattedText) }}
+                            />
+                          ) : (
+                            <span>{currentQuestionContent.questionText}</span>
+                          )
+                        })()}
                       </div>
                       {currentQuestionContent.questionImageUrl && (
                         <img
@@ -2474,7 +2527,17 @@ export default function TestAttemptPage() {
                               )}
                             </div>
                             <span className="font-medium mr-2">{option.optionId}.</span>
-                            <span>{option.text}</span>
+                            {(() => {
+                              const isHTML = containsHTML(option.text)
+                              return isHTML ? (
+                                <span
+                                  className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                  dangerouslySetInnerHTML={{ __html: decodeHTML(option.text) }}
+                                />
+                              ) : (
+                                <span>{option.text}</span>
+                              )
+                            })()}
                           </div>
                           {option.imageUrl && (
                             <img

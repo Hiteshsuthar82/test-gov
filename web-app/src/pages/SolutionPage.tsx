@@ -145,6 +145,21 @@ export default function SolutionPage() {
     return question.languages.en
   }
 
+  // Helper to decode HTML entities
+  const decodeHTML = (html: string): string => {
+    if (!html || typeof html !== 'string') return html || ''
+    const textarea = document.createElement('textarea')
+    textarea.innerHTML = html
+    return textarea.value
+  }
+
+  // Helper to check if a string contains HTML
+  const containsHTML = (str: string | undefined | null): boolean => {
+    if (!str || typeof str !== 'string') return false
+    // Check for HTML tags (including escaped ones like &lt;)
+    return /<[a-z][\s\S]*>/i.test(str) || /&lt;[a-z][\s\S]*&gt;/i.test(str)
+  }
+
   // Get explanation content
   const getExplanationContent = (question: any) => {
     if (question.languages && question.languages[selectedLanguage]) {
@@ -332,85 +347,146 @@ export default function SolutionPage() {
           <div className="flex-1 flex flex-col overflow-hidden border-r">
             {showQuestionPaper ? (
               /* Question Paper View */
-              <div className="flex-1 overflow-y-auto bg-white p-8">
-                {sections.map((section: any) => {
-                  const sectionQuestions = questions.filter((q: any) => q.sectionId === section.sectionId)
-                  return (
-                    <div key={section.sectionId} className="mb-8">
-                      <h2 className="text-2xl font-bold mb-4">{section.name}</h2>
-                      <div className="space-y-6">
-                        {sectionQuestions.map((q: any, idx: number) => {
-                          const qContent = getQuestionContent(q, selectedLanguage)
-                          const gainedMarks = getGainedMarks(q)
-                          const qId = q.questionId || q._id
-                          return (
-                            <div key={qId} className="border-b pb-4">
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  {isEbookView ? (
-                                    <div className="space-y-4">
-                                      <div className="font-medium">
-                                        Q. {q.questionOrder || (idx + 1)}){' '}
-                                        {qContent.questionFormattedText ? (
-                                          <span dangerouslySetInnerHTML={{ __html: qContent.questionFormattedText }} />
-                                        ) : (
-                                          <span>{qContent.questionText}</span>
-                                        )}
-                                      </div>
-                                      {qContent.direction && (
-                                        <div className="text-sm text-gray-600">
-                                          <strong>Direction:</strong>{' '}
-                                          {qContent.directionFormattedText ? (
-                                            <span dangerouslySetInnerHTML={{ __html: qContent.directionFormattedText }} />
-                                          ) : (
-                                            <span>{qContent.direction}</span>
-                                          )}
-                                        </div>
-                                      )}
-                                      {qContent.conclusion && (
-                                        <div className="text-sm text-gray-600">
-                                          <strong>Conclusion:</strong>{' '}
-                                          {qContent.conclusionFormattedText ? (
-                                            <span dangerouslySetInnerHTML={{ __html: qContent.conclusionFormattedText }} />
-                                          ) : (
-                                            <span>{qContent.conclusion}</span>
-                                          )}
-                                        </div>
-                                      )}
-                                      <div className="space-y-2">
-                                        {qContent.options.map((opt: any) => (
-                                          <div key={opt.optionId} className="flex items-start">
-                                            <span className="font-medium mr-2">{opt.optionId})</span>
-                                            <span>{opt.text}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="font-medium">
-                                      Q. {q.questionOrder || (idx + 1)}){' '}
-                                      {qContent.questionFormattedText ? (
-                                        <span dangerouslySetInnerHTML={{ __html: qContent.questionFormattedText }} />
-                                      ) : (
-                                        <span>{qContent.questionText}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                {!isEbookView && (
-                                  <div className="ml-4 font-semibold">
-                                    {gainedMarks > 0 ? '+' : ''}{gainedMarks}
-                                  </div>
-                                )}
-                              </div>
+<div className="flex-1 overflow-y-auto bg-white p-8">
+  {sections.map((section: any) => {
+    const sectionQuestions = questions.filter((q: any) => q.sectionId === section.sectionId)
+    return (
+      <div key={section.sectionId} className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">{section.name}</h2>
+        <div className="space-y-6">
+          {sectionQuestions.map((q: any, idx: number) => {
+            const qContent = getQuestionContent(q, selectedLanguage)
+            const gainedMarks = getGainedMarks(q)
+            const qId = q.questionId || q._id
+            return (
+              <div key={qId} className="border-b pb-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    {isEbookView ? (
+                      <div className="space-y-4">
+                        <div className="font-medium">
+                          Q. {q.questionOrder || (idx + 1)}){' '}
+                          {qContent.questionFormattedText ? (
+                            <span 
+                              className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                              dangerouslySetInnerHTML={{ __html: decodeHTML(qContent.questionFormattedText) }} 
+                            />
+                          ) : qContent.questionText ? (
+                            (() => {
+                              const isHTML = containsHTML(qContent.questionText)
+                              return isHTML ? (
+                                <span 
+                                  className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                                  dangerouslySetInnerHTML={{ __html: decodeHTML(qContent.questionText) }} 
+                                />
+                              ) : (
+                                <span>{qContent.questionText}</span>
+                              )
+                            })()
+                          ) : null}
+                        </div>
+                        {qContent.direction && (
+                          <div className="text-sm text-gray-600">
+                            <strong>Direction:</strong>{' '}
+                            {(() => {
+                              const rawDirectionContent = qContent.directionFormattedText || qContent.direction || ''
+                              const isHTML = containsHTML(rawDirectionContent)
+                              // Decode HTML entities if it's HTML
+                              const directionContent = isHTML ? decodeHTML(rawDirectionContent) : rawDirectionContent
+
+                              return isHTML ? (
+                                <span
+                                  className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                                  dangerouslySetInnerHTML={{ __html: directionContent }}
+                                />
+                              ) : directionContent ? (
+                                <span>{directionContent}</span>
+                              ) : null
+                            })()}
+                          </div>
+                        )}
+                        {qContent.conclusion && (
+                          <div className="text-sm text-gray-600">
+                            <strong>Conclusion:</strong>{' '}
+                            {qContent.conclusionFormattedText ? (
+                              <span 
+                                className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                                dangerouslySetInnerHTML={{ __html: decodeHTML(qContent.conclusionFormattedText) }} 
+                              />
+                            ) : qContent.conclusion ? (
+                              (() => {
+                                const isHTML = containsHTML(qContent.conclusion)
+                                return isHTML ? (
+                                  <span 
+                                    className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                                    dangerouslySetInnerHTML={{ __html: decodeHTML(qContent.conclusion) }} 
+                                  />
+                                ) : (
+                                  <span>{qContent.conclusion}</span>
+                                )
+                              })()
+                            ) : null}
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          {qContent.options.map((opt: any) => (
+                            <div key={opt.optionId} className="flex items-start">
+                              <span className="font-medium mr-2">{opt.optionId})</span>
+                              {(() => {
+                                const isHTML = containsHTML(opt.text)
+                                return isHTML ? (
+                                  <span 
+                                    className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline"
+                                    dangerouslySetInnerHTML={{ __html: decodeHTML(opt.text) }} 
+                                  />
+                                ) : (
+                                  <span>{opt.text}</span>
+                                )
+                              })()}
                             </div>
-                          )
-                        })}
+                          ))}
+                        </div>
                       </div>
+                    ) : (
+                      <div className="font-medium">
+  Q. {q.questionOrder || (idx + 1)}){' '}
+  {qContent.questionFormattedText ? (
+    <span 
+      className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+      dangerouslySetInnerHTML={{ __html: decodeHTML(qContent.questionFormattedText) }} 
+    />
+  ) : qContent.questionText ? (
+    (() => {
+      const isHTML = containsHTML(qContent.questionText)
+      const decodedText = isHTML ? decodeHTML(qContent.questionText) : qContent.questionText
+      
+      return isHTML ? (
+        <span 
+          className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+          dangerouslySetInnerHTML={{ __html: decodedText }} 
+        />
+      ) : (
+        <span>{decodedText}</span>
+      )
+    })()
+  ) : null}
+</div>
+                    )}
+                  </div>
+                  {!isEbookView && (
+                    <div className="ml-4 font-semibold">
+                      {gainedMarks > 0 ? '+' : ''}{gainedMarks}
                     </div>
-                  )
-                })}
+                  )}
+                </div>
               </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  })}
+</div>
             ) : (
               <>
                 {/* Section Selection Row */}
@@ -492,11 +568,21 @@ export default function SolutionPage() {
                             {/* Left Box: Direction */}
                             <div className="bg-blue-50 p-4 rounded-lg overflow-y-auto max-h-full">
                               <p className="text-sm font-medium text-blue-900 mb-2">Direction:</p>
-                              {currentQuestionContent.directionFormattedText ? (
-                                <div className="text-gray-700 mb-2" dangerouslySetInnerHTML={{ __html: currentQuestionContent.directionFormattedText }} />
-                              ) : currentQuestionContent.direction && (
-                                <p className="text-gray-700 mb-2">{currentQuestionContent.direction}</p>
-                              )}
+                              {(() => {
+                                const rawDirectionContent = currentQuestionContent.directionFormattedText || currentQuestionContent.direction || ''
+                                const isHTML = containsHTML(rawDirectionContent)
+                                // Decode HTML entities if it's HTML
+                                const directionContent = isHTML ? decodeHTML(rawDirectionContent) : rawDirectionContent
+                                
+                                return isHTML ? (
+                                  <div 
+                                    className="text-gray-700 mb-2 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline" 
+                                    dangerouslySetInnerHTML={{ __html: directionContent }} 
+                                  />
+                                ) : directionContent ? (
+                                  <p className="text-gray-700 mb-2">{directionContent}</p>
+                                ) : null
+                              })()}
                               {currentQuestionContent.directionImageUrl && (
                                 <img
                                   src={currentQuestionContent.directionImageUrl}
@@ -512,10 +598,17 @@ export default function SolutionPage() {
                                 <div className="text-lg font-medium mb-2">
                                   {currentQuestion.questionOrder || (currentQuestionIndex + 1)}.{' '}
                                   {currentQuestionContent.questionFormattedText ? (
-                                    <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
-                                  ) : (
-                                    <span>{currentQuestionContent.questionText}</span>
-                                  )}
+                                    <span dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionFormattedText) }} />
+                                  ) : currentQuestionContent.questionText ? (
+                                    (() => {
+                                      const isHTML = containsHTML(currentQuestionContent.questionText)
+                                      return isHTML ? (
+                                        <span dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionText) }} />
+                                      ) : (
+                                        <span>{currentQuestionContent.questionText}</span>
+                                      )
+                                    })()
+                                  ) : null}
                                 </div>
                                 {currentQuestionContent.questionImageUrl && (
                                   <img
@@ -531,10 +624,23 @@ export default function SolutionPage() {
                                 <div className="bg-green-50 p-4 rounded-lg mb-4">
                                   <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
                                   {currentQuestionContent.conclusionFormattedText ? (
-                                    <div className="text-gray-700" dangerouslySetInnerHTML={{ __html: currentQuestionContent.conclusionFormattedText }} />
-                                  ) : (
-                                    <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
-                                  )}
+                                    <div 
+                                      className="text-gray-700 prose prose-sm max-w-none [&_p]:mb-2 [&_strong]:font-bold" 
+                                      dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.conclusionFormattedText) }} 
+                                    />
+                                  ) : currentQuestionContent.conclusion ? (
+                                    (() => {
+                                      const isHTML = containsHTML(currentQuestionContent.conclusion)
+                                      return isHTML ? (
+                                        <div 
+                                          className="text-gray-700 prose prose-sm max-w-none [&_p]:mb-2 [&_strong]:font-bold" 
+                                          dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.conclusion) }} 
+                                        />
+                                      ) : (
+                                        <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
+                                      )
+                                    })()
+                                  ) : null}
                                   {currentQuestionContent.conclusionImageUrl && (
                                     <img
                                       src={currentQuestionContent.conclusionImageUrl}
@@ -651,18 +757,26 @@ export default function SolutionPage() {
                                     if (hasExplanationText || hasExplanationImages) {
                                       return (
                                         <>
-                                          {hasExplanationText && (
-                                            <>
-                                              {explanationContent.explanationFormattedText ? (
-                                                <div
-                                                  className="text-sm text-gray-700"
-                                                  dangerouslySetInnerHTML={{ __html: explanationContent.explanationFormattedText }}
-                                                />
-                                              ) : (
-                                                <p className="text-sm text-gray-700">{explanationContent.explanationText}</p>
-                                              )}
-                                            </>
-                                          )}
+                                          {hasExplanationText && (() => {
+                                            // Determine which content to use and if it contains HTML
+                                            const rawContent = explanationContent.explanationFormattedText || explanationContent.explanationText || ''
+                                            const isHTML = containsHTML(rawContent)
+                                            // Decode HTML entities if it's HTML
+                                            const contentToRender = isHTML ? decodeHTML(rawContent) : rawContent
+                                            
+                                            return (
+                                              <>
+                                                {isHTML ? (
+                                                  <div
+                                                    className="text-sm text-gray-700 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                                    dangerouslySetInnerHTML={{ __html: contentToRender }}
+                                                  />
+                                                ) : (
+                                                  <p className="text-sm text-gray-700">{contentToRender}</p>
+                                                )}
+                                              </>
+                                            )
+                                          })()}
                                           {hasExplanationImages && (
                                             <div className={hasExplanationText ? "mt-2 space-y-2" : "space-y-2"}>
                                               {validImages.map((img: string, i: number) => (
@@ -694,11 +808,17 @@ export default function SolutionPage() {
                             <div className="mb-4">
                               <div className="text-lg font-medium mb-2">
                                 {currentQuestion.questionOrder || (currentQuestionIndex + 1)}.{' '}
-                                {currentQuestionContent.questionFormattedText ? (
-                                  <span dangerouslySetInnerHTML={{ __html: currentQuestionContent.questionFormattedText }} />
-                                ) : (
-                                  <span>{currentQuestionContent.questionText}</span>
-                                )}
+                                {(() => {
+                                  const isHTML = containsHTML(currentQuestionContent.questionFormattedText)
+                                  return isHTML && currentQuestionContent.questionFormattedText ? (
+                                    <span
+                                      className="prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                      dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.questionFormattedText) }}
+                                    />
+                                  ) : (
+                                    <span>{currentQuestionContent.questionText}</span>
+                                  )
+                                })()}
                               </div>
                               {currentQuestionContent.questionImageUrl && (
                                 <img
@@ -713,11 +833,17 @@ export default function SolutionPage() {
                             {currentQuestionContent.conclusion && (
                               <div className="bg-green-50 p-4 rounded-lg mb-4">
                                 <p className="text-sm font-medium text-green-900 mb-2">Conclusion:</p>
-                                {currentQuestionContent.conclusionFormattedText ? (
-                                  <div className="text-gray-700" dangerouslySetInnerHTML={{ __html: currentQuestionContent.conclusionFormattedText }} />
-                                ) : (
-                                  <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
-                                )}
+                                {(() => {
+                                  const isHTML = containsHTML(currentQuestionContent.conclusionFormattedText)
+                                  return isHTML && currentQuestionContent.conclusionFormattedText ? (
+                                    <div
+                                      className="text-gray-700 prose prose-sm max-w-none [&_p]:mb-2 [&_strong]:font-bold"
+                                      dangerouslySetInnerHTML={{ __html: decodeHTML(currentQuestionContent.conclusionFormattedText) }}
+                                    />
+                                  ) : (
+                                    <p className="text-gray-700">{currentQuestionContent.conclusion}</p>
+                                  )
+                                })()}
                                 {currentQuestionContent.conclusionImageUrl && (
                                   <img
                                     src={currentQuestionContent.conclusionImageUrl}
@@ -837,12 +963,27 @@ export default function SolutionPage() {
                                         {hasExplanationText && (
                                           <>
                                             {explanationContent.explanationFormattedText ? (
-                                              <div
-                                                className="text-sm text-gray-700"
-                                                dangerouslySetInnerHTML={{ __html: explanationContent.explanationFormattedText }}
-                                              />
+                                              (() => {
+                                                const isHTML = containsHTML(explanationContent.explanationFormattedText)
+                                                return (
+                                                  <div
+                                                    className="text-sm text-gray-700 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                                    dangerouslySetInnerHTML={{ __html: isHTML ? decodeHTML(explanationContent.explanationFormattedText) : explanationContent.explanationFormattedText }}
+                                                  />
+                                                )
+                                              })()
                                             ) : (
-                                              <p className="text-sm text-gray-700">{explanationContent.explanationText}</p>
+                                              (() => {
+                                                const isHTML = containsHTML(explanationContent.explanationText)
+                                                return isHTML ? (
+                                                  <div
+                                                    className="text-sm text-gray-700 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                                    dangerouslySetInnerHTML={{ __html: decodeHTML(explanationContent.explanationText) }}
+                                                  />
+                                                ) : (
+                                                  <p className="text-sm text-gray-700">{explanationContent.explanationText}</p>
+                                                )
+                                              })()
                                             )}
                                           </>
                                         )}

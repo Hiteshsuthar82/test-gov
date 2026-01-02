@@ -14,6 +14,21 @@ export default function ResultsPage() {
     return localStorage.getItem('selectedLanguage') || 'en'
   })
   
+  // Helper to decode HTML entities
+  const decodeHTML = (html: string): string => {
+    if (!html || typeof html !== 'string') return html || ''
+    const textarea = document.createElement('textarea')
+    textarea.innerHTML = html
+    return textarea.value
+  }
+
+  // Helper to check if a string contains HTML
+  const containsHTML = (str: string | undefined | null): boolean => {
+    if (!str || typeof str !== 'string') return false
+    // Check for HTML tags (including escaped ones like &lt;)
+    return /<[a-z][\s\S]*>/i.test(str) || /&lt;[a-z][\s\S]*&gt;/i.test(str)
+  }
+
   // Helper to get explanation content for a question based on selected language
   const getExplanationContent = (question: any) => {
     // Try selected language first
@@ -201,38 +216,78 @@ export default function ResultsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Direction */}
-                {q.direction && (
-                  <div className="bg-blue-50 p-3 rounded">
-                    <p className="text-sm font-medium text-blue-900 mb-1">Direction:</p>
-                    <p className="text-sm text-gray-700">{q.direction}</p>
-                    {q.directionImageUrl && (
-                      <img src={q.directionImageUrl} alt="Direction" className="mt-2 max-w-xs rounded" />
-                    )}
-                  </div>
-                )}
+                {(q.direction || q.directionFormattedText) && (() => {
+                  const rawDirectionContent = q.directionFormattedText || q.direction || ''
+                  const isHTML = containsHTML(rawDirectionContent)
+                  // Decode HTML entities if it's HTML
+                  const directionContent = isHTML ? decodeHTML(rawDirectionContent) : rawDirectionContent
+                  
+                  return (
+                    <div className="bg-blue-50 p-3 rounded">
+                      <p className="text-sm font-medium text-blue-900 mb-1">Direction:</p>
+                      {isHTML ? (
+                        <div 
+                          className="text-sm text-gray-700 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline" 
+                          dangerouslySetInnerHTML={{ __html: directionContent }} 
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-700">{directionContent}</p>
+                      )}
+                      {q.directionImageUrl && (
+                        <img src={q.directionImageUrl} alt="Direction" className="mt-2 max-w-xs rounded" />
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Question */}
                 <div>
                   {q.questionFormattedText ? (
-                    <div className="font-medium mb-2" dangerouslySetInnerHTML={{ __html: q.questionFormattedText }} />
-                  ) : (
-                    <p className="font-medium mb-2">{q.questionText}</p>
-                  )}
+                    <div 
+                      className="font-medium mb-2" 
+                      dangerouslySetInnerHTML={{ __html: decodeHTML(q.questionFormattedText) }} 
+                    />
+                  ) : q.questionText ? (
+                    (() => {
+                      const isHTML = containsHTML(q.questionText)
+                      return isHTML ? (
+                        <div 
+                          className="font-medium mb-2" 
+                          dangerouslySetInnerHTML={{ __html: decodeHTML(q.questionText) }} 
+                        />
+                      ) : (
+                        <p className="font-medium mb-2">{q.questionText}</p>
+                      )
+                    })()
+                  ) : null}
                   {q.questionImageUrl && (
                     <img src={q.questionImageUrl} alt="Question" className="max-w-md rounded mb-2" />
                   )}
                 </div>
 
                 {/* Conclusion */}
-                {q.conclusion && (
-                  <div className="bg-green-50 p-3 rounded">
-                    <p className="text-sm font-medium text-green-900 mb-1">Conclusion:</p>
-                    <p className="text-sm text-gray-700">{q.conclusion}</p>
-                    {q.conclusionImageUrl && (
-                      <img src={q.conclusionImageUrl} alt="Conclusion" className="mt-2 max-w-xs rounded" />
-                    )}
-                  </div>
-                )}
+                {(q.conclusion || q.conclusionFormattedText) && (() => {
+                  const rawConclusionContent = q.conclusionFormattedText || q.conclusion || ''
+                  const isHTML = containsHTML(rawConclusionContent)
+                  const conclusionContent = isHTML ? decodeHTML(rawConclusionContent) : rawConclusionContent
+                  
+                  return (
+                    <div className="bg-green-50 p-3 rounded">
+                      <p className="text-sm font-medium text-green-900 mb-1">Conclusion:</p>
+                      {isHTML ? (
+                        <div 
+                          className="text-sm text-gray-700 prose prose-sm max-w-none [&_p]:mb-2 [&_strong]:font-bold" 
+                          dangerouslySetInnerHTML={{ __html: conclusionContent }} 
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-700">{conclusionContent}</p>
+                      )}
+                      {q.conclusionImageUrl && (
+                        <img src={q.conclusionImageUrl} alt="Conclusion" className="mt-2 max-w-xs rounded" />
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Options */}
                 <div className="space-y-2">
@@ -289,18 +344,26 @@ export default function ResultsPage() {
                       <div className="bg-purple-50 p-3 rounded">
                         <p className="text-sm font-medium text-purple-900 mb-1">Explanation:</p>
                         {/* Show text first if it exists */}
-                        {hasExplanationText && (
-                          <>
-                            {explanationContent.explanationFormattedText ? (
-                              <div
-                                className="text-sm text-gray-700"
-                                dangerouslySetInnerHTML={{ __html: explanationContent.explanationFormattedText }}
-                              />
-                            ) : (
-                              <p className="text-sm text-gray-700">{explanationContent.explanationText}</p>
-                            )}
-                          </>
-                        )}
+                        {hasExplanationText && (() => {
+                          // Determine which content to use and if it contains HTML
+                          const rawContent = explanationContent.explanationFormattedText || explanationContent.explanationText || ''
+                          const isHTML = containsHTML(rawContent)
+                          // Decode HTML entities if it's HTML
+                          const contentToRender = isHTML ? decodeHTML(rawContent) : rawContent
+                          
+                          return (
+                            <>
+                              {isHTML ? (
+                                <div
+                                  className="text-sm text-gray-700 prose prose-sm max-w-none [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_td]:border [&_td]:border-gray-300 [&_td]:p-2 [&_th]:border [&_th]:border-gray-300 [&_th]:p-2 [&_th]:bg-gray-100 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:mb-2 [&_li]:mb-1 [&_div]:mb-2 [&_span]:inline [&_img]:inline-block [&_img]:align-middle [&_u]:underline [&_br]:block"
+                                  dangerouslySetInnerHTML={{ __html: contentToRender }}
+                                />
+                              ) : (
+                                <p className="text-sm text-gray-700">{contentToRender}</p>
+                              )}
+                            </>
+                          )
+                        })()}
                         {/* Show images after text (or alone if no text) */}
                         {hasExplanationImages && (
                           <div className={hasExplanationText ? "mt-2 space-y-2" : "space-y-2"}>
