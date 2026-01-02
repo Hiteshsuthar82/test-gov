@@ -345,7 +345,7 @@ export default function SubscriptionPopup({
           </div> */}
 
           {/* Payment Button */}
-          {hasPendingComboOfferForCategory || hasPendingCategorySubscription ? (
+          {(hasPendingComboOfferForCategory && viewMode === 'combo') || (hasPendingCategorySubscription && viewMode === 'single') ? (
             <Link to="/subscriptions" className="block w-full">
               <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 text-base">
                 View Subscription Status

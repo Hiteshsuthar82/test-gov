@@ -82,7 +82,16 @@ export default function SolutionPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
-  const [isReattemptMode, setIsReattemptMode] = useState(false)
+  const [isReattemptMode, setIsReattemptMode] = useState(() => {
+    // Check if reattempt mode should be enabled from localStorage
+    const reattemptFromStorage = localStorage.getItem('isReattemptMode')
+    if (reattemptFromStorage === 'true') {
+      // Clear it after reading to avoid persisting across page reloads
+      localStorage.removeItem('isReattemptMode')
+      return true
+    }
+    return false
+  })
   const [reattemptSelections, setReattemptSelections] = useState<Record<string, string>>({})
   const [showSolution, setShowSolution] = useState<Record<string, boolean>>({})
   const [showQuestionPaper, setShowQuestionPaper] = useState(false)
@@ -123,6 +132,9 @@ export default function SolutionPage() {
       // Clear previous reattempt selections when mode is turned on
       setReattemptSelections({})
       setShowSolution({})
+    } else {
+      // Clear localStorage when reattempt mode is turned off
+      localStorage.removeItem('isReattemptMode')
     }
   }, [isReattemptMode])
 
@@ -1118,16 +1130,20 @@ export default function SolutionPage() {
                     <FiChevronLeft className="mr-2" />
                     Previous
                   </Button>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={isReattemptMode}
-                        onChange={(e) => setIsReattemptMode(e.target.checked)}
-                        className="w-4 h-4"
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium">Re-attempt Questions</span>
+                    <button
+                      onClick={() => setIsReattemptMode(!isReattemptMode)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        isReattemptMode ? 'bg-purple-600' : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isReattemptMode ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                       />
-                      <span>Re-attempt Questions</span>
-                    </label>
+                    </button>
                   </div>
                   {selectedSectionId && isLastQuestionInSection && !isLastSection ? (
                     <Button

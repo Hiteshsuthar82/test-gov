@@ -666,6 +666,74 @@ export default function CategoryPage() {
     navigate(`/test/${testSetId}/analysis/${attemptId}`);
   };
 
+  const handleReattempt = (testSetId: string) => {
+    // Check if this is a free test
+    const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
+    const isFreeTest = testSet?.isFree || false;
+
+    // Find the latest completed attempt for this test set
+    if (!allAttempts || !Array.isArray(allAttempts)) {
+      toast.error("No attempts found");
+      return;
+    }
+
+    const attempts = allAttempts.filter((attempt: any) => {
+      const attemptTestSetId =
+        attempt.testSetId?._id ||
+        attempt.testSetId?.toString() ||
+        attempt.testSetId;
+      return (
+        (attemptTestSetId === testSetId ||
+          attemptTestSetId?.toString() === testSetId) &&
+        (attempt.status === "SUBMITTED" || attempt.status === "AUTO_SUBMITTED")
+      );
+    });
+
+    if (attempts.length === 0) {
+      toast.error("No completed attempts found for reattempt");
+      return;
+    }
+
+    // Get the latest attempt
+    const latestAttempt = attempts.sort(
+      (a: any, b: any) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];
+
+    // For free tests, always allow reattempt
+    if (isFreeTest) {
+      // Set reattempt mode in localStorage
+      localStorage.setItem('isReattemptMode', 'true');
+      navigate(`/test/${testSetId}/solution/${latestAttempt._id}`);
+      return;
+    }
+
+    // For paid tests, check subscription
+    if (!subscriptionStatus) {
+      toast.error("Please subscribe to this category first");
+      return;
+    }
+
+    if (subscriptionStatus.status === "EXPIRED") {
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
+      return;
+    }
+
+    // Only require subscription if test is not free
+    if (!isFreeTest && (!subscriptionStatus || subscriptionStatus.status !== "APPROVED")) {
+      // Reset popup duration selection and open popup
+      setPopupSelectedDurationMonths(undefined);
+      setIsSubscriptionPopupOpen(true);
+      return;
+    }
+
+    // If subscription is APPROVED (or any other allowed status), navigate to solution with reattempt enabled
+    localStorage.setItem('isReattemptMode', 'true');
+    navigate(`/test/${testSetId}/solution/${latestAttempt._id}`);
+  };
+
   const handleViewSolution = (testSetId: string, attemptId: string) => {
     // Check if this is a free test
     const testSet = allTestSets.find((set: TestSet) => set._id === testSetId);
@@ -1575,7 +1643,7 @@ export default function CategoryPage() {
                                 // variant="outline"
                                 // size="sm"
                                 className="border-purple-500 text-purple-600 hover:bg-purple-50 flex items-center gap-1 hover:cursor-pointer px-2"
-                                onClick={() => handleStartTest(testSet._id)}
+                                onClick={() => handleReattempt(testSet._id)}
                               >
                                 Reattempt
                                 <span className="bg-purple-400 rounded-full">
