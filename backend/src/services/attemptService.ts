@@ -523,8 +523,8 @@ export const attemptService = {
       _id: new Types.ObjectId(attemptId),
       userId: new Types.ObjectId(userId),
     })
-      .populate('testSetId', 'name durationMinutes totalMarks negativeMarking sections hasSectionWiseTiming')
-      .populate('categoryId', 'name');
+      .populate('testSetId', 'name durationMinutes totalMarks negativeMarking sections hasSectionWiseTiming categoryId sectionId')
+      .populate('categoryId', 'name sections');
 
     if (!attempt) {
       throw new Error('Attempt not found');
@@ -593,6 +593,10 @@ export const attemptService = {
       ? Math.floor((attempt.lastActiveAt.getTime() - attempt.startedAt.getTime()) / 1000) - attempt.totalPausedSeconds
       : attempt.totalTimeSeconds;
 
+    // Get category information
+    const category = await Category.findById(testSet?.categoryId).select('name sections');
+    const categorySection = category?.sections?.find((s: any) => s.sectionId === testSet?.sectionId);
+
     return {
       attemptId: attempt._id,
       testSet: {
@@ -604,6 +608,10 @@ export const attemptService = {
         sections: testSet.sections,
         hasSectionWiseTiming: testSet.hasSectionWiseTiming,
       },
+      category: category ? {
+        name: category.name,
+        section: categorySection ? { name: categorySection.name } : null,
+      } : null,
       questions: questionsWithDetails,
       status: attempt.status,
       startedAt: attempt.startedAt,

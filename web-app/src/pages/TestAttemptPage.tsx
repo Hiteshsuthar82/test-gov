@@ -1435,7 +1435,7 @@ export default function TestAttemptPage() {
         const currentSectionQuestions = questions.filter((q: Question) => q.sectionId === currentQ.sectionId)
         const currentSectionIndex = currentSectionQuestions.findIndex((q: Question) => q._id === currentQ._id)
         isLastQuestionInSection = currentSectionIndex === currentSectionQuestions.length - 1
-        isLastQuestionInTest = false // Can navigate to other sections
+        isLastQuestionInTest = currentQuestionIndex === questions.length - 1 // Can navigate to other sections
       } else {
         // No sections - check if it's last question overall
         isLastQuestionInTest = currentQuestionIndex === questions.length - 1
@@ -1838,7 +1838,7 @@ export default function TestAttemptPage() {
       attemptData.questions.forEach((q: any) => {
         // Use _id (backend always returns _id)
         const questionId = q._id || q.id
-        
+
         if (q.selectedOptionId) {
           initialSelectedOptions[questionId] = q.selectedOptionId
           initialSavedAnswers[questionId] = q.selectedOptionId // Track saved answers separately
@@ -1860,13 +1860,22 @@ export default function TestAttemptPage() {
         initialVisited.add(questions[currentQuestionIndex]._id)
       }
 
-      // Only set from backend data if we haven't made local updates
-      setSelectedOptions(initialSelectedOptions)
-      setSavedAnswers(initialSavedAnswers)
-      setMarkedForReview(initialMarkedForReview)
-      setVisitedQuestions(initialVisited)
+      // Preserve savedAnswers during pause to prevent showing unattempted questions
+      // Only update savedAnswers from backend data when not paused
+      if (isPaused) {
+        // During pause, don't overwrite savedAnswers to preserve optimistic updates
+        setSelectedOptions(initialSelectedOptions)
+        setMarkedForReview(initialMarkedForReview)
+        setVisitedQuestions(initialVisited)
+      } else {
+        // Not paused - safe to update all states from backend data
+        setSelectedOptions(initialSelectedOptions)
+        setSavedAnswers(initialSavedAnswers)
+        setMarkedForReview(initialMarkedForReview)
+        setVisitedQuestions(initialVisited)
+      }
     }
-  }, [attemptData, currentQuestionIndex, questions])
+  }, [attemptData, currentQuestionIndex, questions, isPaused])
 
   // Navigate to first question when section changes (after section submission)
   useEffect(() => {
@@ -2217,7 +2226,21 @@ export default function TestAttemptPage() {
 
         {/* Top Header */}
         <div className="border-b bg-white px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <div className="text-xl font-bold">{attemptData?.testSet?.name}</div>
+          {/* Left Section - Test Info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="text-lg font-bold text-gray-900 leading-none">{attemptData?.testSet?.name}</div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">
+                  {attemptData?.category?.name || 'Category'}
+                </span>
+                <span className="text-gray-400 h-fit text-xs">•</span>
+                <span className="font-medium text-blue-600">
+                  {attemptData?.category?.section?.name || 'Section'}
+                </span>
+              </div>
+            </div>
+          </div>
           <div className="flex items-center gap-4">
             {isPaused ? (
               <Button variant="outline" disabled size="sm">
